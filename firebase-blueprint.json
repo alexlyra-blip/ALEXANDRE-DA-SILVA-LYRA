@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "PromoterSettings": {
+      "title": "PromoterSettings",
+      "description": "Branding settings for the promoter",
+      "type": "object",
+      "properties": {
+        "loginImageUrl": { "type": "string" },
+        "primaryColor": { "type": "string" },
+        "promoterName": { "type": "string" }
+      },
+      "required": ["loginImageUrl", "primaryColor"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile containing role and basic info",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "supervisor", "corretor"] },
+        "status": { "type": "string", "enum": ["active", "pending", "inactive"] },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["uid", "email", "name", "role", "status", "createdAt"]
+    },
+    "BankRule": {
+      "title": "BankRule",
+      "description": "Rules for a specific bank",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "minAge": { "type": "number" },
+        "maxAge": { "type": "number" },
+        "nonAcceptedBanks": { "type": "array", "items": { "type": "string" } },
+        "acceptsIlliterate": { "type": "boolean" },
+        "acceptsLOAS": { "type": "boolean" },
+        "invalidezAgeYears": { "type": "number" },
+        "acceptsOver60Invalidez": { "type": "boolean" },
+        "minBenefitTimeYears": { "type": "number" },
+        "minBenefitTimeMonths": { "type": "number" },
+        "tabelas": { "type": "array" },
+        "minInstallmentValue": { "type": "number" },
+        "minBalance": { "type": "number" },
+        "portabilityRate": { "type": "number" },
+        "refinRate": { "type": "number" },
+        "minTroco": { "type": "number" },
+        "sumBalanceAndTroco": { "type": "boolean" },
+        "logoUrl": { "type": "string" },
+        "priority": { "type": "number", "description": "Preference order for simulation results (lower is better, e.g., 1 is top priority)" }
+      },
+      "required": ["id", "name", "minAge", "maxAge", "acceptsIlliterate", "acceptsLOAS", "invalidezAgeYears", "acceptsOver60Invalidez", "minBenefitTimeYears", "minBenefitTimeMonths", "tabelas"]
+    },
+    "GeneralRule": {
+      "title": "GeneralRule",
+      "description": "General rules for portability",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "banco": { "type": "string" },
+        "parcelasAceitas": { "type": "number" }
+      },
+      "required": ["id", "banco", "parcelasAceitas"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "UserProfile" },
+      "description": "User profiles"
+    },
+    "/bankRules/{ruleId}": {
+      "schema": { "$ref": "BankRule" },
+      "description": "Bank rules"
+    },
+    "/generalRules/{ruleId}": {
+      "schema": { "$ref": "GeneralRule" },
+      "description": "General rules"
+    },
+    "/simulations/{simulationId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string" },
+          "userName": { "type": "string" },
+          "userRole": { "type": "string" },
+          "recommendedBanks": { "type": "array", "items": { "type": "string" } },
+          "topOffer": { "type": "string" },
+          "createdAt": { "type": "timestamp" }
+        },
+        "required": ["userId", "createdAt"]
+      },
+      "description": "Simulation records"
+    },
+    "/settings/promoter": {
+      "schema": { "$ref": "PromoterSettings" },
+      "description": "Promoter branding settings"
+    }
+  }
+}

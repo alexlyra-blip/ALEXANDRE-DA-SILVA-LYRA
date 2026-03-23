@@ -1,0 +1,136 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email == "alexlyra@gmail.com" ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isPromotora() {
+      return isAuthenticated() &&
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'promotora') || isAdmin());
+    }
+
+    function isActive() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'name', 'role', 'status', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             data.email is string && data.email.size() > 0 && data.email.size() < 150 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.role in ['admin', 'promotora', 'vendedor', 'corretor'] &&
+             data.status in ['active', 'pending', 'inactive'] &&
+             (!('photoUrl' in data) || data.photoUrl is string) &&
+             (!('avatarUrl' in data) || data.avatarUrl is string) &&
+             (!('maxUsers' in data) || data.maxUsers is number) &&
+             (!('createdBy' in data) || data.createdBy == null || data.createdBy is string);
+    }
+
+    function isValidBankRule(data) {
+      return data.keys().hasAll(['name', 'minAge', 'maxAge', 'tabelas']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.minAge is number && data.maxAge is number &&
+             data.tabelas is list;
+    }
+
+    // ===============================================================
+    // Collections
+    // ===============================================================
+
+    match /users/{userId} {
+      // Users can read their own profile, admins and promotoras can read all
+      allow read: if isOwner(userId) || isPromotora() || isAdmin();
+      
+      // Admin can create anything, promotoras can create anything except admins, users can create their own profile as 'corretor' and 'pending'
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+        (
+          isAdmin() || 
+          (isPromotora() && request.resource.data.role != 'admin') ||
+          (isOwner(userId) && request.resource.data.role == 'corretor' && request.resource.data.status == 'pending')
+        );
+        
+      // Only admins can update roles/status to anything. Promotoras can update non-admins. Users can update their own name.
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+        (
+          isAdmin() ||
+          (isPromotora() && resource.data.role != 'admin' && request.resource.data.role != 'admin') ||
+          (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.status == resource.data.status)
+        );
+        
+      allow delete: if isAdmin();
+    }
+
+    match /bankRules/{ruleId} {
+      // Active users can read the rules
+      allow read: if isAdmin() || isPromotora() || isActive();
+      // Only admins can modify the rules
+      allow create, update: if isAdmin() && isValidBankRule(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /generalRules/{ruleId} {
+      // Active users can read the rules
+      allow read: if isAdmin() || isPromotora() || isActive();
+      // Only admins can modify the rules
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /settings/{promotoraId} {
+      // Branding settings are public
+      allow read: if true;
+      // Only admins or the owner of the settings can modify
+      allow create, update: if isAdmin() || isOwner(promotoraId);
+      allow delete: if isAdmin();
+    }
+
+    match /simulations/{simulationId} {
+      // Admins can read all.
+      // Promotoras can read their own and their users' (where createdBy == their UID).
+      // Corretor/Vendedor can only read their own.
+      allow read: if isAdmin() || (isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        (isPromotora() && resource.data.createdBy == request.auth.uid)
+      ));
+      
+      // Any authenticated user can create a simulation for themselves.
+      // Admins and Promotoras can also create simulations.
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid || 
+        isPromotora() || 
+        isAdmin()
+      );
+      
+      // Allow updates if user owns the simulation, is a promotora (for their users), or is admin.
+      allow update: if isAdmin() || (isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        (isPromotora() && resource.data.createdBy == request.auth.uid)
+      ));
+      
+      allow delete: if isAdmin();
+    }
+  }
+}
