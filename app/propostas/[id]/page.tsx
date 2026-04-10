@@ -88,6 +88,7 @@ function ProposalDetailPageContent() {
     proposalNumber: '',
     status: 'PENDENTE',
     cipSentDate: '',
+    cipReturnDate: '',
     bank: searchParams.get('bank') || '',
     tabela: searchParams.get('tabela') || '',
     value: parseFloat(searchParams.get('valor') || '0'),
@@ -107,13 +108,23 @@ function ProposalDetailPageContent() {
       const proposals = await getProposals(profile);
       const proposal = proposals.find(p => p.id === proposalId);
       if (proposal) {
+        let cipRetDate = proposal.cipReturnDate ? proposal.cipReturnDate.split('T')[0] : '';
+        const cipSent = proposal.cipSentDate ? proposal.cipSentDate.split('T')[0] : '';
+        
+        if (!cipRetDate && cipSent) {
+          const [y, m, d] = cipSent.split('-');
+          const sentD = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+          cipRetDate = format(addBusinessDays(sentD, 5), 'yyyy-MM-dd');
+        }
+
         setFormData({
           clientName: proposal.clientName || '',
           clientCpf: proposal.clientCpf || '',
           proposalDate: proposal.proposalDate || format(new Date(), 'yyyy-MM-dd'),
           proposalNumber: proposal.proposalNumber || '',
           status: proposal.status || 'PENDENTE',
-          cipSentDate: proposal.cipSentDate ? proposal.cipSentDate.split('T')[0] : '',
+          cipSentDate: cipSent,
+          cipReturnDate: cipRetDate,
           bank: proposal.bank || '',
           tabela: proposal.tabela || '',
           value: proposal.value || 0,
@@ -130,11 +141,10 @@ function ProposalDetailPageContent() {
   };
 
   const expectedReturnDate = useMemo(() => {
-    if (!formData.cipSentDate || formData.status !== 'ANDAMENTO') return null;
-    const sentDate = new Date(formData.cipSentDate);
-    // 5 business days
-    return addBusinessDays(sentDate, 5);
-  }, [formData.cipSentDate, formData.status]);
+    if (formData.status !== 'ANDAMENTO' || !formData.cipReturnDate) return null;
+    const [y, m, d] = formData.cipReturnDate.split('-');
+    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+  }, [formData.cipReturnDate, formData.status]);
 
   const remainingDays = useMemo(() => {
     if (!expectedReturnDate) return null;
@@ -276,7 +286,9 @@ function ProposalDetailPageContent() {
                   onClick={() => {
                     const updates: any = { status: option.id };
                     if (option.id === 'ANDAMENTO' && !formData.cipSentDate) {
-                      updates.cipSentDate = format(new Date(), 'yyyy-MM-dd');
+                      const todayStr = format(new Date(), 'yyyy-MM-dd');
+                      updates.cipSentDate = todayStr;
+                      updates.cipReturnDate = format(addBusinessDays(new Date(), 5), 'yyyy-MM-dd');
                     }
                     setFormData({ ...formData, ...updates });
                   }}
@@ -399,7 +411,30 @@ function ProposalDetailPageContent() {
                 <input 
                   type="date"
                   value={formData.cipSentDate}
-                  onChange={(e) => setFormData({ ...formData, cipSentDate: e.target.value })}
+                  onChange={(e) => {
+                    const newSentDate = e.target.value;
+                    const updates: any = { cipSentDate: newSentDate };
+                    if (newSentDate) {
+                      const [y, m, d] = newSentDate.split('-');
+                      const sentD = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+                      updates.cipReturnDate = format(addBusinessDays(sentD, 5), 'yyyy-MM-dd');
+                    } else {
+                      updates.cipReturnDate = '';
+                    }
+                    setFormData({ ...formData, ...updates });
+                  }}
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5" />
+                  Data de Retorno CIP
+                </label>
+                <input 
+                  type="date"
+                  value={formData.cipReturnDate}
+                  onChange={(e) => setFormData({ ...formData, cipReturnDate: e.target.value })}
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 />
               </div>

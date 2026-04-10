@@ -1,22 +1,8 @@
 {
   "firestore": {
-    "rules": "firestore.rules",
-    "database": "(default)"
+    "rules": "firestore.rules"
   },
   "storage": {
-    "rules": "storage.rules",
-    "bucket": "deft-apparatus-477017-c5.firebasestorage.app"
-  },
-  "apphosting": {
-    "backendId": "portabilidadepro",
-    "rootDir": "/",
-    "ignore": [
-      "node_modules",
-      ".git",
-      "firebase-debug.log",
-      "firebase-debug.*.log",
-      "functions"
-    ],
-    "alwaysDeployFromSource": true
+    "rules": "storage.rules"
   }
 }
