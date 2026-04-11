@@ -227,7 +227,7 @@ function ProposalDetailPageContent() {
   }
 
   return (
-    <div className={`min-h-screen ${getSoftBackgroundColor(formData.status)} dark:bg-slate-950 flex flex-col md:flex-row`}>
+    <div className={`min-h-screen ${getSoftBackgroundColor(formData.status)} dark:bg-background flex flex-col md:flex-row`}>
       <Sidebar />
       
       <div className="flex-1 flex flex-col pb-20 md:pb-0">

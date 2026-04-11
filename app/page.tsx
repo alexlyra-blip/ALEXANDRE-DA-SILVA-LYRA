@@ -140,24 +140,23 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login: handleLogin triggered", email);
     
     if (!validateForm()) return;
 
     setErrorMsg(null);
     setIsLoading(true);
     try {
-      console.log("Login: Attempting login...");
       await login(email, password);
-      console.log("Login: Login successful");
     } catch (error: any) {
       console.error("Login: Login failed", error);
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         setErrorMsg("E-mail ou senha incorretos.");
-      } else if (error.code === 'auth/operation-not-allowed') {
-        setErrorMsg("O login com e-mail e senha não está ativado.");
+      } else if (error.code === 'auth/too-many-requests') {
+        setErrorMsg("Muitas tentativas. Tente novamente mais tarde.");
+      } else if (error.code === 'auth/network-request-failed') {
+        setErrorMsg("Verifique sua conexão com a internet.");
       } else {
-        setErrorMsg("Erro ao fazer login. Verifique sua conexão.");
+        setErrorMsg("Erro ao fazer login. Tente novamente.");
       }
     } finally {
       setIsLoading(false);
@@ -199,10 +198,13 @@ export default function Login() {
     setIsLoading(true);
     try {
       await loginWithGoogle();
-      // Redirection is handled by the useEffect watching `user`
     } catch (error: any) {
       console.error("Google login failed", error);
-      setErrorMsg("Erro ao fazer login com o Google. Tente novamente.");
+      if (error.code === 'auth/network-request-failed') {
+        setErrorMsg("Verifique sua conexão com a internet.");
+      } else {
+        setErrorMsg("Erro ao fazer login com o Google. Tente novamente.");
+      }
     } finally {
       setIsLoading(false);
     }

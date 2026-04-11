@@ -195,7 +195,7 @@ export default function Perfil() {
   if (!profile) return null;
 
   return (
-    <div className="flex flex-col min-h-screen w-full md:max-w-none mx-auto max-w-md bg-slate-50 dark:bg-background-dark text-slate-900 dark:text-slate-100 font-sans pb-24 md:pb-0">
+    <div className="flex flex-col min-h-screen w-full md:max-w-none mx-auto max-w-md bg-background text-slate-900 dark:text-slate-100 font-sans pb-24 md:pb-0">
       {/* Header */}
       <header className="bg-primary dark:bg-black text-white px-6 pt-8 pb-10 rounded-b-[40px] shadow-lg relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl" />
@@ -248,19 +248,19 @@ export default function Perfil() {
         <div className="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-2xl">
           <button 
             onClick={() => setActiveTab('conta')} 
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${activeTab === 'conta' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${activeTab === 'conta' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-black/70 hover:text-black dark:text-slate-200 dark:hover:text-white'}`}
           >
             Conta
           </button>
           <button 
             onClick={() => setActiveTab('preferencias')} 
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${activeTab === 'preferencias' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${activeTab === 'preferencias' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-black/70 hover:text-black dark:text-slate-200 dark:hover:text-white'}`}
           >
             Ajustes
           </button>
           <button 
             onClick={() => setActiveTab('seguranca')} 
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${activeTab === 'seguranca' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${activeTab === 'seguranca' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-black/70 hover:text-black dark:text-slate-200 dark:hover:text-white'}`}
           >
             Segurança
           </button>

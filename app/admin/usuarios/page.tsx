@@ -28,7 +28,8 @@ import {
   Pencil,
   AlertCircle,
   Key,
-  Clock
+  Clock,
+  Phone
 } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { PasswordStrength } from '@/components/PasswordStrength';
@@ -87,6 +88,19 @@ function UsuariosAdminContent() {
   const searchParams = useSearchParams();
   const [users, setUsers] = useState<any[]>([]);
 
+  const formatPhone = (value: string) => {
+    let v = value.replace(/\D/g, '');
+    if (v.length > 11) v = v.substring(0, 11);
+    if (v.length > 6) {
+      return `(${v.substring(0, 2)}) ${v.substring(2, 7)}-${v.substring(7)}`;
+    } else if (v.length > 2) {
+      return `(${v.substring(0, 2)}) ${v.substring(2)}`;
+    } else if (v.length > 0) {
+      return `(${v}`;
+    }
+    return v;
+  };
+
   // Handle query params
   useEffect(() => {
     if (searchParams.get('personalizar') === 'true' && profile) {
@@ -121,6 +135,7 @@ function UsuariosAdminContent() {
 
   // New user form
   const [newEmail, setNewEmail] = useState('');
+  const [newPhone, setNewPhone] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('corretor');
@@ -157,6 +172,7 @@ function UsuariosAdminContent() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [editRole, setEditRole] = useState<UserRole>('corretor');
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
 
@@ -475,6 +491,7 @@ function UsuariosAdminContent() {
     setEditingUser(user);
     setEditName(user.name || '');
     setEditEmail(user.email || '');
+    setEditPhone(user.phone || '');
     setEditRole(user.role || 'corretor');
     setShowEditModal(true);
   };
@@ -489,19 +506,37 @@ function UsuariosAdminContent() {
 
     setIsUpdatingUser(true);
     try {
+      // Update email in Firebase Auth if it changed
+      if (editEmail !== editingUser.email) {
+        const response = await fetch('/api/admin/update-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: editingUser.id,
+            newEmail: editEmail,
+            adminUid: profile?.uid,
+          }),
+        });
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.error || "Erro ao atualizar e-mail no Firebase Auth.");
+        }
+      }
+
       const userRef = doc(db, 'users', editingUser.id);
       await updateDoc(userRef, {
         name: editName,
         email: editEmail,
+        phone: editPhone,
         role: editRole
       });
       
       showToast("Usuário atualizado com sucesso!", "success");
       setShowEditModal(false);
       setEditingUser(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating user:", error);
-      handleFirestoreError(error, OperationType.UPDATE, `users/${editingUser.id}`);
+      showToast(error.message || "Erro ao atualizar usuário.", "error");
     } finally {
       setIsUpdatingUser(false);
     }
@@ -789,15 +824,15 @@ function UsuariosAdminContent() {
 
       const data = await response.json();
       if (data.success) {
-        alert("Senha redefinida com sucesso!");
+        showToast("Senha redefinida com sucesso! O usuário já pode fazer login com a nova senha.", "success");
         setUserToResetPassword(null);
         setNewPasswordForReset('');
       } else {
-        alert("Erro ao redefinir senha: " + data.error);
+        showToast("Erro ao redefinir senha: " + data.error, "error");
       }
     } catch (error: any) {
       console.error("Error resetting password:", error);
-      alert("Erro ao redefinir senha.");
+      showToast("Erro ao redefinir senha.", "error");
     } finally {
       setIsResettingPassword(false);
     }
@@ -943,15 +978,20 @@ function UsuariosAdminContent() {
       }
 
       // Create profile in Firestore
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 3);
+
       const userProfileData = {
         uid: newUser.uid,
         email: newEmail,
         name: newName,
+        phone: newPhone,
         role: newRole,
         avatarUrl: avatarUrl,
         photoUrl: avatarUrl, // Set both for compatibility
         status: 'active', // Admin created users are active by default
         createdAt: serverTimestamp(),
+        expiresAt: expiresAt,
         createdBy: profile?.uid || null,
         promotoraId: profile?.role === 'promotora' ? profile.uid : (profile?.promotoraId || profile?.createdBy || 'admin'),
         allowedBanks: []
@@ -1212,7 +1252,7 @@ function UsuariosAdminContent() {
             {(profile?.role === 'admin' || profile?.role === 'promotora') && (
               <button 
                 onClick={handleOpenGlobalBranding}
-                className="w-full mb-6 flex items-center justify-between p-4 bg-primary/10 border border-primary/20 rounded-2xl text-primary font-bold transition-all hover:bg-primary/20"
+                className="w-full mb-6 flex items-center justify-between p-4 bg-primary/10 dark:bg-slate-800 border border-primary/20 dark:border-slate-700 rounded-2xl text-primary dark:text-slate-200 font-bold transition-all hover:bg-primary/20 dark:hover:bg-slate-700"
               >
                 <div className="flex items-center gap-3">
                   <Palette className="w-5 h-5" />
@@ -1630,6 +1670,11 @@ function UsuariosAdminContent() {
                     <p className="text-[10px] text-slate-500 flex items-center gap-1">
                       <Mail className="w-3 h-3" /> {user.email}
                     </p>
+                    {user.phone && (
+                      <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> {user.phone}
+                      </p>
+                    )}
                     <p className="text-[10px] text-slate-400">Criado por: {getCreatorName(user.createdBy)}</p>
                   </div>
                 </div>
@@ -2063,6 +2108,17 @@ function UsuariosAdminContent() {
               </div>
 
               <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Telefone</label>
+                <input
+                  type="tel"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  placeholder="(00) 00000-0000"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Senha Inicial</label>
                 <input
                   type="password"
@@ -2195,9 +2251,17 @@ function UsuariosAdminContent() {
                   onChange={(e) => setEditEmail(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
-                <p className="text-[10px] text-amber-500 mt-1 ml-1">
-                  Atenção: Alterar o e-mail aqui atualiza apenas o cadastro. O login no Firebase Auth permanece o mesmo.
-                </p>
+              </div>
+
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Telefone</label>
+                <input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(formatPhone(e.target.value))}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
               </div>
 
               <div className="flex flex-col gap-1">
