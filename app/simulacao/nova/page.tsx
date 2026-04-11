@@ -301,7 +301,7 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-semibold text-slate-600 dark:text-slate-400 ml-1">
-                {convenio === 'INSS' ? 'Código do Benefício' : convenio === 'GOVERNO' ? 'Estado' : convenio === 'FORÇAS ARMADAS' ? 'Militar' : 'Código do Benefício'}
+                {convenio === 'INSS' ? 'Código do Benefício' : 'Sub-convênio'}
               </label>
               <div className="relative">
                 <select 
@@ -314,7 +314,7 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
                   }}
                   className="flex w-full rounded-xl border border-primary/20 bg-white dark:bg-input text-slate-900 dark:text-black focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 h-14 p-4 text-base font-medium appearance-none transition-all"
                 >
-                  <option disabled value="">Selecione o benefício</option>
+                  <option disabled value="">Selecione...</option>
                   {beneficios[convenio].map((b) => (
                     <option key={b.value} value={b.value} className="text-slate-900 dark:text-black">{b.label}</option>
                   ))}
@@ -322,25 +322,6 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 w-5 h-5" />
               </div>
             </div>
-            {(convenio === 'GOVERNO' || convenio === 'FORÇAS ARMADAS') && (
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-slate-400 ml-1">
-                  {convenio === 'GOVERNO' ? 'Estado (UF)' : 'Militar (Exército, Aeronáutica, Marinha)'}
-                </label>
-                <select
-                  className="flex w-full rounded-xl border border-primary/20 bg-white dark:bg-input focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 h-14 p-4 text-base font-medium transition-all appearance-none"
-                  value={subConvenio}
-                  onChange={(e) => setSubConvenio(e.target.value)}
-                >
-                  <option value="">Selecione...</option>
-                  {convenio === 'GOVERNO' ? (
-                    ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'].map(uf => <option key={uf} value={uf}>{uf}</option>)
-                  ) : (
-                    ['Exército', 'Aeronáutica', 'Marinha'].map(m => <option key={m} value={m}>{m}</option>)
-                  )}
-                </select>
-              </div>
-            )}
             {(convenio === 'INSS') && (
               <>
                 {showDataConcessao && (
