@@ -406,7 +406,7 @@ export default function Recomendacoes() {
         topOfferContrato: topOffer?.valorContrato || 0,
         topOfferTroco: topOffer?.valorTroco || 0,
         topOfferTaxa: topOffer?.novaTaxaPortabilidade || 0,
-        topOfferPrazo: 96, // Defaulting to 96 as it's the standard for INSS/SIAPE port
+        topOfferPrazo: simDataParsed.subConvenio === 'Marinha' ? 72 : 96,
         createdAt: serverTimestamp()
       };
 
@@ -838,7 +838,7 @@ export default function Recomendacoes() {
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                           <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
                           <p className="text-[10px] font-medium truncate">
-                            Prazo: <span className="text-slate-900 dark:text-white font-bold">{simData?.prazoTotal || 96}X</span>
+                            Prazo: <span className="text-slate-900 dark:text-white font-bold">{simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96)}X</span>
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">

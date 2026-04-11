@@ -33,6 +33,16 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
+::selection {
+  background-color: var(--primary);
+  color: #ffffff !important;
+}
+
+::-moz-selection {
+  background-color: var(--primary);
+  color: #ffffff !important;
+}
+
 .professional-card {
   @apply bg-surface dark:bg-surface rounded-2xl shadow-sm border border-slate-200 dark:border-white/10 transition-all hover:shadow-md;
 }

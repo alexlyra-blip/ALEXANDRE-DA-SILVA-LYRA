@@ -19,7 +19,7 @@ import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { getProposals, deleteProposal } from '@/lib/data-service';
 import Link from 'next/link';
-import { format, startOfDay } from 'date-fns';
+import { format, startOfDay, isAfter, addBusinessDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function PropostasPage() {
@@ -27,6 +27,7 @@ export default function PropostasPage() {
   const [proposals, setProposals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,6 +47,38 @@ export default function PropostasPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateRemainingDays = (expectedReturnDate: string | null | undefined, cipSentDate: string | null | undefined) => {
+    if (!expectedReturnDate && !cipSentDate) return null;
+    
+    let returnDateObj;
+    if (expectedReturnDate) {
+      returnDateObj = startOfDay(new Date(expectedReturnDate));
+    } else if (cipSentDate) {
+      const [y, m, d] = cipSentDate.split('T')[0].split('-');
+      const sentD = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+      returnDateObj = startOfDay(addBusinessDays(sentD, 5));
+    } else {
+      return null;
+    }
+
+    const today = startOfDay(new Date());
+    if (isAfter(today, returnDateObj)) return 0;
+    
+    let count = 0;
+    let current = new Date(today);
+    current.setDate(current.getDate() + 1); // start counting from tomorrow
+    
+    while (current <= returnDateObj) {
+      const dayOfWeek = current.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // 0 = Sunday, 6 = Saturday
+        count++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return count;
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -83,9 +116,10 @@ export default function PropostasPage() {
   }, [proposals]);
 
   const filteredProposals = proposals.filter(p => 
-    p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.clientCpf?.includes(searchTerm) ||
-    p.proposalNumber?.includes(searchTerm)
+    (p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     p.clientCpf?.includes(searchTerm) ||
+     p.proposalNumber?.includes(searchTerm)) &&
+    (!statusFilter || p.status === statusFilter)
   );
 
   const getStatusColor = (status: string) => {
@@ -161,6 +195,33 @@ export default function PropostasPage() {
               <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-1">Reprovados</p>
               <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.rejected}</p>
             </div>
+          </div>
+
+          {/* Quick Filters */}
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            <button
+              onClick={() => setStatusFilter(null)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                statusFilter === null 
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' 
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              TODAS
+            </button>
+            {['PENDENTE', 'ANDAMENTO', 'PAGO', 'REPROVADO'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status === statusFilter ? null : status)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                  statusFilter === status
+                    ? 'bg-primary text-white'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
+                }`}
+              >
+                {status}
+              </button>
+            ))}
           </div>
 
           {/* Highlight Window: Saldos do Dia */}
@@ -242,10 +303,14 @@ export default function PropostasPage() {
                           </div>
                         </div>
                         
-                        {proposal.status === 'ANDAMENTO' && proposal.expectedReturnDate && (
+                        {proposal.status === 'ANDAMENTO' && (proposal.expectedReturnDate || proposal.cipSentDate) && (
                           <div className="flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg">
                             <Clock className="w-3 h-3" />
-                            <span>Retorno: {format(new Date(proposal.expectedReturnDate), 'dd/MM', { locale: ptBR })}</span>
+                            <span>
+                              {calculateRemainingDays(proposal.expectedReturnDate, proposal.cipSentDate) === 0 
+                                ? 'Retorno Hoje' 
+                                : `Faltam ${calculateRemainingDays(proposal.expectedReturnDate, proposal.cipSentDate)} dias`}
+                            </span>
                           </div>
                         )}
                       </div>

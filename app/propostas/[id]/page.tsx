@@ -14,7 +14,10 @@ import {
   CreditCard,
   FileText,
   TrendingUp,
-  Info
+  Info,
+  CheckCircle,
+  Copy,
+  FileEdit
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Sidebar from '@/components/Sidebar';
@@ -24,6 +27,7 @@ import { format, addBusinessDays, differenceInBusinessDays, isAfter, startOfDay 
 import { ptBR } from 'date-fns/locale';
 
 const STATUS_OPTIONS = [
+  { id: 'RASCUNHO', label: 'RASCUNHO', color: 'bg-slate-500', activeColor: 'bg-slate-500 text-white shadow-lg shadow-slate-500/30' },
   { id: 'PENDENTE', label: 'PENDENTE', color: 'bg-amber-500', activeColor: 'bg-amber-500 text-white shadow-lg shadow-amber-500/30' },
   { id: 'ANDAMENTO', label: 'ANDAMENTO', color: 'bg-blue-500', activeColor: 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' },
   { id: 'PAGO', label: 'PAGO', color: 'bg-emerald-500', activeColor: 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' },
@@ -80,6 +84,9 @@ function ProposalDetailPageContent() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showCopySuccess, setShowCopySuccess] = useState(false);
   
   const [formData, setFormData] = useState({
     clientName: '',
@@ -110,12 +117,6 @@ function ProposalDetailPageContent() {
       if (proposal) {
         let cipRetDate = proposal.cipReturnDate ? proposal.cipReturnDate.split('T')[0] : '';
         const cipSent = proposal.cipSentDate ? proposal.cipSentDate.split('T')[0] : '';
-        
-        if (!cipRetDate && cipSent) {
-          const [y, m, d] = cipSent.split('-');
-          const sentD = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
-          cipRetDate = format(addBusinessDays(sentD, 5), 'yyyy-MM-dd');
-        }
 
         setFormData({
           clientName: proposal.clientName || '',
@@ -141,10 +142,19 @@ function ProposalDetailPageContent() {
   };
 
   const expectedReturnDate = useMemo(() => {
-    if (formData.status !== 'ANDAMENTO' || !formData.cipReturnDate) return null;
-    const [y, m, d] = formData.cipReturnDate.split('-');
-    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
-  }, [formData.cipReturnDate, formData.status]);
+    if (formData.status !== 'ANDAMENTO') return null;
+    
+    if (formData.cipReturnDate) {
+      const [y, m, d] = formData.cipReturnDate.split('-');
+      return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+    } else if (formData.cipSentDate) {
+      const [y, m, d] = formData.cipSentDate.split('-');
+      const sentD = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+      return addBusinessDays(sentD, 5);
+    }
+    
+    return null;
+  }, [formData.cipReturnDate, formData.cipSentDate, formData.status]);
 
   const remainingDays = useMemo(() => {
     if (!expectedReturnDate) return null;
@@ -153,17 +163,29 @@ function ProposalDetailPageContent() {
     
     if (isAfter(today, returnDate)) return 0;
     
-    // Count business days between today and return date
-    return differenceInBusinessDays(returnDate, today);
+    let count = 0;
+    let current = new Date(today);
+    current.setDate(current.getDate() + 1); // start counting from tomorrow
+    
+    while (current <= returnDate) {
+      const dayOfWeek = current.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // 0 = Sunday, 6 = Saturday
+        count++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return count;
   }, [expectedReturnDate]);
 
   const handleSave = async () => {
+    setError(null);
     if (!formData.clientName || !formData.clientCpf) {
-      alert('Por favor, preencha o nome e CPF do cliente.');
+      setError('Por favor, preencha o nome e CPF do cliente.');
       return;
     }
     if (!validateCpf(formData.clientCpf)) {
-      alert('CPF inválido.');
+      setError('CPF inválido.');
       return;
     }
 
@@ -178,10 +200,46 @@ function ProposalDetailPageContent() {
       };
       
       await saveProposal(proposalData);
-      router.push('/propostas');
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        router.push('/propostas');
+      }, 2000);
     } catch (error) {
       console.error('Error saving proposal:', error);
-      alert('Erro ao salvar proposta. Verifique sua conexão.');
+      setError('Erro ao salvar proposta. Verifique sua conexão.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setError(null);
+    if (!formData.clientName || !formData.clientCpf) {
+      setError('Por favor, preencha o nome e CPF do cliente para salvar como rascunho.');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      const proposalData = {
+        ...formData,
+        status: 'RASCUNHO',
+        id: isNew ? undefined : proposalId,
+        userId: profile.uid,
+        promotoraId: profile.promotoraId || profile.uid,
+        expectedReturnDate: expectedReturnDate ? expectedReturnDate.toISOString() : null,
+      };
+      
+      await saveProposal(proposalData);
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        router.push('/propostas');
+      }, 2000);
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      setError('Erro ao salvar rascunho. Verifique sua conexão.');
     } finally {
       setSaving(false);
     }
@@ -251,6 +309,14 @@ function ProposalDetailPageContent() {
             </div>
             
             <div className="flex items-center gap-2">
+              {formData.status === 'ANDAMENTO' && (
+                <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-xl">
+                  <Clock className="w-4 h-4 text-blue-500" />
+                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                    {remainingDays !== null ? `${remainingDays} dias restantes` : 'Calculando...'}
+                  </span>
+                </div>
+              )}
               {!isNew && (
                 <button 
                   onClick={handleDelete}
@@ -272,6 +338,20 @@ function ProposalDetailPageContent() {
           </div>
         </header>
 
+        <AnimatePresence>
+          {showSuccess && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-white px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3"
+            >
+              <CheckCircle className="w-5 h-5" />
+              <span className="font-bold">Alterações salvas com sucesso!</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <main className="p-4 max-w-3xl mx-auto w-full space-y-6">
           {/* Status Seals (Farol) */}
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -288,7 +368,7 @@ function ProposalDetailPageContent() {
                     if (option.id === 'ANDAMENTO' && !formData.cipSentDate) {
                       const todayStr = format(new Date(), 'yyyy-MM-dd');
                       updates.cipSentDate = todayStr;
-                      updates.cipReturnDate = format(addBusinessDays(new Date(), 5), 'yyyy-MM-dd');
+                      // cipReturnDate remains blank so it calculates automatically
                     }
                     setFormData({ ...formData, ...updates });
                   }}
@@ -413,15 +493,7 @@ function ProposalDetailPageContent() {
                   value={formData.cipSentDate}
                   onChange={(e) => {
                     const newSentDate = e.target.value;
-                    const updates: any = { cipSentDate: newSentDate };
-                    if (newSentDate) {
-                      const [y, m, d] = newSentDate.split('-');
-                      const sentD = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
-                      updates.cipReturnDate = format(addBusinessDays(sentD, 5), 'yyyy-MM-dd');
-                    } else {
-                      updates.cipReturnDate = '';
-                    }
-                    setFormData({ ...formData, ...updates });
+                    setFormData({ ...formData, cipSentDate: newSentDate });
                   }}
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 />

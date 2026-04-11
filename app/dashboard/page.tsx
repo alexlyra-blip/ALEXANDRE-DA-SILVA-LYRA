@@ -536,14 +536,14 @@ export default function Dashboard() {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="professional-card p-6 flex items-center gap-4 border-l-4 border-l-primary"
+            className="professional-card p-6 flex items-center gap-4 border-l-4 border-l-primary dark:bg-slate-800"
           >
             <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
               <FileText className="w-6 h-6" />
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Total Simulações</p>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.totalSimulations}</p>
+              <p className="text-2xl font-black text-foreground">{stats.totalSimulations}</p>
             </div>
           </motion.div>
 
@@ -551,14 +551,14 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="professional-card p-6 flex items-center gap-4 border-l-4 border-l-secondary"
+            className="professional-card p-6 flex items-center gap-4 border-l-4 border-l-secondary dark:bg-slate-800"
           >
             <div className="size-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary">
               <TrendingUp className="w-6 h-6" />
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Hoje</p>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.simulationsToday}</p>
+              <p className="text-2xl font-black text-foreground">{stats.simulationsToday}</p>
             </div>
           </motion.div>
 
@@ -566,14 +566,14 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="professional-card p-6 flex items-center gap-4 border-l-4 border-l-emerald-500"
+            className="professional-card p-6 flex items-center gap-4 border-l-4 border-l-emerald-500 dark:bg-slate-800"
           >
             <div className="size-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
               <Building2 className="w-6 h-6" />
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Banco Favorito</p>
-              <p className="text-lg font-black text-slate-900 dark:text-white truncate max-w-[120px]">{stats.mostRecommendedBank}</p>
+              <p className="text-lg font-black text-foreground truncate max-w-[120px]">{stats.mostRecommendedBank}</p>
             </div>
           </motion.div>
         </div>
@@ -581,7 +581,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           {/* Chart Section */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="professional-card p-6">
+            <div className="professional-card p-6 dark:bg-slate-800">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
                 <h3 className="font-black text-lg flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-primary" />
@@ -714,7 +714,7 @@ export default function Dashboard() {
           {/* Sidebar Section */}
           <div className="space-y-8">
             {/* Top Users */}
-            <div className="professional-card p-6">
+            <div className="professional-card p-6 dark:bg-slate-800">
               <h3 className="font-black text-lg mb-6 flex items-center gap-2">
                 <Users className="w-5 h-5 text-secondary" />
                 Top 5 Corretores
@@ -733,7 +733,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors">{user.name}</p>
+                          <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{user.name}</p>
                           <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">{user.count} simulações</p>
                         </div>
                       </div>
@@ -754,7 +754,7 @@ export default function Dashboard() {
             </div>
 
             {/* Donut Chart - Mix por Convênio */}
-            <div className="professional-card p-6">
+            <div className="professional-card p-6 dark:bg-slate-800">
               <h3 className="font-black text-lg mb-6 flex items-center gap-2">
                 <PieChartIcon className="w-5 h-5 text-pink-500" />
                 Mix por Convênio
@@ -791,7 +791,7 @@ export default function Dashboard() {
         </div>
 
         {/* Recent Simulations - Full Width at Bottom */}
-        <div className="professional-card overflow-hidden mb-8">
+        <div className="professional-card overflow-hidden mb-8 dark:bg-slate-800">
           <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <h3 className="font-black text-lg">Simulações Recentes</h3>
             <Link href="/simulacao/nova" className="text-primary text-sm font-bold hover:underline flex items-center gap-1">
@@ -894,7 +894,7 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm font-medium">{sim.topOfferPrazo || '96'}x</span>
+                        <span className="text-sm font-medium">{sim.subConvenio === 'Marinha' ? '72' : (sim.topOfferPrazo || '96')}x</span>
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-sm font-bold text-emerald-600">

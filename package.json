@@ -8,10 +8,6 @@
     "start": "next start",
     "lint": "next lint"
   },
-  "overrides": {
-    "react": "$react",
-    "react-dom": "$react-dom"
-  },
   "dependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@google/genai": "^1.46.0",

@@ -694,14 +694,17 @@ export default function RegrasBanco() {
                             bank.convenio === 'SIAPE' 
                               ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' 
                               : bank.convenio === 'GOVERNO'
-                              ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+                              ? 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400'
                               : bank.convenio === 'FORÇAS ARMADAS'
-                              ? 'bg-purple-100 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400'
+                              ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
                               : 'bg-primary/10 text-primary'
                           }`}>
                             {bank.convenio || 'INSS'}
                           </span>
                         </div>
+                        {bank.subConvenio && (
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{bank.subConvenio}</p>
+                        )}
                         <p className="text-xs text-slate-500 dark:text-slate-400">{bank.tabelas?.length || 0} tabelas</p>
                       </div>
                     </div>
