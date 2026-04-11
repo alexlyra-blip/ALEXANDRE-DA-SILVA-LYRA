@@ -12,6 +12,7 @@ import { db } from '@/firebase';
 import { PromotoraAvatar } from '@/components/PromotoraAvatar';
 import { uploadFileWithTimeout, deleteFile } from '@/lib/storage-service';
 import { getAuth } from 'firebase/auth';
+import { safeStringify } from '@/lib/utils';
 
 enum OperationType {
   CREATE = 'create',
@@ -61,8 +62,8 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     operationType,
     path
   }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('Firestore Error: ', safeStringify(errInfo));
+  throw new Error(safeStringify(errInfo));
 }
 
 type TabType = 'conta' | 'preferencias' | 'seguranca';

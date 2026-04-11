@@ -5,6 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function safeStringify(obj: any) {
+  try {
+    return JSON.stringify(obj);
+  } catch (e) {
+    console.error("Error stringifying object:", e);
+    return "{}";
+  }
+}
+
 export function safeLocalStorageSet(key: string, value: string) {
   try {
     localStorage.setItem(key, value);

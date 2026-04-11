@@ -20,7 +20,7 @@ export default function Cadastro() {
   const [isLoading, setIsLoading] = useState(false);
 
   const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     return emailRegex.test(email);
   };
 
@@ -140,6 +140,11 @@ export default function Cadastro() {
                   } else {
                     setFieldErrors(prev => ({...prev, email: "Formato de e-mail inválido"}));
                   }
+                }
+              }}
+              onBlur={() => {
+                if (email && !validateEmail(email)) {
+                  setFieldErrors(prev => ({...prev, email: "Formato de e-mail inválido"}));
                 }
               }}
               placeholder="seu@email.com"

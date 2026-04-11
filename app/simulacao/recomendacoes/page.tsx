@@ -864,26 +864,6 @@ export default function Recomendacoes() {
                           </div>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleSelectOffer(bank)}
-                        className="mt-3 w-full bg-primary hover:bg-primary/90 text-white text-[10px] font-black uppercase tracking-tight py-2 rounded-lg transition-all shadow-sm"
-                      >
-                        Selecionar
-                      </button>
-                      
-                      {bank.rules && bank.rules.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/50">
-                          {bank.rules.map((ruleGroup, i) => (
-                            <div key={i} className="flex gap-1">
-                              {ruleGroup.map((rule, j) => (
-                                <span key={j} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[8px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm whitespace-nowrap">
-                                  {rule}
-                                </span>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      )}
                   </div>
                   <div className="flex flex-col items-end gap-0.5 mt-1 shrink-0">
                     <p className="text-[8px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider">VALOR TROCO</p>
@@ -900,17 +880,38 @@ export default function Recomendacoes() {
                     
                     <button 
                       onClick={() => handleGeneratePDF(bank)}
-                      className={`mt-2 flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-all duration-300 ${
+                      className={`mt-2 flex items-center justify-center gap-1.5 rounded-lg p-2 text-xs font-bold transition-all duration-300 ${
                         index === 0 && !showAllOffers 
-                          ? 'bg-primary text-white shadow-md shadow-primary/20 hover:bg-primary/90' 
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700' 
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
+                      title="Baixar PDF"
                     >
-                      <span>Selecionar</span>
-                      <Download className="w-3.5 h-3.5" />
+                      <Download className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
+
+                <button
+                  onClick={() => handleSelectOffer(bank)}
+                  className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-black uppercase tracking-tight py-3 rounded-lg transition-all shadow-sm mt-2"
+                >
+                  Selecionar
+                </button>
+
+                {bank.rules && bank.rules.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/50">
+                    {bank.rules.map((ruleGroup, i) => (
+                      <div key={i} className="flex gap-1">
+                        {ruleGroup.map((rule, j) => (
+                          <span key={j} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[8px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm whitespace-nowrap">
+                            {rule}
+                          </span>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {expandedBankId === bank.id && (
                   <div className="mt-2 p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">

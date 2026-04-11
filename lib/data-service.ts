@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { db, auth } from '@/firebase';
+import { safeStringify } from '@/lib/utils';
 import { doc, getDoc, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, setDoc, orderBy, limit, or, serverTimestamp, startAfter } from 'firebase/firestore';
 
 export enum OperationType {
@@ -49,8 +50,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('Firestore Error: ', safeStringify(errInfo));
+  throw new Error(safeStringify(errInfo));
 }
 
 export interface BrandingData {

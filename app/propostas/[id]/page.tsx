@@ -245,17 +245,19 @@ function ProposalDetailPageContent() {
     }
   };
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   const handleDelete = async () => {
-    if (!confirm('Tem certeza que deseja excluir esta proposta?')) return;
-    
     setDeleting(true);
     try {
       await deleteProposal(proposalId as string);
       router.push('/propostas');
     } catch (error) {
       console.error('Error deleting proposal:', error);
+      setError('Erro ao excluir proposta.');
     } finally {
       setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 

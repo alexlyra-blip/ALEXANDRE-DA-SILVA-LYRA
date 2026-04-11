@@ -29,6 +29,7 @@ export default function PropostasPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [proposalToDelete, setProposalToDelete] = useState<any | null>(null);
 
   useEffect(() => {
     if (profile) {
@@ -81,11 +82,7 @@ export default function PropostasPage() {
     return count;
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!confirm('Tem certeza que deseja excluir esta proposta?')) return;
-    
+  const handleDelete = async (id: string) => {
     setDeletingId(id);
     try {
       await deleteProposal(id);
@@ -94,6 +91,7 @@ export default function PropostasPage() {
       console.error('Error deleting proposal:', error);
     } finally {
       setDeletingId(null);
+      setProposalToDelete(null);
     }
   };
 
@@ -292,7 +290,7 @@ export default function PropostasPage() {
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         <div className="flex items-center gap-2">
                           <button 
-                            onClick={(e) => handleDelete(proposal.id, e)}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setProposalToDelete(proposal); }}
                             disabled={deletingId === proposal.id}
                             className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
                           >
@@ -326,6 +324,29 @@ export default function PropostasPage() {
             </div>
           </div>
         </main>
+
+        {proposalToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-sm shadow-xl border border-slate-200 dark:border-slate-800">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">Confirmar Exclusão</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">Tem certeza que deseja excluir esta proposta?</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setProposalToDelete(null)}
+                  className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold rounded-xl"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => handleDelete(proposalToDelete.id)}
+                  className="flex-1 py-3 bg-rose-600 text-white font-bold rounded-xl"
+                >
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <BottomNav activeTab="propostas" />
