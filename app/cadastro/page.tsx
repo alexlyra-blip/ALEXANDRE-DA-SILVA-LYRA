@@ -19,9 +19,13 @@ export default function Cadastro() {
   const [fieldErrors, setFieldErrors] = useState<{name?: string, email?: string, password?: string}>({});
   const [isLoading, setIsLoading] = useState(false);
 
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const validateForm = () => {
     const errors: {name?: string, email?: string, password?: string} = {};
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     
     if (!name.trim()) {
       errors.name = "Nome é obrigatório";
@@ -29,7 +33,7 @@ export default function Cadastro() {
     
     if (!email) {
       errors.email = "E-mail é obrigatório";
-    } else if (!emailRegex.test(email)) {
+    } else if (!validateEmail(email)) {
       errors.email = "Formato de e-mail inválido";
     }
     
@@ -59,8 +63,8 @@ export default function Cadastro() {
         setErrorMsg("Este e-mail já está em uso. Tente fazer login ou recupere sua senha.");
       } else if (error.code === 'auth/weak-password') {
         setErrorMsg("A senha deve ter pelo menos 6 caracteres.");
-      } else if (error.code === 'auth/operation-not-allowed') {
-        setErrorMsg("O cadastro com e-mail e senha não está ativado.");
+      } else if (error.code === 'auth/network-request-failed') {
+        setErrorMsg("Verifique sua conexão com a internet.");
       } else {
         setErrorMsg("Erro ao criar conta. Tente novamente.");
       }
@@ -128,8 +132,15 @@ export default function Cadastro() {
               type="email"
               value={email}
               onChange={(e) => {
-                setEmail(e.target.value);
-                if (fieldErrors.email) setFieldErrors(prev => ({...prev, email: undefined}));
+                const newEmail = e.target.value;
+                setEmail(newEmail);
+                if (fieldErrors.email) {
+                  if (validateEmail(newEmail)) {
+                    setFieldErrors(prev => ({...prev, email: undefined}));
+                  } else {
+                    setFieldErrors(prev => ({...prev, email: "Formato de e-mail inválido"}));
+                  }
+                }
               }}
               placeholder="seu@email.com"
               className={`w-full bg-white dark:bg-slate-900 border rounded-xl py-4 pl-12 pr-4 text-foreground focus:outline-none focus:ring-2 transition-all ${

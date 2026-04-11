@@ -318,40 +318,37 @@ export default function RegrasBanco() {
         await addBank(bankData);
         setSaveFeedback({ type: 'success', message: "Banco adicionado com sucesso!" });
         
-        // Reset form after success
-        setTimeout(() => {
-          setBankName('');
-          setLogoUrl('');
-          setMinAge('');
-          setMaxAge('');
-          setMinInstallmentValue('');
-          setMinBalance('');
-          setMinTroco('');
-          setPortabilityRate('');
-          setRefinRate('');
-          setSumBalanceAndTroco(false);
-          setNonAcceptedBanks([]);
-          setNonAcceptedBankInput('');
-          setSpecificInstallmentRules([]);
-          setSpecificBankInput('');
-          setSpecificInstallmentsInput('');
-          setAcceptsIlliterate(false);
-          setAcceptsLOAS(false);
-          setAcceptsInvalidez(true);
-          setInvalidezAgeYears('');
-          setAcceptsOver60Invalidez(false);
-          setMinBenefitTimeYears('');
-          setMinBenefitTimeMonths('');
-          setMinPaidInstallments('');
-          setPriority('');
-          setIsActive(true);
-          setConvenio('INSS');
-          setSubConvenio('');
-          setTaxaContratoAtualPreview('1.85');
-          setTabelas([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '' }]);
-          setErrors({});
-          setIsBankModalOpen(false);
-        }, 1500);
+        // Reset form after success, but keep modal open to allow user to view/edit
+        setBankName('');
+        setLogoUrl('');
+        setMinAge('');
+        setMaxAge('');
+        setMinInstallmentValue('');
+        setMinBalance('');
+        setMinTroco('');
+        setPortabilityRate('');
+        setRefinRate('');
+        setSumBalanceAndTroco(false);
+        setNonAcceptedBanks([]);
+        setNonAcceptedBankInput('');
+        setSpecificInstallmentRules([]);
+        setSpecificBankInput('');
+        setSpecificInstallmentsInput('');
+        setAcceptsIlliterate(false);
+        setAcceptsLOAS(false);
+        setAcceptsInvalidez(true);
+        setInvalidezAgeYears('');
+        setAcceptsOver60Invalidez(false);
+        setMinBenefitTimeYears('');
+        setMinBenefitTimeMonths('');
+        setMinPaidInstallments('');
+        setPriority('');
+        setIsActive(true);
+        setConvenio('INSS');
+        setSubConvenio('');
+        setTaxaContratoAtualPreview('1.85');
+        setTabelas([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '' }]);
+        setErrors({});
       }
     } catch (error) {
       console.error("Erro ao salvar banco:", error);
@@ -977,13 +974,18 @@ export default function RegrasBanco() {
                       <label className="text-[10px] font-medium text-slate-500">
                         {convenio === 'GOVERNO' ? 'Estado (UF)' : 'Militar (Exército, Aeronáutica, Marinha)'}
                       </label>
-                      <input 
-                        type="text" 
+                      <select 
                         value={subConvenio} 
                         onChange={e => setSubConvenio(e.target.value)} 
                         className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" 
-                        placeholder={convenio === 'GOVERNO' ? 'Ex: SP' : 'Ex: Exército'} 
-                      />
+                      >
+                        <option value="">Selecione...</option>
+                        {convenio === 'GOVERNO' ? (
+                          ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'].map(uf => <option key={uf} value={uf}>{uf}</option>)
+                        ) : (
+                          ['Exército', 'Aeronáutica', 'Marinha'].map(m => <option key={m} value={m}>{m}</option>)
+                        )}
+                      </select>
                     </div>
                   )}
                   <div className="col-span-2 space-y-4 border border-slate-200 dark:border-slate-700 p-4 rounded-xl bg-white dark:bg-slate-900 shadow-sm relative overflow-hidden">

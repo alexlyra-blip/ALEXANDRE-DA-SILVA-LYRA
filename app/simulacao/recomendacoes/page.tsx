@@ -814,7 +814,15 @@ export default function Recomendacoes() {
                         )}
                       </div>
                     </div>
-                      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1">
+                    {/* Exibição do subconvênio para Governo e Forças Armadas */}
+                    {(bank.convenio === 'GOVERNO' || bank.convenio === 'FORÇAS ARMADAS') && bank.subConvenio && (
+                      <div className="mt-1">
+                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                          Subconvênio: {bank.subConvenio}
+                        </span>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1">
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                           <FileText className="w-3 h-3 text-slate-400 shrink-0" />
                           <p className="text-[10px] font-medium truncate">
