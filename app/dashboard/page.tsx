@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { QuotaAlert } from '@/components/QuotaAlert';
-import { collection, query, onSnapshot, orderBy, where, limit, Timestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, where, limit, Timestamp, doc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PromotoraAvatar } from '@/components/PromotoraAvatar';
@@ -80,27 +80,49 @@ export default function Dashboard() {
   useEffect(() => {
     if (!profile) return;
 
-    const fetchSettings = async () => {
-      const promotoraId = profile.role === 'admin' ? 'admin' : (profile.role === 'promotora' ? profile.uid : profile.createdBy);
-      if (!promotoraId) return;
+    let brandingId = profile.uid;
+    if (profile.role === 'admin') {
+      brandingId = 'admin';
+    }
 
-      try {
-        const data = await getBrandingSettings(promotoraId);
-        if (data) {
-          setPromotoraSettings({ logoUrl: data.loginImageUrl || '', name: data.promoterName || profile.name });
-        } else {
-          setPromotoraSettings({ logoUrl: '', name: profile.name });
-        }
-      } catch (error: any) {
-        console.error("Error fetching settings:", error);
-        if (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded')) {
-          setQuotaExceeded(true);
+    const settingsRef = doc(db, 'settings', brandingId);
+    const unsubscribe = onSnapshot(settingsRef, async (snapshot) => {
+      let data: any = null;
+      
+      if (snapshot.exists()) {
+        data = snapshot.data();
+      } else if (brandingId !== 'admin') {
+        try {
+          let fallbackData = null;
+          
+          if (profile.role === 'vendedor' || profile.role === 'corretor') {
+            const creatorId = profile.promotoraId || profile.createdBy;
+            if (creatorId && creatorId !== 'admin') {
+              fallbackData = await getBrandingSettings(creatorId);
+            }
+          }
+          
+          if (!fallbackData) {
+            fallbackData = await getBrandingSettings('admin');
+          }
+          
+          if (fallbackData) data = fallbackData;
+        } catch (e) {
+          console.error("Failed to fetch fallback settings:", e);
         }
       }
-    };
 
-    fetchSettings();
-  }, [profile, setQuotaExceeded]);
+      if (data) {
+        setPromotoraSettings({ logoUrl: data.loginImageUrl || '', name: data.promoterName || profile.name });
+      } else {
+        setPromotoraSettings({ logoUrl: '', name: profile.name });
+      }
+    }, (error) => {
+      console.error("Error fetching settings:", error);
+    });
+
+    return () => unsubscribe();
+  }, [profile]);
 
   useEffect(() => {
     if (!profile) return;
@@ -480,7 +502,7 @@ export default function Dashboard() {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <PromotoraAvatar 
-              logoUrl={profile.avatarUrl || profile.photoUrl || promotoraSettings?.logoUrl} 
+              logoUrl={profile.avatarUrl || profile.photoUrl} 
               name={profile.name} 
               className="size-14 border-2 border-white/30 shadow-xl"
             />
@@ -621,14 +643,17 @@ export default function Dashboard() {
                       tick={{ fill: '#94a3b8', fontSize: 12 }}
                     />
                     <Tooltip 
+                      itemStyle={{ fontSize: '11px' }}
+                      labelStyle={{ fontSize: '11px' }}
                       contentStyle={{ 
                         borderRadius: '16px', 
                         border: 'none', 
                         boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                        padding: '12px'
+                        padding: '12px',
+                        fontSize: '11px'
                       }} 
                     />
-                    <Legend verticalAlign="top" height={36} iconType="circle" />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} verticalAlign="top" height={36} iconType="circle" />
                     <Line 
                       type="monotone" 
                       dataKey="INSS" 
@@ -693,14 +718,17 @@ export default function Dashboard() {
                     />
                     <Tooltip 
                       formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)}
+                      itemStyle={{ fontSize: '11px' }}
+                      labelStyle={{ fontSize: '11px' }}
                       contentStyle={{ 
                         borderRadius: '16px', 
                         border: 'none', 
                         boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                        padding: '12px'
+                        padding: '12px',
+                        fontSize: '11px'
                       }} 
                     />
-                    <Legend verticalAlign="top" height={36} iconType="circle" />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} verticalAlign="top" height={36} iconType="circle" />
                     <Bar dataKey="INSS_val" name="INSS" fill={stats.CONVENIO_COLORS['INSS']} radius={[4, 4, 0, 0]} />
                     <Bar dataKey="SIAPE_val" name="SIAPE" fill={stats.CONVENIO_COLORS['SIAPE']} radius={[4, 4, 0, 0]} />
                     <Bar dataKey="GOVERNO_val" name="GOVERNO" fill={stats.CONVENIO_COLORS['GOVERNO']} radius={[4, 4, 0, 0]} />

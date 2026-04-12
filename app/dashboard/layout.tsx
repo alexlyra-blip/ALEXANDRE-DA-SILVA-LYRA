@@ -1,5 +1,6 @@
 import Sidebar from '@/components/Sidebar';
 
+// Force rebuild
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-background-light dark:bg-background-dark">

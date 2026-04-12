@@ -308,6 +308,10 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
                   value={codigoBeneficio}
                   onChange={(e) => {
                     setCodigoBeneficio(e.target.value);
+                    if (convenio !== 'INSS') {
+                      const selected = beneficios[convenio].find(b => b.value === e.target.value);
+                      setSubConvenio(selected ? (selected.label.includes(' - ') ? selected.label.split(' - ')[1] : selected.label) : '');
+                    }
                     if (!['04', '32', '92'].includes(e.target.value)) {
                       setDataConcessao('');
                     }

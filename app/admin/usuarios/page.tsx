@@ -29,7 +29,9 @@ import {
   AlertCircle,
   Key,
   Clock,
-  Phone
+  Phone,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { PasswordStrength } from '@/components/PasswordStrength';
@@ -154,6 +156,7 @@ function UsuariosAdminContent() {
   const [userToResetPassword, setUserToResetPassword] = useState<any>(null);
   const [newPasswordForReset, setNewPasswordForReset] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Filter and Sort states
   const [startDate, setStartDate] = useState('');
@@ -431,18 +434,7 @@ function UsuariosAdminContent() {
         timestamp: Date.now()
       }));
 
-      // If we are updating our own branding, also update the global branding cache for the wrapper
-      if (targetId === profile?.uid || (targetId === 'admin' && profile?.role === 'admin')) {
-        const currentUserCacheKey = `branding_${profile?.uid}`;
-        safeLocalStorageSet(currentUserCacheKey, JSON.stringify({
-          data: brandingData,
-          timestamp: Date.now()
-        }));
-        
-        // Force a page reload to apply new theme immediately
-        window.location.reload();
-      }
-
+      // Removed automatic reload and global cache update
       console.log("handleSaveBranding: Branding save completed successfully");
       setBrandingStatus({ type: 'success', message: "Configurações salvas!" });
       showToast("Configurações de branding salvas com sucesso!", "success");
@@ -1710,22 +1702,13 @@ function UsuariosAdminContent() {
                 {profile?.role === 'admin' && (
                   <button
                     onClick={() => {
-                      let promotoraId = user.role === 'promotora' ? user.id : user.createdBy;
-                      
-                      // If it's an admin-created user or the user is an admin, use 'admin' for global branding
-                      // We check if the user was created by the current admin or if role is admin
-                      if (user.role === 'admin' || !promotoraId) {
-                        promotoraId = 'admin';
-                      }
-                      
-                      // If current user is admin and the target user's creator is an admin (not a promotora)
-                      // This is a bit tricky, but usually admin-created users have the admin's UID as createdBy
-                      // We'll check if the createdBy exists in our users list and what its role is
-                      const creator = users.find(u => u.id === promotoraId);
-                      if (creator && creator.role === 'admin') {
-                        promotoraId = 'admin';
-                      }
+                      // Always use the user's own ID so branding is applied to the selected profile
+                      let promotoraId = user.id;
 
+                      if (user.role === 'admin') {
+                        promotoraId = 'admin';
+                      }
+                      
                       if (promotoraId) {
                         setSelectedPromotoraId(promotoraId);
                         setShowBranding(true);
@@ -2006,14 +1989,23 @@ function UsuariosAdminContent() {
 
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Nova Senha</label>
-                <input
-                  required
-                  type="password"
-                  value={newPasswordForReset}
-                  onChange={(e) => setNewPasswordForReset(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
+                <div className="relative">
+                  <input
+                    required
+                    type={showPassword ? 'text' : 'password'}
+                    value={newPasswordForReset}
+                    onChange={(e) => setNewPasswordForReset(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-3 mt-4">

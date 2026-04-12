@@ -108,32 +108,9 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
     const profileCreatedBy = profile?.createdBy;
 
     const fetchRules = async () => {
-      const CACHE_KEY_BANKS = 'rules_banks';
-      const CACHE_KEY_GENERAL = 'rules_general';
-      const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // Increase to 24 hours
-
-      // Try to load from cache first
-      const cachedBanks = localStorage.getItem(CACHE_KEY_BANKS);
-      const cachedGeneral = localStorage.getItem(CACHE_KEY_GENERAL);
-
-      let hasValidCache = false;
-
-      if (cachedBanks && cachedGeneral) {
-        try {
-          const { data: banksData, timestamp: banksTime } = JSON.parse(cachedBanks);
-          const { data: generalData, timestamp: generalTime } = JSON.parse(cachedGeneral);
-          
-          if (Date.now() - banksTime < CACHE_EXPIRY && Date.now() - generalTime < CACHE_EXPIRY) {
-            console.log("RuleContext: Using cached rules");
-            setBanks(banksData);
-            setGeneralRules(generalData);
-            setIsLoaded(true);
-            hasValidCache = true;
-          }
-        } catch (e) {
-          console.error("RuleContext: Error parsing cached rules", e);
-        }
-      }
+      // Clear cache to force fresh fetch
+      localStorage.removeItem('rules_banks');
+      localStorage.removeItem('rules_general');
 
       // Fetch rules function
       const fetchFromFirestore = () => {
@@ -141,7 +118,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
         const unsubscribeBanks = onSnapshot(banksQuery, (snapshot) => {
           const banksData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BankRule));
           setBanks(banksData);
-          safeLocalStorageSet(CACHE_KEY_BANKS, JSON.stringify({
+          safeLocalStorageSet('rules_banks', JSON.stringify({
             data: banksData,
             timestamp: Date.now()
           }));
@@ -157,7 +134,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
         const unsubscribeGeneral = onSnapshot(generalQuery, (snapshot) => {
           const generalData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GeneralRule));
           setGeneralRules(generalData);
-          safeLocalStorageSet(CACHE_KEY_GENERAL, JSON.stringify({
+          safeLocalStorageSet('rules_general', JSON.stringify({
             data: generalData,
             timestamp: Date.now()
           }));
@@ -171,10 +148,8 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
         };
       };
 
-      if (!hasValidCache) {
-        const unsubscribe = fetchFromFirestore();
-        return unsubscribe;
-      }
+      const unsubscribe = fetchFromFirestore();
+      return unsubscribe;
     };
 
     const unsubscribePromise = fetchRules();

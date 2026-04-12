@@ -77,9 +77,45 @@ export default function Perfil() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState(profile?.email || '');
+  const [isEditingPhone, setIsEditingPhone] = useState(false);
+  const [newPhone, setNewPhone] = useState(profile?.phone || '');
   const [newPassword, setNewPassword] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('conta');
   const [resetMessage, setResetMessage] = useState({ type: '', text: '' });
+
+  const formatPhone = (value: string) => {
+    if (!value) return '';
+    value = value.replace(/\D/g, '');
+    if (value.length > 11) value = value.slice(0, 11);
+    
+    if (value.length <= 2) {
+      return value.length > 0 ? `(${value}` : '';
+    } else if (value.length <= 7) {
+      return `(${value.slice(0, 2)}) ${value.slice(2)}`;
+    } else {
+      return `(${value.slice(0, 2)}) ${value.slice(2, 7)}-${value.slice(7)}`;
+    }
+  };
+
+  const handleUpdatePhone = async () => {
+    if (!profile) return;
+    
+    const rawPhone = newPhone.replace(/\D/g, '');
+    if (rawPhone && rawPhone.length !== 11) {
+      showToast("O telefone deve ter 11 dígitos.", "error");
+      return;
+    }
+
+    try {
+      const userRef = doc(db, 'users', profile.uid);
+      await updateDoc(userRef, { phone: newPhone });
+      showToast("Telefone atualizado com sucesso!", "success");
+      setIsEditingPhone(false);
+    } catch (error: any) {
+      console.error("Error updating phone:", error);
+      showToast(`Erro ao atualizar telefone: ${error.message}`, "error");
+    }
+  };
 
   const handleUpdateEmail = async () => {
     if (!profile || !newEmail || newEmail === profile.email) {
@@ -295,6 +331,29 @@ export default function Perfil() {
                   <div className="flex items-center justify-between mt-1">
                     <p className="font-medium text-slate-800 dark:text-slate-200">{profile.email}</p>
                     <button onClick={() => setIsEditingEmail(true)} className="text-xs font-bold text-primary hover:text-primary/80">Editar</button>
+                  </div>
+                )}
+              </div>
+              <div className="h-px bg-slate-100 dark:bg-slate-800" />
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Telefone</label>
+                {isEditingPhone ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="tel"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(formatPhone(e.target.value))}
+                      placeholder="(00) 00000-0000"
+                      maxLength={15}
+                      className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary outline-none"
+                    />
+                    <button onClick={handleUpdatePhone} className="text-xs font-bold text-primary hover:text-primary/80">Salvar</button>
+                    <button onClick={() => setIsEditingPhone(false)} className="text-xs font-bold text-slate-500 hover:text-slate-700">Cancelar</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="font-medium text-slate-800 dark:text-slate-200">{profile.phone || 'Não informado'}</p>
+                    <button onClick={() => setIsEditingPhone(true)} className="text-xs font-bold text-primary hover:text-primary/80">Editar</button>
                   </div>
                 )}
               </div>

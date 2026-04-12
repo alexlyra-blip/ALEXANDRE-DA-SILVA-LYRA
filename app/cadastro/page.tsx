@@ -13,11 +13,26 @@ export default function Cadastro() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{name?: string, email?: string, password?: string}>({});
+  const [fieldErrors, setFieldErrors] = useState<{name?: string, email?: string, phone?: string, password?: string}>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  const formatPhone = (value: string) => {
+    if (!value) return '';
+    value = value.replace(/\D/g, '');
+    if (value.length > 11) value = value.slice(0, 11);
+    
+    if (value.length <= 2) {
+      return value.length > 0 ? `(${value}` : '';
+    } else if (value.length <= 7) {
+      return `(${value.slice(0, 2)}) ${value.slice(2)}`;
+    } else {
+      return `(${value.slice(0, 2)}) ${value.slice(2, 7)}-${value.slice(7)}`;
+    }
+  };
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -25,7 +40,7 @@ export default function Cadastro() {
   };
 
   const validateForm = () => {
-    const errors: {name?: string, email?: string, password?: string} = {};
+    const errors: {name?: string, email?: string, phone?: string, password?: string} = {};
     
     if (!name.trim()) {
       errors.name = "Nome é obrigatório";
@@ -35,6 +50,13 @@ export default function Cadastro() {
       errors.email = "E-mail é obrigatório";
     } else if (!validateEmail(email)) {
       errors.email = "Formato de e-mail inválido";
+    }
+
+    const rawPhone = phone.replace(/\D/g, '');
+    if (!rawPhone) {
+      errors.phone = "Telefone é obrigatório";
+    } else if (rawPhone.length !== 11) {
+      errors.phone = "Telefone deve ter 11 dígitos";
     }
     
     if (!password) {
@@ -55,7 +77,7 @@ export default function Cadastro() {
     setErrorMsg(null);
     setIsLoading(true);
     try {
-      await register(email, password, name);
+      await register(email, password, name, phone);
       router.push('/dashboard');
     } catch (error: any) {
       console.error("Registration failed", error);
@@ -155,6 +177,35 @@ export default function Cadastro() {
           </div>
           {fieldErrors.email && (
             <span className="text-[10px] font-bold text-red-500 ml-1 mt-1 uppercase tracking-widest">{fieldErrors.email}</span>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Telefone</label>
+          <div className="relative">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${fieldErrors.phone ? 'text-red-500' : 'text-slate-400'}`}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => {
+                const formattedPhone = formatPhone(e.target.value);
+                setPhone(formattedPhone);
+                if (fieldErrors.phone) {
+                  const rawPhone = formattedPhone.replace(/\D/g, '');
+                  if (rawPhone.length === 11) {
+                    setFieldErrors(prev => ({...prev, phone: undefined}));
+                  }
+                }
+              }}
+              placeholder="(00) 00000-0000"
+              maxLength={15}
+              className={`w-full bg-white dark:bg-slate-900 border rounded-xl py-4 pl-12 pr-4 text-foreground focus:outline-none focus:ring-2 transition-all ${
+                fieldErrors.phone ? 'border-red-500 focus:ring-red-500/50' : 'border-slate-200 dark:border-slate-800 focus:ring-primary/50'
+              }`}
+            />
+          </div>
+          {fieldErrors.phone && (
+            <span className="text-[10px] font-bold text-red-500 ml-1 mt-1 uppercase tracking-widest">{fieldErrors.phone}</span>
           )}
         </div>
 

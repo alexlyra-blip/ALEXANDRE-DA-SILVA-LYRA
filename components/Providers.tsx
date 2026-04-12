@@ -1,14 +1,28 @@
 'use client';
 
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { getBrandingSettings } from '@/lib/data-service';
+import { safeLocalStorageSet } from '@/lib/utils';
+import { db } from '@/firebase';
+import { doc, getDocFromServer, onSnapshot } from 'firebase/firestore';
 import { RuleProvider } from '@/contexts/RuleContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
-import { useEffect, useState } from 'react';
-import { getBrandingSettings } from '@/lib/data-service';
-import { safeLocalStorageSet } from '@/lib/utils';
-import { db } from '@/firebase';
-import { doc, getDocFromServer } from 'firebase/firestore';
+
+interface BrandingContextType {
+  primaryColor: string;
+  loginImageUrl: string;
+  promoterName: string;
+}
+
+const BrandingContext = createContext<BrandingContextType>({
+  primaryColor: '#1152d4',
+  loginImageUrl: '',
+  promoterName: ''
+});
+
+export const useBranding = () => useContext(BrandingContext);
 
 function ConnectionTester() {
   useEffect(() => {
@@ -80,77 +94,83 @@ function BrandingWrapper({ children }: { children: React.ReactNode }) {
     
     const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour
     
-    const fetchBranding = async () => {
-      const CACHE_KEY = `branding_${profile.uid}`;
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        try {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < CACHE_EXPIRY) {
-            setBranding(prev => ({ ...prev, ...data }));
-            return;
-          }
-        } catch (e) {}
-      }
-
+    let brandingId = profile.uid;
+    if (profile.role === 'admin') {
+      brandingId = 'admin';
+    }
+    
+    const CACHE_KEY = `branding_${brandingId}`;
+    
+    // Try to load from cache first for immediate display
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
       try {
-        // Determine which ID to use for branding
-        // Admin sees global branding ('admin')
-        // Promotora sees their own branding (profile.uid)
-        // Vendedor and Corretor see their Promotora's branding
-        let brandingId = profile.uid;
-        if (profile.role === 'admin') {
-          brandingId = 'admin';
-        } else if (profile.role === 'vendedor' || profile.role === 'corretor') {
-          brandingId = profile.promotoraId || profile.createdBy || 'admin';
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < CACHE_EXPIRY) {
+          setBranding(prev => ({ ...prev, ...data }));
         }
-        
-        console.log(`BrandingWrapper: Fetching branding for ${profile.role} using ID: ${brandingId}`);
-        let data = await getBrandingSettings(brandingId);
-        
-        // Fallback to admin branding if specific branding not found
-        if (!data && brandingId !== 'admin') {
-          console.log("BrandingWrapper: Specific branding not found, falling back to admin");
-          data = await getBrandingSettings('admin');
-        }
+      } catch (e) {}
+    }
 
-        if (data) {
-          const newBranding = {
-            primaryColor: data.primaryColor || '#1152d4',
-            loginImageUrl: data.loginImageUrl || '',
-            promoterName: data.promoterName || ''
-          };
-          setBranding(newBranding);
-          safeLocalStorageSet(CACHE_KEY, JSON.stringify({
-            data: newBranding,
-            timestamp: Date.now()
-          }));
-        } else {
-          setBranding({ primaryColor: '#1152d4', loginImageUrl: '', promoterName: '' });
-        }
-      } catch (error: any) {
-        console.error("BrandingWrapper: Error fetching branding:", error);
-        if (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded')) {
-          // Try to use expired cache if available
-          const cached = localStorage.getItem(CACHE_KEY);
-          if (cached) {
-            try {
-              const { data } = JSON.parse(cached);
-              setBranding(prev => ({ ...prev, ...data }));
-            } catch (e) {}
+    console.log(`BrandingWrapper: Listening for branding for ${profile.role} using ID: ${brandingId}`);
+
+    const settingsRef = doc(db, 'settings', brandingId);
+    const unsubscribe = onSnapshot(settingsRef, async (snapshot) => {
+      let data: any = null;
+      
+      if (snapshot.exists()) {
+        data = snapshot.data();
+      } else if (brandingId !== 'admin') {
+        // Fallback to creator's branding or admin if specific branding not found
+        console.log("BrandingWrapper: Specific branding not found, checking fallbacks");
+        try {
+          let fallbackData = null;
+          
+          // If user is corretor/vendedor, try their creator's branding first
+          if (profile.role === 'vendedor' || profile.role === 'corretor') {
+            const creatorId = profile.promotoraId || profile.createdBy;
+            if (creatorId && creatorId !== 'admin') {
+              fallbackData = await getBrandingSettings(creatorId);
+            }
           }
+          
+          // If still no data, fallback to admin
+          if (!fallbackData) {
+            fallbackData = await getBrandingSettings('admin');
+          }
+          
+          if (fallbackData) data = fallbackData;
+        } catch (e) {
+          console.error("Failed to fetch fallback branding", e);
         }
       }
-    };
 
-    fetchBranding();
+      if (data) {
+        const newBranding = {
+          primaryColor: data.primaryColor || '#1152d4',
+          loginImageUrl: data.loginImageUrl || '',
+          promoterName: data.promoterName || ''
+        };
+        setBranding(newBranding);
+        safeLocalStorageSet(CACHE_KEY, JSON.stringify({
+          data: newBranding,
+          timestamp: Date.now()
+        }));
+      } else {
+        setBranding({ primaryColor: '#1152d4', loginImageUrl: '', promoterName: '' });
+      }
+    }, (error) => {
+      console.error("BrandingWrapper: Error listening to branding:", error);
+    });
+
+    return () => unsubscribe();
   }, [profile]);
 
   const primaryDark = darkenColor(branding.primaryColor, 30);
   const sidebarBg = adjustSidebarColor(branding.primaryColor);
 
   return (
-    <>
+    <BrandingContext.Provider value={branding}>
       <style dangerouslySetInnerHTML={{ __html: `
         :root { 
           --primary: ${branding.primaryColor}; 
@@ -159,7 +179,7 @@ function BrandingWrapper({ children }: { children: React.ReactNode }) {
         }
       ` }} />
       {children}
-    </>
+    </BrandingContext.Provider>
   );
 }
 

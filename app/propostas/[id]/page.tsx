@@ -436,26 +436,42 @@ function ProposalDetailPageContent() {
                   <User className="w-3.5 h-3.5" />
                   Nome do Cliente
                 </label>
-                <input 
-                  type="text"
-                  value={formData.clientName}
-                  onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
-                  placeholder="Nome completo"
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                />
+                <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    value={formData.clientName}
+                    onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                    placeholder="Nome completo"
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                  />
+                  <button 
+                    onClick={() => { navigator.clipboard.writeText(formData.clientName); setShowCopySuccess(true); setTimeout(() => setShowCopySuccess(false), 2000); }}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 text-slate-400 hover:text-primary transition-all"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                   <CreditCard className="w-3.5 h-3.5" />
                   CPF do Cliente
                 </label>
-                <input 
-                  type="text"
-                  value={formData.clientCpf}
-                  onChange={(e) => setFormData({ ...formData, clientCpf: formatCpf(e.target.value) })}
-                  placeholder="000.000.000-00"
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                />
+                <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    value={formData.clientCpf}
+                    onChange={(e) => setFormData({ ...formData, clientCpf: formatCpf(e.target.value) })}
+                    placeholder="000.000.000-00"
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                  />
+                  <button 
+                    onClick={() => { navigator.clipboard.writeText(formData.clientCpf); setShowCopySuccess(true); setTimeout(() => setShowCopySuccess(false), 2000); }}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 text-slate-400 hover:text-primary transition-all"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -465,13 +481,21 @@ function ProposalDetailPageContent() {
                   <FileText className="w-3.5 h-3.5" />
                   Número da Proposta
                 </label>
-                <input 
-                  type="text"
-                  value={formData.proposalNumber}
-                  onChange={(e) => setFormData({ ...formData, proposalNumber: e.target.value })}
-                  placeholder="Ex: 123456789"
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                />
+                <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    value={formData.proposalNumber}
+                    onChange={(e) => setFormData({ ...formData, proposalNumber: e.target.value })}
+                    placeholder="Ex: 123456789"
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                  />
+                  <button 
+                    onClick={() => { navigator.clipboard.writeText(formData.proposalNumber); setShowCopySuccess(true); setTimeout(() => setShowCopySuccess(false), 2000); }}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 text-slate-400 hover:text-primary transition-all"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">

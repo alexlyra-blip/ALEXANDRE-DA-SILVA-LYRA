@@ -10,7 +10,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState } from 'react';
 
 import { getBrandingSettings } from '@/lib/data-service';
-import { safeLocalStorageSet } from '@/lib/utils';
 
 export default function Login() {
   const { user, login, isAuthReady, resetPassword, loginWithGoogle, setQuotaExceeded, blockedError, setBlockedError } = useAuth();
@@ -40,25 +39,6 @@ export default function Login() {
 
   useEffect(() => {
     const fetchBranding = async () => {
-      const CACHE_KEY = 'branding_admin';
-      const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
-
-      // Try to load from cache first for immediate display
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        try {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < CACHE_EXPIRY) {
-            console.log("Login: Using cached branding settings");
-            setBranding(data);
-            setIsLoadingBranding(false);
-            // We still fetch in the background to ensure we have the latest
-          }
-        } catch (e) {
-          console.error("Login: Error parsing cached branding", e);
-        }
-      }
-
       try {
         console.log("Login: Fetching global branding settings via DataService...");
         const data = await getBrandingSettings();
@@ -70,12 +50,6 @@ export default function Login() {
           };
           console.log("Login: Branding settings loaded:", brandingData);
           setBranding(brandingData);
-          
-          // Update cache
-          safeLocalStorageSet(CACHE_KEY, JSON.stringify({
-            data: brandingData,
-            timestamp: Date.now()
-          }));
         } else {
           console.log("Login: No global branding settings found, using defaults.");
         }
@@ -83,13 +57,6 @@ export default function Login() {
         console.error("Login: Error fetching branding settings:", error);
         if (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded')) {
           setQuotaExceeded(true);
-          // If we have a cache (even if expired), use it on quota error
-          if (cached) {
-            try {
-              const { data } = JSON.parse(cached);
-              setBranding(data);
-            } catch (e) {}
-          }
         }
       } finally {
         setIsLoadingBranding(false);
