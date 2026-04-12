@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateEmail, updatePassword } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { getUserProfile } from '@/lib/data-service';
@@ -21,6 +21,7 @@ export interface UserProfile {
   createdBy?: string | null;
   promotoraId?: string | null;
   maxUsers?: number;
+  phone?: string; // optional phone field
 }
 
 interface AuthContextType {
@@ -32,7 +33,7 @@ interface AuthContextType {
   setQuotaExceeded: (value: boolean) => void;
   resetQuotaExceeded: () => void;
   login: (email: string, pass: string) => Promise<void>;
-  register: (email: string, pass: string, name: string) => Promise<void>;
+  register: (email: string, pass: string, name: string, phone?: string) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
