@@ -922,7 +922,7 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm font-medium">{sim.subConvenio === 'Marinha' ? '72' : (sim.topOfferPrazo || '96')}x</span>
+                        <span className="text-sm font-medium">{sim.topOfferPrazo || (sim.subConvenio === 'Marinha' ? '72' : '96')}x</span>
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-sm font-bold text-emerald-600">

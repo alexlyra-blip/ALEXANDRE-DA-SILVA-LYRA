@@ -14,6 +14,7 @@ export interface Tabela {
   ajusteTaxaPonderada?: number;
   useMinTicket?: boolean;
   useTaxaPonderada?: boolean;
+  prazoRefinPort?: number;
 }
 
 export interface SpecificInstallmentRule {

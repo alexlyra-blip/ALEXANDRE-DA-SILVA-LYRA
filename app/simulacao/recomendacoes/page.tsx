@@ -31,6 +31,7 @@ interface Offer {
   convenio: 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS';
   subConvenio?: string;
   tabelasCount: number;
+  prazoRefinPort?: number;
 }
 
 import NovaSimulacao from '../nova/page';
@@ -355,7 +356,8 @@ export default function Recomendacoes() {
               rules,
               convenio: bank.convenio || 'INSS',
               subConvenio: bank.subConvenio,
-              tabelasCount: bank.tabelas.length
+              tabelasCount: bank.tabelas.length,
+              prazoRefinPort: tabela.prazoRefinPort
             });
           } else {
             if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by valorTroco <= 0: ${valorTroco}`);
@@ -406,7 +408,7 @@ export default function Recomendacoes() {
         topOfferContrato: topOffer?.valorContrato || 0,
         topOfferTroco: topOffer?.valorTroco || 0,
         topOfferTaxa: topOffer?.novaTaxaPortabilidade || 0,
-        topOfferPrazo: simDataParsed.subConvenio === 'Marinha' ? 72 : 96,
+        topOfferPrazo: topOffer.prazoRefinPort || (simDataParsed.subConvenio === 'Marinha' ? 72 : (simDataParsed.prazoTotal || 96)),
         createdAt: serverTimestamp()
       };
 
@@ -576,7 +578,7 @@ export default function Recomendacoes() {
   };
 
   return (
-    <div className="flex w-full min-h-screen bg-background text-foreground overflow-hidden">
+    <div className={`flex w-full min-h-screen bg-background text-foreground ${showAllOffers ? 'overflow-hidden' : ''}`}>
       {/* Desktop Simulator Sidebar with Animation */}
       <motion.div 
         initial={false}
@@ -593,11 +595,11 @@ export default function Recomendacoes() {
         </div>
       </motion.div>
 
-      <div className="flex flex-col flex-1 min-w-0 bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display pb-44 h-screen overflow-y-auto pt-4">
+      <div className={`flex flex-col flex-1 min-w-0 bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display ${showAllOffers ? 'pb-20 h-screen overflow-y-auto' : 'pb-6'} pt-2`}>
         <div className="w-full max-w-5xl mx-auto">
           <QuotaAlert />
           {/* Top Header */}
-          <div className="flex items-center bg-white/80 dark:bg-black/80 backdrop-blur-md p-3 sticky top-0 z-40 border-b border-slate-100 dark:border-white/10 rounded-b-2xl mx-4 shadow-sm">
+          <div className="flex items-center bg-white/80 dark:bg-black/80 backdrop-blur-md p-2 sticky top-0 z-40 border-b border-slate-100 dark:border-white/10 rounded-b-2xl mx-4 shadow-sm">
             <Link href="/simulacao/nova" className="text-slate-900 dark:text-slate-100 flex size-8 shrink-0 items-center justify-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </Link>
@@ -618,7 +620,7 @@ export default function Recomendacoes() {
           </div>
 
           {/* Filters Section */}
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/90 dark:bg-black/90 backdrop-blur-sm border-b border-slate-100 dark:border-white/10 sticky top-[68px] z-30 mx-4 mt-2 rounded-xl shadow-sm">
+          <div className="flex items-center gap-2 px-4 py-1.5 bg-white/90 dark:bg-black/90 backdrop-blur-sm border-b border-slate-100 dark:border-white/10 sticky top-[60px] z-30 mx-4 mt-1 rounded-xl shadow-sm">
         <div className="relative flex-1">
           <button 
             onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
@@ -692,7 +694,7 @@ export default function Recomendacoes() {
       </div>
 
       {/* View Toggle and Filter */}
-      <div className="px-4 pt-4 pb-2">
+      <div className="px-4 pt-2 pb-1">
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
           <div className="flex flex-1 bg-slate-100 dark:bg-slate-800/50 p-0.5 rounded-lg border border-slate-200/50 dark:border-slate-800/50">
             <button
@@ -712,7 +714,7 @@ export default function Recomendacoes() {
       </div>
 
       {/* Recommendations List */}
-      <div className="flex flex-col gap-4 p-4 pt-8">
+      <div className={`flex flex-col gap-3 p-4 ${showAllOffers ? 'pt-4' : 'pt-2'}`}>
         {sortedBanks.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-white/10">
             <Banknote className="w-12 h-12 text-slate-400 mb-4" />
@@ -762,7 +764,7 @@ export default function Recomendacoes() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: index * 0.1 }}
-                className="group flex flex-col gap-2 rounded-xl bg-white dark:bg-surface-dark p-3 shadow-sm hover:shadow-md border border-slate-200 dark:border-white/10 hover:border-primary/30 transition-all relative overflow-hidden"
+                className={`group flex flex-col gap-1.5 rounded-xl bg-white dark:bg-surface-dark ${showAllOffers ? 'p-3' : 'p-2.5'} shadow-sm hover:shadow-md border border-slate-200 dark:border-white/10 hover:border-primary/30 transition-all relative overflow-hidden`}
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                 {badge && (
@@ -822,7 +824,7 @@ export default function Recomendacoes() {
                         </span>
                       </div>
                     )}
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1">
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0 mt-0.5">
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                           <FileText className="w-3 h-3 text-slate-400 shrink-0" />
                           <p className="text-[10px] font-medium truncate">
@@ -838,7 +840,7 @@ export default function Recomendacoes() {
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                           <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
                           <p className="text-[10px] font-medium truncate">
-                            Prazo: <span className="text-slate-900 dark:text-white font-bold">{simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96)}X</span>
+                            Prazo: <span className="text-slate-900 dark:text-white font-bold">{bank.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))}X</span>
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
@@ -865,7 +867,7 @@ export default function Recomendacoes() {
                         )}
                       </div>
                   </div>
-                  <div className="flex flex-col items-end gap-0.5 mt-1 shrink-0">
+                  <div className="flex flex-col items-end gap-0 mt-0.5 shrink-0">
                     <p className="text-[8px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider">VALOR TROCO</p>
                     <p className={`text-lg sm:text-xl font-black tracking-tight ${isMelhorTroco || (index === 0 && !showAllOffers) ? 'text-primary' : 'text-slate-900 dark:text-white'} whitespace-nowrap`}>{formatCurrency(bank.valorTroco)}</p>
                     
@@ -880,7 +882,7 @@ export default function Recomendacoes() {
                     
                     <button 
                       onClick={() => handleGeneratePDF(bank)}
-                      className={`mt-2 flex items-center justify-center gap-1.5 rounded-lg p-2 text-xs font-bold transition-all duration-300 ${
+                      className={`mt-1 flex items-center justify-center gap-1.5 rounded-lg p-1.5 text-xs font-bold transition-all duration-300 ${
                         index === 0 && !showAllOffers 
                           ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700' 
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -894,7 +896,7 @@ export default function Recomendacoes() {
 
                 <button
                   onClick={() => handleSelectOffer(bank)}
-                  className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-black uppercase tracking-tight py-3 rounded-lg transition-all shadow-sm mt-2"
+                  className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-black uppercase tracking-tight py-2.5 rounded-lg transition-all shadow-sm mt-1.5"
                 >
                   Selecionar
                 </button>

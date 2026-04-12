@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log("AuthContext: Profile updated", data.role, data.status);
             
             // Auto-upgrade first admin if they are stuck
-            const isFirstAdmin = firebaseUser.email === 'alexandrelyra@msn.com';
+            const isFirstAdmin = firebaseUser.email === 'alexandrelyra@msn.com' || firebaseUser.email === 'alexlyra@gmail.com';
             
             // Check for 3-day trial block
             const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } else {
             console.log("AuthContext: No profile found, bootstrapping...");
-            const isFirstAdmin = firebaseUser.email === 'alexandrelyra@msn.com';
+            const isFirstAdmin = firebaseUser.email === 'alexandrelyra@msn.com' || firebaseUser.email === 'alexlyra@gmail.com';
             const newProfile: UserProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
@@ -211,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, email, pass);
       
-      const isFirstAdmin = email === 'alexandrelyra@msn.com';
+      const isFirstAdmin = email === 'alexandrelyra@msn.com' || email === 'alexlyra@gmail.com';
       const newProfile: UserProfile = {
         uid: firebaseUser.uid,
         email: email,

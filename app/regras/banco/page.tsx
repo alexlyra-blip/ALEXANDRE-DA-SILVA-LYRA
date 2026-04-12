@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Info, Search, ShieldCheck, Landmark, Save, User, TrendingDown, TrendingUp, Plus, X, Settings, FileText, Trash2, Edit, CheckCircle2, AlertCircle, Hash, Percent, Zap, Lock, Settings2 } from 'lucide-react';
+import { ArrowLeft, Info, Search, ShieldCheck, Landmark, Save, User, TrendingDown, TrendingUp, Plus, X, Settings, FileText, Trash2, Edit, CheckCircle2, AlertCircle, Hash, Percent, Zap, Lock, Settings2, Clock } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useRouter } from 'next/navigation';
 import { useRules, BankRule, GeneralRule } from '@/contexts/RuleContext';
@@ -75,7 +75,7 @@ export default function RegrasBanco() {
   const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS'>('INSS');
   const [subConvenio, setSubConvenio] = useState('');
   const [isActive, setIsActive] = useState(true);
-  const [tabelas, setTabelas] = useState([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true }]);
+  const [tabelas, setTabelas] = useState([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '' }]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Auto-populate from simulation data
@@ -123,7 +123,7 @@ export default function RegrasBanco() {
   const [generalRuleParcelas, setGeneralRuleParcelas] = useState('');
 
   const addTabela = () => {
-    setTabelas([...tabelas, { nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true }]);
+    setTabelas([...tabelas, { nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '' }]);
   };
 
   const removeTabela = (index: number) => {
@@ -302,7 +302,8 @@ export default function RegrasBanco() {
           taxaDiferencial: parseNumeric(t.taxaDiferencial),
           ajusteTaxaPonderada: parseNumeric(t.ajusteTaxaPonderada),
           useMinTicket: t.useMinTicket !== false,
-          useTaxaPonderada: t.useTaxaPonderada !== false
+          useTaxaPonderada: t.useTaxaPonderada !== false,
+          prazoRefinPort: t.prazoRefinPort ? parseInt(t.prazoRefinPort as any) : undefined
         }))
       };
 
@@ -399,8 +400,9 @@ export default function RegrasBanco() {
       taxaDiferencial: t.taxaDiferencial?.toString() || '',
       ajusteTaxaPonderada: t.ajusteTaxaPonderada?.toString() || '',
       useMinTicket: t.useMinTicket !== false,
-      useTaxaPonderada: t.useTaxaPonderada !== false
-    })) : [{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true }]);
+      useTaxaPonderada: t.useTaxaPonderada !== false,
+      prazoRefinPort: t.prazoRefinPort?.toString() || ''
+    })) : [{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '' }]);
     setIsBankModalOpen(true);
   };
 
@@ -1378,7 +1380,7 @@ export default function RegrasBanco() {
                     
                     {/* Grid de Inputs Principais */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2 sm:gap-3">
-                      <div className="space-y-1 sm:col-span-2 md:col-span-12">
+                      <div className="space-y-1 sm:col-span-2 md:col-span-8">
                         <div className="flex items-center gap-1 ml-1">
                           <FileText className="w-2 h-2 text-slate-400" />
                           <label className="text-[8px] font-black uppercase tracking-widest text-slate-500">Identificação da Tabela</label>
@@ -1391,6 +1393,20 @@ export default function RegrasBanco() {
                           placeholder="Ex: Tabela Flex 4.0" 
                         />
                         {errors[`tabela_${index}_nome`] && <p className="text-[8px] text-red-500 ml-1 font-bold">{errors[`tabela_${index}_nome`]}</p>}
+                      </div>
+
+                      <div className="space-y-1 sm:col-span-2 md:col-span-4">
+                        <div className="flex items-center gap-1 ml-1">
+                          <Clock className="w-2 h-2 text-slate-400" />
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500">Prazo do Refin de Port</label>
+                        </div>
+                        <input 
+                          type="number" 
+                          value={tabela.prazoRefinPort || ''} 
+                          onChange={e => handleTabelaChange(index, 'prazoRefinPort', e.target.value)} 
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:ring-2 focus:ring-primary/10 outline-none transition-all shadow-sm placeholder:text-slate-300" 
+                          placeholder="Ex: 84" 
+                        />
                       </div>
 
                       <div className="space-y-1 sm:col-span-2 md:col-span-4">
