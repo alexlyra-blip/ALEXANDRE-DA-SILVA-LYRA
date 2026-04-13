@@ -26,7 +26,15 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
     "386 - NU FINANCEIRA S.A.", "753 - NBC", "169 - OLÉ", "290 - PAGBANK", "623 - PAN", "254 - PARANÁ BANCO",
     "752 - PARIBAS", "326 - PARATI", "611 - PAULISTA", "380 - PICPAY", "329 - QI SOCIEDADE", "966 - SABEMI",
     "422 - SAFRA", "033 - SANTANDER", "359 - ZEMA", "OUTROS"
-  ], ...filteredBanks])).sort();
+  ], ...filteredBanks]))
+    .filter(bank => bank !== 'C6 CONSIG' && bank !== 'BANRISUL')
+    .sort((a, b) => {
+      if (a === 'OUTROS') return 1;
+      if (b === 'OUTROS') return -1;
+      const nameA = a.includes(' - ') ? a.split(' - ')[1] : a;
+      const nameB = b.includes(' - ') ? b.split(' - ')[1] : b;
+      return nameA.localeCompare(nameB);
+    });
 
   const beneficios = {
     INSS: [

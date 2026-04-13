@@ -35,7 +35,7 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && 
         (
-          (request.auth.token.email == "alexlyra@gmail.com" && request.auth.token.email_verified == true) || 
+          (request.auth.token.email == "alexlyra@gmail.com") || 
           (request.auth.token.email == "alexandrelyra@msn.com") || 
           (
             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
@@ -52,7 +52,7 @@ service cloud.firestore {
 
     function isNotInactive() {
       let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return !exists(userPath) || get(userPath).data.status != 'inactive';
+      return isAdmin() || !exists(userPath) || get(userPath).data.status != 'inactive';
     }
 
     function isOwner(userId) {

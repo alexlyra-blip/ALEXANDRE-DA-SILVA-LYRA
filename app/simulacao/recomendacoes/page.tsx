@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useEffect, useRef } from 'react';
@@ -10,7 +10,7 @@ import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -44,7 +44,6 @@ export default function Recomendacoes() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [allCalculatedOffers, setAllCalculatedOffers] = useState<Offer[]>([]);
   const [showAllOffers, setShowAllOffers] = useState(false);
-  const [expandedBankId, setExpandedBankId] = useState<string | null>(null);
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('all');
   const [simData, setSimData] = useState<any>(null);
   const { banks, generalRules, promotoraPriorities, isLoaded } = useRules();
@@ -462,26 +461,38 @@ export default function Recomendacoes() {
       return 0;
     });
 
-    const finalOffers: Offer[] = [];
+    // Group by bank and pick the best offer for each based on current sortBy
+    const bestOfferPerBank: Record<string, Offer> = {};
     
-    // 1. Best Offer
-    if (sorted.length > 0) {
-      finalOffers.push(sorted[0]);
-    }
+    sorted.forEach(offer => {
+      if (!bestOfferPerBank[offer.name]) {
+        bestOfferPerBank[offer.name] = offer;
+      } else {
+        const currentBest = bestOfferPerBank[offer.name];
+        let isBetter = false;
+        if (sortBy === 'valor_troco') {
+          isBetter = offer.valorTroco > currentBest.valorTroco;
+        } else if (sortBy === 'valor_contrato') {
+          isBetter = offer.valorContrato > currentBest.valorContrato;
+        } else if (sortBy === 'menor_troco') {
+          isBetter = offer.valorTroco < currentBest.valorTroco;
+        }
+        
+        if (isBetter) {
+          bestOfferPerBank[offer.name] = offer;
+        }
+      }
+    });
 
-    // 2. Second Best (Different Bank if possible)
-    const secondOffer = sorted.find(o => o.name !== finalOffers[0]?.name) || sorted[1];
-    if (secondOffer && !finalOffers.some(f => f.id === secondOffer.id)) {
-      finalOffers.push(secondOffer);
-    }
+    const uniqueBankOffers = Object.values(bestOfferPerBank).sort((a, b) => {
+      if (sortBy === 'valor_troco') return b.valorTroco - a.valorTroco;
+      if (sortBy === 'valor_contrato') return b.valorContrato - a.valorContrato;
+      if (sortBy === 'menor_troco') return a.valorTroco - b.valorTroco;
+      return 0;
+    });
 
-    // 3. Third Best (Different Bank if possible)
-    const thirdOffer = sorted.find(o => !finalOffers.some(f => f.id === o.id));
-    if (thirdOffer) {
-      finalOffers.push(thirdOffer);
-    }
-
-    setOffers(finalOffers);
+    // Take top 3 unique banks
+    setOffers(uniqueBankOffers.slice(0, 3));
   }, [allCalculatedOffers, sortBy, selectedBankFilter]);
 
   const currentOffers = showAllOffers 
@@ -575,6 +586,22 @@ export default function Recomendacoes() {
     doc.text('Sujeito a análise cadastral e de crédito pelo banco emissor.', pageWidth / 2, lastY + 5, { align: 'center' });
 
     doc.save(`simulacao_${offer.name.toLowerCase().replace(/\s+/g, '_')}.pdf`);
+  };
+
+  const [selectedTableIndices, setSelectedTableIndices] = useState<Record<string, number>>({});
+
+  const handleNextTable = (bankName: string, maxTables: number) => {
+    setSelectedTableIndices(prev => ({
+      ...prev,
+      [bankName]: ((prev[bankName] || 0) + 1) % maxTables
+    }));
+  };
+
+  const handlePrevTable = (bankName: string, maxTables: number) => {
+    setSelectedTableIndices(prev => ({
+      ...prev,
+      [bankName]: ((prev[bankName] || 0) - 1 + maxTables) % maxTables
+    }));
   };
 
   return (
@@ -728,34 +755,60 @@ export default function Recomendacoes() {
           </div>
         ) : (
           sortedBanks.map((bank, index) => {
+            // Get all offers for this specific bank
+            const bankOffers = allCalculatedOffers
+              .filter(o => o.name === bank.name)
+              .sort((a, b) => {
+                if (sortBy === 'menor_troco') return a.valorTroco - b.valorTroco;
+                if (sortBy === 'valor_troco') return b.valorTroco - a.valorTroco;
+                if (sortBy === 'valor_contrato') return b.valorContrato - a.valorContrato;
+                return 0;
+              });
+            
+            const currentTableIndex = selectedTableIndices[bank.name] || 0;
+            const currentOffer = bankOffers[currentTableIndex] || bank;
+
             let badge = null;
             let badgeColor = '';
             let badgeBg = '';
             let isMelhorTroco = false;
             let isMaiorContrato = false;
             
-            if (bank.valorTroco === minValorTroco && sortedBanks.length > 1) {
-              badge = 'MELHOR OFERTA';
-              badgeColor = 'text-emerald-600 dark:text-emerald-400';
-              badgeBg = 'bg-emerald-500/10 dark:bg-emerald-500/20';
-            } else if (bank.valorTroco === maxValorTroco && sortedBanks.length > 1) {
-              badge = 'MELHOR TROCO';
-              badgeColor = 'text-amber-600 dark:text-amber-400';
-              badgeBg = 'bg-amber-500/10 dark:bg-amber-500/20';
-              isMelhorTroco = true;
-            } else if (bank.valorTroco + bank.saldoDevedor === maxValorContrato && sortedBanks.length > 1) {
-              badge = 'MAIOR CONTRATO';
-              badgeColor = 'text-blue-600 dark:text-blue-400';
-              badgeBg = 'bg-blue-500/10 dark:bg-blue-500/20';
-              isMaiorContrato = true;
-            }
+            if (!showAllOffers) {
+              // In Principais Ofertas, badges reflect the current filter and rank
+              const filterLabel = sortBy === 'menor_troco' ? 'MELHOR OFERTA' : sortBy === 'valor_troco' ? 'MELHOR TROCO' : 'MAIOR CONTRATO';
+              const filterColor = sortBy === 'menor_troco' ? 'text-emerald-600 dark:text-emerald-400' : sortBy === 'valor_troco' ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400';
+              const filterBg = sortBy === 'menor_troco' ? 'bg-emerald-500/10 dark:bg-emerald-500/20' : sortBy === 'valor_troco' ? 'bg-amber-500/10 dark:bg-amber-500/20' : 'bg-blue-500/10 dark:bg-blue-500/20';
 
-            const sortedExpandedOffers = [...allCalculatedOffers]
-              .filter(o => o.name === bank.name && o.id !== bank.id)
-              .sort((a, b) => Number(a.valorTroco || 0) - Number(b.valorTroco || 0));
-
-            if (expandedBankId === bank.id) {
-              console.log(`Sorted expanded offers for ${bank.name}:`, sortedExpandedOffers.map(o => o.valorTroco));
+              if (index === 0) {
+                badge = filterLabel;
+                badgeColor = filterColor;
+                badgeBg = filterBg;
+              } else {
+                badge = `${index + 1}ª ${filterLabel}`;
+                badgeColor = 'text-slate-500 dark:text-slate-400';
+                badgeBg = 'bg-slate-500/10 dark:bg-slate-500/20';
+              }
+              
+              isMelhorTroco = sortBy === 'valor_troco' && index === 0;
+              isMaiorContrato = sortBy === 'valor_contrato' && index === 0;
+            } else {
+              // In All Offers, keep absolute winners badges
+              if (currentOffer.valorTroco === minValorTroco && sortedBanks.length > 1) {
+                badge = 'MELHOR OFERTA';
+                badgeColor = 'text-emerald-600 dark:text-emerald-400';
+                badgeBg = 'bg-emerald-500/10 dark:bg-emerald-500/20';
+              } else if (currentOffer.valorTroco === maxValorTroco && sortedBanks.length > 1) {
+                badge = 'MELHOR TROCO';
+                badgeColor = 'text-amber-600 dark:text-amber-400';
+                badgeBg = 'bg-amber-500/10 dark:bg-amber-500/20';
+                isMelhorTroco = true;
+              } else if (currentOffer.valorTroco + currentOffer.saldoDevedor === maxValorContrato && sortedBanks.length > 1) {
+                badge = 'MAIOR CONTRATO';
+                badgeColor = 'text-blue-600 dark:text-blue-400';
+                badgeBg = 'bg-blue-500/10 dark:bg-blue-500/20';
+                isMaiorContrato = true;
+              }
             }
 
             return (
@@ -780,8 +833,8 @@ export default function Recomendacoes() {
                       <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm relative shrink-0">
                         <div className="relative w-full h-full">
                           <Image
-                            src={bank.logo}
-                            alt={`${bank.name} logo`}
+                            src={currentOffer.logo}
+                            alt={`${currentOffer.name} logo`}
                             fill
                             unoptimized
                             className="object-cover"
@@ -791,44 +844,61 @@ export default function Recomendacoes() {
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-slate-900 dark:text-slate-100 text-sm font-bold leading-tight truncate">{bank.name}</h3>
+                          <h3 className="text-slate-900 dark:text-slate-100 text-sm font-bold leading-tight truncate">{currentOffer.name}</h3>
                           <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider shrink-0 text-white shadow-sm ${
-                            bank.convenio === 'SIAPE' 
+                            currentOffer.convenio === 'SIAPE' 
                               ? 'bg-[#f59e0b]' 
-                              : bank.convenio === 'GOVERNO'
+                              : currentOffer.convenio === 'GOVERNO'
                               ? 'bg-[#FF0000]'
-                              : bank.convenio === 'FORÇAS ARMADAS'
+                              : currentOffer.convenio === 'FORÇAS ARMADAS'
                               ? 'bg-[#47953D]'
                               : 'bg-[#1152d4]'
                           }`}>
-                            {bank.convenio}
+                            {currentOffer.convenio}
                           </span>
-                          {bank.subConvenio && (
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider shrink-0 text-white shadow-sm bg-slate-500">
-                              {bank.subConvenio}
-                            </span>
-                          )}
                         </div>
-                        {bank.tabelasCount > 1 && (
-                          <p className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
-                            +{bank.tabelasCount - 1} ofertas
-                          </p>
+                        {bankOffers.length > 1 && (
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
+                              {bankOffers.length} ofertas disponíveis
+                            </p>
+                            <div className="flex gap-1.5 items-center">
+                              <button 
+                                onClick={() => handlePrevTable(bank.name, bankOffers.length)}
+                                className="size-7 flex items-center justify-center rounded-xl bg-primary text-white hover:bg-primary/90 transition-all shadow-md shadow-primary/20 active:scale-90"
+                              >
+                                <ChevronLeft className="w-4 h-4" />
+                              </button>
+                              <span className="text-[10px] font-black text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700">{currentTableIndex + 1}/{bankOffers.length}</span>
+                              <button 
+                                onClick={() => handleNextTable(bank.name, bankOffers.length)}
+                                className="size-7 flex items-center justify-center rounded-xl bg-primary text-white hover:bg-primary/90 transition-all shadow-md shadow-primary/20 active:scale-90"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
-                    {/* Exibição do subconvênio para Governo e Forças Armadas */}
-                    {(bank.convenio === 'GOVERNO' || bank.convenio === 'FORÇAS ARMADAS') && bank.subConvenio && (
-                      <div className="mt-1">
-                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                          Subconvênio: {bank.subConvenio}
-                        </span>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-0 mt-0.5">
+                    
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.div
+                        key={`${currentOffer.id}-${currentTableIndex}`}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ 
+                          type: "spring",
+                          stiffness: 300,
+                          damping: 30
+                        }}
+                        className="grid grid-cols-2 gap-x-2 gap-y-0 mt-0.5"
+                      >
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                           <FileText className="w-3 h-3 text-slate-400 shrink-0" />
                           <p className="text-[10px] font-medium truncate">
-                            Tabela: <span className="text-slate-900 dark:text-white font-bold">{bank.tabela}</span>
+                            Tabela: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.tabela}</span>
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
@@ -840,53 +910,52 @@ export default function Recomendacoes() {
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                           <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
                           <p className="text-[10px] font-medium truncate">
-                            Prazo: <span className="text-slate-900 dark:text-white font-bold">{bank.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))}X</span>
+                            Prazo: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))}X</span>
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                           <Banknote className={`w-3 h-3 ${isMaiorContrato ? 'text-blue-500' : 'text-slate-400'} shrink-0`} />
                           <p className="text-[10px] font-medium truncate">
-                            Contrato: <span className={`${isMaiorContrato ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'} font-bold`}>{formatCurrency(bank.valorContrato)}</span>
+                            Contrato: <span className={`${isMaiorContrato ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'} font-bold`}>{formatCurrency(currentOffer.valorContrato)}</span>
                           </p>
                         </div>
-                        {bank.taxaPonderada !== undefined && (
+                        {currentOffer.taxaPonderada !== undefined && (
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                             <Percent className="w-3 h-3 text-slate-400 shrink-0" />
                             <p className="text-[10px] font-medium truncate">
-                              Taxa da Port.: <span className="text-slate-900 dark:text-white font-bold">{bank.taxaPonderada.toFixed(2)}%</span>
+                              Taxa da Port.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.taxaPonderada.toFixed(2)}%</span>
                             </p>
                           </div>
                         )}
-                        {bank.novaTaxaPortabilidade !== undefined && (
+                        {currentOffer.novaTaxaPortabilidade !== undefined && (
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                             <Percent className="w-3 h-3 text-slate-400 shrink-0" />
                             <p className="text-[10px] font-medium truncate">
-                              Taxa do Refin: <span className="text-slate-900 dark:text-white font-bold">{bank.novaTaxaPortabilidade.toFixed(2)}%</span>
+                              Taxa do Refin: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.novaTaxaPortabilidade.toFixed(2)}%</span>
                             </p>
                           </div>
                         )}
-                      </div>
+                      </motion.div>
+                    </AnimatePresence>
                   </div>
                   <div className="flex flex-col items-end gap-0 mt-0.5 shrink-0">
                     <p className="text-[8px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider">VALOR TROCO</p>
-                    <p className={`text-lg sm:text-xl font-black tracking-tight ${isMelhorTroco || (index === 0 && !showAllOffers) ? 'text-primary' : 'text-slate-900 dark:text-white'} whitespace-nowrap`}>{formatCurrency(bank.valorTroco)}</p>
-                    
-                    {bank.tabelasCount > 1 && (
-                      <button 
-                        onClick={() => setExpandedBankId(expandedBankId === bank.id ? null : bank.id)}
-                        className="mt-2 text-[9px] font-bold text-slate-400 hover:text-primary transition-colors"
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.p 
+                        key={currentOffer.valorTroco}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className={`text-lg sm:text-xl font-black tracking-tight ${isMelhorTroco || (index === 0 && !showAllOffers) ? 'text-primary' : 'text-slate-900 dark:text-white'} whitespace-nowrap`}
                       >
-                        {expandedBankId === bank.id ? 'Ocultar' : `Ver Outras Ofertas (${bank.tabelasCount - 1})`}
-                      </button>
-                    )}
+                        {formatCurrency(currentOffer.valorTroco)}
+                      </motion.p>
+                    </AnimatePresence>
                     
                     <button 
-                      onClick={() => handleGeneratePDF(bank)}
-                      className={`mt-1 flex items-center justify-center gap-1.5 rounded-lg p-1.5 text-xs font-bold transition-all duration-300 ${
-                        index === 0 && !showAllOffers 
-                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700' 
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
+                      onClick={() => handleGeneratePDF(currentOffer)}
+                      className={`mt-1 flex items-center justify-center gap-1.5 rounded-lg p-1.5 text-xs font-bold transition-all duration-300 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700`}
                       title="Baixar PDF"
                     >
                       <Download className="w-4 h-4" />
@@ -895,15 +964,15 @@ export default function Recomendacoes() {
                 </div>
 
                 <button
-                  onClick={() => handleSelectOffer(bank)}
+                  onClick={() => handleSelectOffer(currentOffer)}
                   className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-black uppercase tracking-tight py-2.5 rounded-lg transition-all shadow-sm mt-1.5"
                 >
                   Selecionar
                 </button>
 
-                {bank.rules && bank.rules.length > 0 && (
+                {currentOffer.rules && currentOffer.rules.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/50">
-                    {bank.rules.map((ruleGroup, i) => (
+                    {currentOffer.rules.map((ruleGroup, i) => (
                       <div key={i} className="flex gap-1">
                         {ruleGroup.map((rule, j) => (
                           <span key={j} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[8px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm whitespace-nowrap">
@@ -912,20 +981,6 @@ export default function Recomendacoes() {
                         ))}
                       </div>
                     ))}
-                  </div>
-                )}
-
-                {expandedBankId === bank.id && (
-                  <div className="mt-2 p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <h4 className="text-[9px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Outras Tabelas</h4>
-                    <div className="space-y-1">
-                      {sortedExpandedOffers.map(otherOffer => (
-                          <div key={otherOffer.id} className="flex justify-between items-center text-[10px] p-1.5 bg-white dark:bg-surface-dark rounded-md border border-slate-100 dark:border-white/5">
-                            <span className="font-medium text-slate-700 dark:text-slate-300">{otherOffer.tabela}</span>
-                            <span className="font-bold text-primary">{formatCurrency(otherOffer.valorTroco)}</span>
-                          </div>
-                        ))}
-                    </div>
                   </div>
                 )}
               </motion.div>
