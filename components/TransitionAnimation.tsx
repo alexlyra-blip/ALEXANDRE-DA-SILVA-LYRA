@@ -33,6 +33,27 @@ export default function TransitionAnimation({ onComplete }: { onComplete: () => 
     }));
   }, []);
 
+  // Generate logos to be sucked into the center
+  const suckedLogos = useMemo(() => {
+    if (banks.length === 0) return [];
+    const items = [];
+    for (let i = 0; i < banks.length; i++) {
+      for (let j = 0; j < 3; j++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 250 + Math.random() * 150; // Random distance between 250 and 400
+        items.push({
+          id: `${banks[i].name}-${i}-${j}`,
+          bank: banks[i],
+          startX: Math.cos(angle) * distance,
+          startY: Math.sin(angle) * distance,
+          delay: Math.random() * 5,
+          duration: 2 + Math.random() * 2
+        });
+      }
+    }
+    return items;
+  }, [banks]);
+
   // Fetch banks for the cycling animation
   useEffect(() => {
     const fetchBanks = async () => {
@@ -65,8 +86,8 @@ export default function TransitionAnimation({ onComplete }: { onComplete: () => 
 
   // Progress and step logic
   useEffect(() => {
-    const duration = 4500; // 4.5 seconds total
-    const intervalTime = 40;
+    const duration = 2500; // Reduced from 4.5s to 2.5s for faster perceived performance
+    const intervalTime = 25;
     const totalSteps = duration / intervalTime;
     const increment = 100 / totalSteps;
 
@@ -75,7 +96,7 @@ export default function TransitionAnimation({ onComplete }: { onComplete: () => 
         const next = prev + increment;
         if (next >= 100) {
           clearInterval(interval);
-          setTimeout(onComplete, 800); // Delay at 100% for satisfaction
+          setTimeout(onComplete, 400); // Reduced delay at 100%
           return 100;
         }
         return next;
@@ -208,41 +229,37 @@ export default function TransitionAnimation({ onComplete }: { onComplete: () => 
             <div className="absolute inset-0 bg-gradient-to-tr from-black/10 via-transparent to-white/20 pointer-events-none z-30" />
           </div>
 
-          {/* 3D Horizontal Scrolling Ticker */}
-          <div className="absolute -bottom-32 left-1/2 -translate-x-1/2 w-[120vw] h-24 overflow-hidden pointer-events-none">
-            <div className="relative w-full h-full flex items-center" style={{ perspective: '1000px' }}>
-              <motion.div 
-                className="flex gap-12 items-center whitespace-nowrap"
-                animate={{ x: [0, -1000] }}
-                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                style={{ transformStyle: 'preserve-3d' }}
+          {/* Logos being sucked into the center */}
+          <div className="absolute inset-0 pointer-events-none z-0 flex items-center justify-center">
+            {suckedLogos.map((item) => (
+              <motion.div
+                key={item.id}
+                className="absolute size-14 bg-white rounded-full shadow-lg flex items-center justify-center border border-slate-100 overflow-hidden"
+                initial={{ x: item.startX, y: item.startY, scale: 0, opacity: 0 }}
+                animate={{ 
+                  x: [item.startX, item.startX * 0.5, 0], 
+                  y: [item.startY, item.startY * 0.5, 0],
+                  scale: [0, 1, 0],
+                  opacity: [0, 1, 0]
+                }}
+                transition={{ 
+                  duration: item.duration, 
+                  delay: item.delay, 
+                  repeat: Infinity, 
+                  ease: "easeInOut" 
+                }}
               >
-                {[...banks, ...banks, ...banks].map((bank, i) => (
-                  <motion.div
-                    key={`${bank.name}-${i}`}
-                    className="size-16 bg-white rounded-full shadow-xl flex items-center justify-center border border-slate-100 overflow-hidden"
-                    style={{ 
-                      rotateY: 25,
-                      translateZ: 0
-                    }}
-                  >
-                    <div className="relative w-full h-full">
-                      <Image 
-                        src={bank.logo} 
-                        alt={bank.name} 
-                        fill 
-                        className="object-cover" 
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                  </motion.div>
-                ))}
+                <div className="relative w-full h-full">
+                  <Image 
+                    src={item.bank.logo} 
+                    alt={item.bank.name} 
+                    fill 
+                    className="object-cover" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
               </motion.div>
-            </div>
-            
-            {/* Fade edges */}
-            <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-white/80 dark:from-[#020617] to-transparent z-10" />
-            <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-white/80 dark:from-[#020617] to-transparent z-10" />
+            ))}
           </div>
 
           {/* Floating Tech Elements */}

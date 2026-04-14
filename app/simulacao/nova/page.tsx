@@ -2,11 +2,15 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, HelpCircle, User, FileText, ChevronDown, TrendingUp } from 'lucide-react';
+import { ArrowLeft, HelpCircle, User, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2 } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
 import { useRules } from '@/contexts/RuleContext';
+import { GoogleGenAI, Type } from "@google/genai";
+import { motion, AnimatePresence } from 'motion/react';
+
+const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' });
 
 export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const router = useRouter();
@@ -182,6 +186,67 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
   const isInvalidCalculation = parseCurrency(valorParcela) > 0 && parseInt(parcelasRestantes) > 0 && parseCurrency(saldoDevedor) > 0 && parseCurrency(valorParcela) * parseInt(parcelasRestantes) <= parseCurrency(saldoDevedor);
 
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiInput, setAiInput] = useState('');
+  const [isAILoading, setIsAILoading] = useState(false);
+
+  const handleAIParsing = async () => {
+    if (!aiInput.trim()) return;
+    
+    setIsAILoading(true);
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Extraia os dados de simulação de portabilidade do seguinte texto: "${aiInput}". 
+        Retorne um JSON com os campos: idade (número), convenio (uma das opções: INSS, SIAPE, GOVERNO, FORÇAS ARMADAS), codigoBeneficio (string), bancoAtual (string), valorParcela (número), prazoTotal (número), parcelasRestantes (número), saldoDevedor (número).
+        Se não encontrar um campo, deixe nulo.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              idade: { type: Type.NUMBER },
+              convenio: { type: Type.STRING },
+              codigoBeneficio: { type: Type.STRING },
+              bancoAtual: { type: Type.STRING },
+              valorParcela: { type: Type.NUMBER },
+              prazoTotal: { type: Type.NUMBER },
+              parcelasRestantes: { type: Type.NUMBER },
+              saldoDevedor: { type: Type.NUMBER },
+            }
+          }
+        }
+      });
+
+      const data = JSON.parse(response.text);
+      
+      if (data.idade) setIdade(data.idade.toString());
+      if (data.convenio) {
+        const conv = data.convenio.toUpperCase();
+        if (['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS'].includes(conv)) {
+          setConvenio(conv as any);
+        }
+      }
+      if (data.codigoBeneficio) setCodigoBeneficio(data.codigoBeneficio);
+      if (data.bancoAtual) {
+        // Tentar encontrar o banco na lista
+        const foundBank = allBanks.find(b => b.toLowerCase().includes(data.bancoAtual.toLowerCase()));
+        if (foundBank) setBancoAtual(foundBank);
+      }
+      if (data.valorParcela) setValorParcela(formatCurrency((data.valorParcela * 100).toString()));
+      if (data.prazoTotal) setPrazoTotal(data.prazoTotal.toString());
+      if (data.parcelasRestantes) setParcelasRestantes(data.parcelasRestantes.toString());
+      if (data.saldoDevedor) setSaldoDevedor(formatCurrency((data.saldoDevedor * 100).toString()));
+
+      setIsAIModalOpen(false);
+      setAiInput('');
+    } catch (error) {
+      console.error("Erro ao processar com IA:", error);
+      alert("Não foi possível processar o texto. Tente novamente ou preencha manualmente.");
+    } finally {
+      setIsAILoading(false);
+    }
+  };
 
   const handleSimulate = () => {
     if (isInvalidCalculation) {
@@ -230,9 +295,18 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
               </Link>
               <h2 className="text-xl font-bold leading-tight tracking-tight">Nova Simulação</h2>
             </div>
-            <button className="flex items-center justify-center size-10 rounded-full hover:bg-primary/10 transition-colors text-slate-900 dark:text-slate-100">
-              <HelpCircle className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setIsAIModalOpen(true)}
+                className="flex items-center justify-center size-10 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                title="Assistente IA"
+              >
+                <Sparkles className="w-5 h-5" />
+              </button>
+              <button className="flex items-center justify-center size-10 rounded-full hover:bg-primary/10 transition-colors text-slate-900 dark:text-slate-100">
+                <HelpCircle className="w-6 h-6" />
+              </button>
+            </div>
           </div>
         </header>
       )}
@@ -498,6 +572,75 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
       </footer>
 
       </div>
+      
+      {/* AI Assistant Modal */}
+      <AnimatePresence>
+        {isAIModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded-2xl flex items-center justify-center">
+                    <Sparkles className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold">Assistente IA</h3>
+                    <p className="text-xs text-slate-500">Cole o texto da simulação abaixo</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsAIModalOpen(false)}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <div className="relative">
+                  <textarea
+                    value={aiInput}
+                    onChange={(e) => setAiInput(e.target.value)}
+                    placeholder="Ex: Cliente João, 65 anos, INSS, parcela de 450,00, saldo de 12.000,00..."
+                    className="w-full h-40 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary outline-none resize-none transition-all"
+                  />
+                  <div className="absolute bottom-3 right-3 text-[10px] text-slate-400 font-medium">
+                    {aiInput.length} caracteres
+                  </div>
+                </div>
+                
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Dica: Você pode copiar a mensagem inteira do WhatsApp e colar aqui. Nossa IA identificará os valores automaticamente.
+                </p>
+                
+                <button
+                  onClick={handleAIParsing}
+                  disabled={isAILoading || !aiInput.trim()}
+                  className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-bold py-4 rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                >
+                  {isAILoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Processando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5" />
+                      <span>Preencher Automaticamente</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {!isEmbedded && (
         <div className="hidden md:flex flex-1 items-center justify-center bg-slate-50 dark:bg-black">
           <div className="flex flex-col items-center text-center max-w-md p-8">

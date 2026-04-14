@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Lock, Eye, LogIn, ShieldCheck, AlertCircle } from 'lucide-react';
+import { ArrowLeft, User, Lock, Eye, LogIn, ShieldCheck, AlertCircle, MessageCircle } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { PasswordStrength } from '@/components/PasswordStrength';
 import { useAuth } from '@/contexts/AuthContext';
@@ -175,6 +175,19 @@ export default function Login() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleWhatsAppLead = () => {
+    const message = `Olá! Gostaria de realizar uma simulação de portabilidade.\n\n` +
+      `*Dados para Simulação:*\n` +
+      `- Nome:\n` +
+      `- CPF:\n` +
+      `- Convênio:\n` +
+      `- Valor da Parcela:\n` +
+      `- Saldo Devedor (se souber):`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    window.open(`https://wa.me/5511999999999?text=${encodedMessage}`, '_blank');
   };
 
   if (!isAuthReady) {
@@ -357,6 +370,15 @@ export default function Login() {
             />
           </svg>
           <span>Entrar com Google</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleWhatsAppLead}
+          className="w-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold py-4 rounded-xl shadow-sm flex items-center justify-center gap-3 transition-all active:scale-[0.98] hover:bg-emerald-500 hover:text-white"
+        >
+          <MessageCircle className="w-5 h-5" />
+          <span>Simular via WhatsApp</span>
         </button>
 
         <p className="text-center text-sm text-slate-500 mt-2">

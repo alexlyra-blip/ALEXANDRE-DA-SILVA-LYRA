@@ -837,7 +837,7 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-8" />
-                      <span className="font-bold text-sm">{sim.userName || 'N/A'}</span>
+                      <span className="font-bold text-sm text-slate-700 dark:text-slate-300 dark:selection:bg-slate-700 dark:selection:text-white">{sim.userName || 'N/A'}</span>
                     </div>
                     <span 
                       className="px-2 py-1 rounded-md text-[10px] font-bold text-white shadow-sm"
@@ -849,7 +849,7 @@ export default function Dashboard() {
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <p className="text-slate-400 uppercase font-black text-[9px] tracking-widest">Banco</p>
-                      <p className="font-bold">{sim.topOffer || 'N/A'}</p>
+                      <p className="font-bold text-slate-700 dark:text-slate-300 dark:selection:bg-slate-700 dark:selection:text-white">{sim.topOffer || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-slate-400 uppercase font-black text-[9px] tracking-widest">Parcela</p>
@@ -902,11 +902,11 @@ export default function Dashboard() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-8" />
-                          <span className="font-bold text-sm truncate max-w-[150px]">{sim.userName || 'N/A'}</span>
+                          <span className="font-bold text-sm truncate max-w-[150px] text-slate-700 dark:text-slate-300 dark:selection:bg-slate-700 dark:selection:text-white">{sim.userName || 'N/A'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm font-medium">{sim.topOffer || 'N/A'}</span>
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:selection:bg-slate-700 dark:selection:text-white">{sim.topOffer || 'N/A'}</span>
                       </td>
                       <td className="px-6 py-4">
                         <span 
@@ -922,7 +922,7 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm font-medium">{sim.topOfferPrazo || (sim.subConvenio === 'Marinha' ? '72' : '96')}x</span>
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{sim.topOfferPrazo || (sim.subConvenio === 'Marinha' ? '72' : '96')}x</span>
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-sm font-bold text-emerald-600">

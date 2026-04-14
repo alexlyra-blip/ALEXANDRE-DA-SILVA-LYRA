@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@eslint/eslintrc": "^3.3.5",
-    "@google/genai": "^1.46.0",
+    "@google/genai": "^1.50.0",
     "@supabase/supabase-js": "^2.100.0",
     "@tailwindcss/postcss": "^4.2.2",
     "clsx": "^2.1.1",

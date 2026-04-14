@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useEffect, useRef } from 'react';
@@ -13,6 +13,9 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { GoogleGenAI } from "@google/genai";
+
+const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' });
 
 type SortOption = 'menor_troco' | 'valor_troco' | 'valor_contrato';
 
@@ -26,6 +29,7 @@ interface Offer {
   saldoDevedor: number;
   novaTaxaPortabilidade?: number;
   taxaPonderada?: number;
+  taxaBase?: number;
   priority?: number;
   rules?: string[][];
   convenio: 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS';
@@ -46,6 +50,7 @@ export default function Recomendacoes() {
   const [showAllOffers, setShowAllOffers] = useState(false);
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('all');
   const [simData, setSimData] = useState<any>(null);
+  const [isAISummarizing, setIsAISummarizing] = useState(false);
   const { banks, generalRules, promotoraPriorities, isLoaded } = useRules();
   const { profile } = useAuth();
   const savedSimulationId = useRef<string | null>(null);
@@ -58,6 +63,54 @@ export default function Recomendacoes() {
     
     // Redirect to new proposal page
     router.push(`/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}`);
+  };
+
+  const handleShareWhatsApp = (offer: Offer) => {
+    const message = `*Simulação de Portabilidade*\n\n` +
+      `*Banco:* ${offer.name}\n` +
+      `*Tabela:* ${offer.tabela}\n` +
+      `*Valor da Parcela:* ${formatCurrency(simData?.valorParcela || 0)}\n` +
+      `*Valor do Contrato:* ${formatCurrency(offer.valorContrato)}\n` +
+      `*Valor do Troco:* ${formatCurrency(offer.valorTroco)}\n` +
+      `*Prazo:* ${offer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))}x\n` +
+      `*Taxa Port.:* ${offer.novaTaxaPortabilidade?.toFixed(2)}%\n\n` +
+      `_Simulação realizada em: ${new Date().toLocaleDateString('pt-BR')}_`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+  };
+
+  const handleAIShareWhatsApp = async () => {
+    if (offers.length === 0) return;
+    
+    setIsAISummarizing(true);
+    try {
+      const topOffers = offers.slice(0, 3);
+      const offersText = topOffers.map((o, i) => 
+        `Oferta ${i+1}: Banco ${o.name}, Tabela ${o.tabela}, Troco de ${formatCurrency(o.valorTroco)}, Taxa de ${o.novaTaxaPortabilidade?.toFixed(2)}%`
+      ).join('\n');
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Crie uma mensagem profissional e persuasiva para WhatsApp enviando os resultados de uma simulação de portabilidade de crédito consignado para um cliente.
+        Dados da simulação:
+        Parcela atual: ${formatCurrency(simData?.valorParcela || 0)}
+        
+        Principais Ofertas encontradas:
+        ${offersText}
+        
+        A mensagem deve ser amigável, destacar o valor do troco e convidar o cliente para escolher a melhor opção. Use emojis e negrito para destacar valores.`,
+      });
+
+      const message = response.text;
+      const encodedMessage = encodeURIComponent(message);
+      window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+    } catch (error) {
+      console.error("Erro ao gerar resumo com IA:", error);
+      alert("Não foi possível gerar o resumo com IA. Tente usar o compartilhamento individual.");
+    } finally {
+      setIsAISummarizing(false);
+    }
   };
 
   useEffect(() => {
@@ -287,16 +340,16 @@ export default function Recomendacoes() {
           let taxaTabelaValida = (tabela.taxaTabela !== undefined && tabela.taxaTabela !== null && tabela.taxaTabela > 0) ? tabela.taxaTabela : (bank.refinRate || 0);
           let taxaDiferencial = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0) ? tabela.taxaDiferencial : taxaTabelaValida;
           
-          // Cap rates at 1.85 as requested by the user
-          if (taxaTabelaValida > 1.85) taxaTabelaValida = 1.85;
-          if (taxaDiferencial > 1.85) taxaDiferencial = 1.85;
-
-          const novaTaxaPortabilidade = (bank.novaTaxaReferencia !== undefined && bank.novaTaxaReferencia !== null && bank.novaTaxaReferencia > 0) 
-            ? bank.novaTaxaReferencia 
-            : taxaTabelaValida;
           const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || 1.85);
-          const taxaPonderada = ((convenioRate + taxaDiferencial) / 2) + (tabela.ajusteTaxaPonderada || 0);
-
+          
+          // Nova Taxa Port is calculated as (Current Rate + Bank Adjustment)
+          // This matches the logic in the Bank Rules page
+          const bankAdjustment = bank.ajusteTaxa || 0;
+          const novaTaxaPortabilidade = convenioRate + bankAdjustment;
+          
+          // Taxa Ponderada is the average between current rate and the table's target rate
+          let taxaPonderada = ((convenioRate + taxaDiferencial) / 2) + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
+          
           // Validação da Taxa Ponderada vs Taxa da Tabela
           // Regra: Taxa da tabela deve ser menor ou igual à taxa ponderada
           // Se useTaxaPonderada for false, ignora esta regra
@@ -351,6 +404,7 @@ export default function Recomendacoes() {
               saldoDevedor,
               novaTaxaPortabilidade,
               taxaPonderada,
+              taxaBase: taxaTabelaValida,
               priority: bank.priority || 0,
               rules,
               convenio: bank.convenio || 'INSS',
@@ -485,10 +539,8 @@ export default function Recomendacoes() {
     });
 
     const uniqueBankOffers = Object.values(bestOfferPerBank).sort((a, b) => {
-      if (sortBy === 'valor_troco') return b.valorTroco - a.valorTroco;
-      if (sortBy === 'valor_contrato') return b.valorContrato - a.valorContrato;
-      if (sortBy === 'menor_troco') return a.valorTroco - b.valorTroco;
-      return 0;
+      // Default sorting for Principais Ofertas is by highest troco
+      return b.valorTroco - a.valorTroco;
     });
 
     // Take top 3 unique banks
@@ -742,6 +794,28 @@ export default function Recomendacoes() {
 
       {/* Recommendations List */}
       <div className={`flex flex-col gap-3 p-4 ${showAllOffers ? 'pt-4' : 'pt-2'}`}>
+        {!showAllOffers && sortedBanks.length > 0 && (
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              Principais Ofertas
+              <span className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                {sortedBanks.length} encontradas
+              </span>
+            </h2>
+            <button
+              onClick={handleAIShareWhatsApp}
+              disabled={isAISummarizing || sortedBanks.length === 0}
+              className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-lg shadow-emerald-500/20"
+            >
+              {isAISummarizing ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Sparkles className="w-3 h-3" />
+              )}
+              Resumo IA WhatsApp
+            </button>
+          </div>
+        )}
         {sortedBanks.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-white/10">
             <Banknote className="w-12 h-12 text-slate-400 mb-4" />
@@ -816,7 +890,7 @@ export default function Recomendacoes() {
                 key={bank.id} 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
+                transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.5) }}
                 className={`group flex flex-col gap-1.5 rounded-xl bg-white dark:bg-surface-dark ${showAllOffers ? 'p-3' : 'p-2.5'} shadow-sm hover:shadow-md border border-slate-200 dark:border-white/10 hover:border-primary/30 transition-all relative overflow-hidden`}
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
@@ -829,8 +903,8 @@ export default function Recomendacoes() {
                 )}
                 <div className="flex items-start justify-between gap-2 relative z-10">
                   <div className="flex flex-col gap-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm relative shrink-0">
+                    <div className="flex items-center gap-3 mb-1 min-w-0">
+                      <div className="w-14 h-14 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm relative shrink-0">
                         <div className="relative w-full h-full">
                           <Image
                             src={currentOffer.logo}
@@ -844,8 +918,8 @@ export default function Recomendacoes() {
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-slate-900 dark:text-slate-100 text-sm font-bold leading-tight truncate">{currentOffer.name}</h3>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider shrink-0 text-white shadow-sm ${
+                          <h3 className="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight truncate">{currentOffer.name}</h3>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 text-white shadow-sm ${
                             currentOffer.convenio === 'SIAPE' 
                               ? 'bg-[#f59e0b]' 
                               : currentOffer.convenio === 'GOVERNO'
@@ -856,10 +930,15 @@ export default function Recomendacoes() {
                           }`}>
                             {currentOffer.convenio}
                           </span>
+                          {currentOffer.subConvenio && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 bg-slate-500 text-white shadow-sm">
+                              {currentOffer.subConvenio}
+                            </span>
+                          )}
                         </div>
                         {bankOffers.length > 1 && (
                           <div className="flex items-center gap-2 mt-0.5">
-                            <p className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
+                            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
                               {bankOffers.length} ofertas disponíveis
                             </p>
                             <div className="flex gap-1.5 items-center">
@@ -869,7 +948,7 @@ export default function Recomendacoes() {
                               >
                                 <ChevronLeft className="w-4 h-4" />
                               </button>
-                              <span className="text-[10px] font-black text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700">{currentTableIndex + 1}/{bankOffers.length}</span>
+                              <span className="text-[11px] font-black text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700">{currentTableIndex + 1}/{bankOffers.length}</span>
                               <button 
                                 onClick={() => handleNextTable(bank.name, bankOffers.length)}
                                 className="size-7 flex items-center justify-center rounded-xl bg-primary text-white hover:bg-primary/90 transition-all shadow-md shadow-primary/20 active:scale-90"
@@ -893,45 +972,45 @@ export default function Recomendacoes() {
                           stiffness: 300,
                           damping: 30
                         }}
-                        className="grid grid-cols-2 gap-x-2 gap-y-0 mt-0.5"
+                        className="grid grid-cols-2 gap-x-2 gap-y-1 mt-1"
                       >
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                          <FileText className="w-3 h-3 text-slate-400 shrink-0" />
-                          <p className="text-[10px] font-medium truncate">
+                          <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <p className="text-xs font-medium truncate">
                             Tabela: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.tabela}</span>
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                          <Banknote className="w-3 h-3 text-slate-400 shrink-0" />
-                          <p className="text-[10px] font-medium truncate">
+                          <Banknote className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <p className="text-xs font-medium truncate">
                             Parcela: <span className="text-slate-900 dark:text-white font-bold">{formatCurrency(simData?.valorParcela || 0)}</span>
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                          <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
-                          <p className="text-[10px] font-medium truncate">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <p className="text-xs font-medium truncate">
                             Prazo: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))}X</span>
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                          <Banknote className={`w-3 h-3 ${isMaiorContrato ? 'text-blue-500' : 'text-slate-400'} shrink-0`} />
-                          <p className="text-[10px] font-medium truncate">
+                          <Banknote className={`w-3.5 h-3.5 ${isMaiorContrato ? 'text-blue-500' : 'text-slate-400'} shrink-0`} />
+                          <p className="text-xs font-medium truncate">
                             Contrato: <span className={`${isMaiorContrato ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'} font-bold`}>{formatCurrency(currentOffer.valorContrato)}</span>
                           </p>
                         </div>
-                        {currentOffer.taxaPonderada !== undefined && (
+                        {currentOffer.novaTaxaPortabilidade !== undefined && (
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                            <Percent className="w-3 h-3 text-slate-400 shrink-0" />
-                            <p className="text-[10px] font-medium truncate">
-                              Taxa da Port.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.taxaPonderada.toFixed(2)}%</span>
+                            <Percent className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <p className="text-xs font-medium truncate">
+                              Taxa da Port.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.novaTaxaPortabilidade.toFixed(2)}%</span>
                             </p>
                           </div>
                         )}
-                        {currentOffer.novaTaxaPortabilidade !== undefined && (
+                        {currentOffer.taxaBase !== undefined && (
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                            <Percent className="w-3 h-3 text-slate-400 shrink-0" />
-                            <p className="text-[10px] font-medium truncate">
-                              Taxa do Refin: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.novaTaxaPortabilidade.toFixed(2)}%</span>
+                            <Percent className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <p className="text-xs font-medium truncate">
+                              Taxa do Refin: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.taxaBase.toFixed(2)}%</span>
                             </p>
                           </div>
                         )}
@@ -939,7 +1018,7 @@ export default function Recomendacoes() {
                     </AnimatePresence>
                   </div>
                   <div className="flex flex-col items-end gap-0 mt-0.5 shrink-0">
-                    <p className="text-[8px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider">VALOR TROCO</p>
+                    <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider">VALOR TROCO</p>
                     <AnimatePresence mode="wait" initial={false}>
                       <motion.p 
                         key={currentOffer.valorTroco}
@@ -947,25 +1026,35 @@ export default function Recomendacoes() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.2 }}
-                        className={`text-lg sm:text-xl font-black tracking-tight ${isMelhorTroco || (index === 0 && !showAllOffers) ? 'text-primary' : 'text-slate-900 dark:text-white'} whitespace-nowrap`}
+                        className={`text-xl sm:text-2xl font-black tracking-tight ${isMelhorTroco || (index === 0 && !showAllOffers) ? 'text-primary' : 'text-slate-900 dark:text-white'} whitespace-nowrap`}
                       >
                         {formatCurrency(currentOffer.valorTroco)}
                       </motion.p>
+
                     </AnimatePresence>
                     
-                    <button 
-                      onClick={() => handleGeneratePDF(currentOffer)}
-                      className={`mt-1 flex items-center justify-center gap-1.5 rounded-lg p-1.5 text-xs font-bold transition-all duration-300 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700`}
-                      title="Baixar PDF"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <button 
+                        onClick={() => handleShareWhatsApp(currentOffer)}
+                        className="flex items-center justify-center gap-1.5 rounded-lg p-1.5 text-xs font-bold transition-all duration-300 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white"
+                        title="Compartilhar WhatsApp"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleGeneratePDF(currentOffer)}
+                        className={`flex items-center justify-center gap-1.5 rounded-lg p-1.5 text-xs font-bold transition-all duration-300 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700`}
+                        title="Baixar PDF"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 <button
                   onClick={() => handleSelectOffer(currentOffer)}
-                  className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-black uppercase tracking-tight py-2.5 rounded-lg transition-all shadow-sm mt-1.5"
+                  className="w-full bg-primary hover:bg-primary/90 text-white text-sm font-black uppercase tracking-tight py-3 rounded-lg transition-all shadow-sm mt-2"
                 >
                   Selecionar
                 </button>
@@ -975,7 +1064,7 @@ export default function Recomendacoes() {
                     {currentOffer.rules.map((ruleGroup, i) => (
                       <div key={i} className="flex gap-1">
                         {ruleGroup.map((rule, j) => (
-                          <span key={j} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[8px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm whitespace-nowrap">
+                          <span key={j} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[9px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm whitespace-nowrap">
                             {rule}
                           </span>
                         ))}

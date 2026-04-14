@@ -35,12 +35,12 @@ body {
 
 ::selection {
   background-color: var(--primary);
-  color: #ffffff !important;
+  color: #ffffff;
 }
 
 ::-moz-selection {
   background-color: var(--primary);
-  color: #ffffff !important;
+  color: #ffffff;
 }
 
 .professional-card {

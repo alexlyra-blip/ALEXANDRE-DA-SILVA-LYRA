@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, Banknote, FileText, CheckCircle2, Calendar, Building2 } from 'lucide-react';
+import { ArrowLeft, Banknote, FileText, CheckCircle2, Calendar, Building2, MessageCircle } from 'lucide-react';
 import { useRules } from '@/contexts/RuleContext';
 
 export default function SimulacaoDetalhes() {
@@ -59,13 +59,13 @@ export default function SimulacaoDetalhes() {
         // Weighted Rate Validation (Taxa Ponderada)
         const originalRate = parsedData.taxaJurosMensal ? parsedData.taxaJurosMensal * 100 : 0;
         const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || 1.85);
-        const taxaTabelaValida = (t.taxaTabela !== undefined && t.taxaTabela !== null && t.taxaTabela > 0) ? t.taxaTabela : (bank.refinRate || 0);
-        const taxaDiferencial = (t.taxaDiferencial !== undefined && t.taxaDiferencial !== null && t.taxaDiferencial > 0) ? t.taxaDiferencial : taxaTabelaValida;
-        const taxaPonderada = ((convenioRate + taxaDiferencial) / 2) + (t.ajusteTaxaPonderada || 0);
+        let taxaTabelaValida = (t.taxaTabela !== undefined && t.taxaTabela !== null && t.taxaTabela > 0) ? t.taxaTabela : (bank.refinRate || 0);
+        let taxaDiferencial = (t.taxaDiferencial !== undefined && t.taxaDiferencial !== null && t.taxaDiferencial > 0) ? t.taxaDiferencial : taxaTabelaValida;
         
-        const novaTaxaPortabilidade = (bank.novaTaxaReferencia !== undefined && bank.novaTaxaReferencia !== null && bank.novaTaxaReferencia > 0) 
-          ? bank.novaTaxaReferencia 
-          : taxaTabelaValida;
+        const bankAdjustment = bank.ajusteTaxa || 0;
+        const novaTaxaPortabilidade = convenioRate + bankAdjustment;
+
+        let taxaPonderada = ((convenioRate + taxaDiferencial) / 2) + (parseFloat(t.ajusteTaxaPonderada) || 0);
 
         // Regra: Taxa da tabela deve ser menor ou igual à taxa ponderada
         if (t.useTaxaPonderada !== false && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderada) {
@@ -80,6 +80,7 @@ export default function SimulacaoDetalhes() {
             valorTroco,
             novaTaxaPortabilidade,
             taxaPonderada,
+            taxaBase: taxaTabelaValida,
             id: `${bank.id}-${t.nome}`
           });
         }
@@ -108,6 +109,23 @@ export default function SimulacaoDetalhes() {
     }
 
   }, [isLoaded, params.id, banks, router, generalRules]);
+
+  const handleShareWhatsApp = () => {
+    if (!offerDetails) return;
+    
+    const message = `*Simulação de Portabilidade*\n\n` +
+      `*Banco:* ${offerDetails.bank.name}\n` +
+      `*Tabela:* ${offerDetails.tabela.nome}\n` +
+      `*Valor da Parcela:* ${formatCurrency(simData?.valorParcela || 0)}\n` +
+      `*Valor do Contrato:* ${formatCurrency(offerDetails.valorContrato)}\n` +
+      `*Valor do Troco:* ${formatCurrency(offerDetails.valorTroco)}\n` +
+      `*Prazo:* ${offerDetails.tabela.prazoRefinPort || 96}x\n` +
+      `*Taxa Port.:* ${offerDetails.novaTaxaPortabilidade.toFixed(2)}%\n\n` +
+      `_Simulação realizada em: ${new Date().toLocaleDateString('pt-BR')}_`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+  };
 
   if (!isLoaded || !offerDetails || !simData) {
     return (
@@ -150,6 +168,24 @@ export default function SimulacaoDetalhes() {
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
             <FileText className="w-4 h-4" />
             <span>{offerDetails.tabela.nome}</span>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2 mt-3">
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-white shadow-sm ${
+              offerDetails.bank.convenio === 'SIAPE' 
+                ? 'bg-[#f59e0b]' 
+                : offerDetails.bank.convenio === 'GOVERNO'
+                ? 'bg-[#FF0000]'
+                : offerDetails.bank.convenio === 'FORÇAS ARMADAS'
+                ? 'bg-[#47953D]'
+                : 'bg-[#1152d4]'
+            }`}>
+              {offerDetails.bank.convenio || 'INSS'}
+            </span>
+            {simData?.subConvenio && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-500 text-white shadow-sm">
+                {simData.subConvenio}
+              </span>
+            )}
           </div>
         </div>
 
@@ -209,14 +245,16 @@ export default function SimulacaoDetalhes() {
                 <Building2 className="w-4 h-4" /> Nova Taxa Port.
               </span>
               <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                {(offerDetails.novaTaxaPortabilidade > 1.85 ? 1.85 : offerDetails.novaTaxaPortabilidade).toFixed(2)}%
+                {offerDetails.novaTaxaPortabilidade.toFixed(2)}%
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                <Building2 className="w-4 h-4" /> Taxa Ponderada
+                <Building2 className="w-4 h-4" /> Taxa do Refin
               </span>
-              <span className="font-medium text-slate-900 dark:text-white">{offerDetails.taxaPonderada.toFixed(2)}%</span>
+              <span className="font-bold text-slate-900 dark:text-white">
+                {offerDetails.taxaBase.toFixed(2)}%
+              </span>
             </div>
           </div>
         </div>
@@ -248,13 +286,22 @@ export default function SimulacaoDetalhes() {
           </div>
         )}
 
-        <button 
-          onClick={() => router.push('/simulacao/recomendacoes')}
-          className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-md hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-        >
-          <CheckCircle2 className="w-5 h-5" />
-          <span>Confirmar Portabilidade</span>
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={handleShareWhatsApp}
+            className="flex-1 bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-md hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
+          >
+            <MessageCircle className="w-5 h-5" />
+            <span>Enviar WhatsApp</span>
+          </button>
+          <button 
+            onClick={() => router.push('/simulacao/recomendacoes')}
+            className="flex-1 bg-primary text-white font-bold py-4 rounded-xl shadow-md hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+          >
+            <CheckCircle2 className="w-5 h-5" />
+            <span>Confirmar</span>
+          </button>
+        </div>
       </div>
     </div>
   );
