@@ -62,7 +62,7 @@ export default function Recomendacoes() {
     sessionStorage.setItem('selectedOffers', JSON.stringify(selected));
     
     // Redirect to new proposal page
-    router.push(`/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}`);
+    router.push(`/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}`);
   };
 
   const handleShareWhatsApp = (offer: Offer) => {
@@ -158,6 +158,33 @@ export default function Recomendacoes() {
     const cleanBeneficio = codigoBeneficio.replace(/^0+/, '');
 
     console.log(`Processing ${banks.length} banks for simulation. Target banks: PAN, C6, FACTA, etc.`);
+    // Helper function to safely match bank rules (by code or name)
+    const checkBankMatch = (ruleBank: string, currentBank: string) => {
+      if (!ruleBank || !currentBank) return false;
+      const rule = ruleBank.trim().toLowerCase();
+      const current = currentBank.trim().toLowerCase();
+      
+      if (current === rule) return true;
+      
+      const parts = current.split('-');
+      if (parts.length >= 2) {
+        const code = parts[0].trim();
+        const name = parts.slice(1).join('-').trim();
+        
+        // Match exact code (e.g., "318")
+        if (rule === code) return true;
+        
+        // Match exact name (e.g., "bmg")
+        if (rule === name) return true;
+        
+        // Match substring in name (e.g., "bmg" inside "banco bmg")
+        if (rule.length >= 2 && name.includes(rule)) return true;
+      }
+      
+      // Fallback for partial matches, requiring at least 2 chars to avoid false positives
+      return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
+    };
+
     banks.forEach(bank => {
       const isTargetBank = ['C6', 'FACTA', 'PAN', 'DAYCOVAL', 'ITAÚ'].some(n => bank.name.toUpperCase().includes(n));
       if (isTargetBank) console.log(`Checking target bank: ${bank.name} (ID: ${bank.id})`);
@@ -265,11 +292,7 @@ export default function Recomendacoes() {
       }
 
       // 6. Banco Atual (Não portam)
-      const bancoAtualLower = bancoAtual.trim().toLowerCase();
-      if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some(b => {
-        const bLower = b.trim().toLowerCase();
-        return bancoAtualLower.includes(bLower) || bLower.includes(bancoAtualLower);
-      })) {
+      if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some(b => checkBankMatch(b, bancoAtual))) {
         if (isTargetBank) console.log(`${bank.name} filtered by nonAcceptedBanks: ${bancoAtual}`);
         return;
       }
@@ -278,18 +301,12 @@ export default function Recomendacoes() {
       let requiredInstallments = 0;
       
       // Check specific rule first
-      const specificRule = bank.specificInstallmentRules?.find(r => {
-        const rLower = r.bank.trim().toLowerCase();
-        return bancoAtualLower.includes(rLower) || rLower.includes(bancoAtualLower);
-      });
+      const specificRule = bank.specificInstallmentRules?.find(r => checkBankMatch(r.bank, bancoAtual));
       if (specificRule) {
         requiredInstallments = specificRule.installments;
       } else {
         // Check general rule
-        const generalRule = generalRules.find(r => {
-          const rLower = r.banco.trim().toLowerCase();
-          return bancoAtualLower.includes(rLower) || rLower.includes(bancoAtualLower);
-        });
+        const generalRule = generalRules.find(r => checkBankMatch(r.banco, bancoAtual));
         if (generalRule) {
           requiredInstallments = generalRule.parcelasAceitas;
         }

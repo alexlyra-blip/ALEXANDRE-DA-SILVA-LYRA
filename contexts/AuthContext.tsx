@@ -198,6 +198,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Inactivity Timeout (15 minutes)
+  useEffect(() => {
+    if (!user) return;
+
+    let inactivityTimer: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(async () => {
+        console.log("AuthContext: User inactive for 15 minutes. Logging out.");
+        await logout();
+      }, 15 * 60 * 1000); // 15 minutes
+    };
+
+    // Events to track activity
+    const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
+
+    const handleActivity = () => {
+      resetTimer();
+    };
+
+    // Attach event listeners
+    events.forEach(event => {
+      window.addEventListener(event, handleActivity);
+    });
+
+    // Initialize timer
+    resetTimer();
+
+    return () => {
+      clearTimeout(inactivityTimer);
+      events.forEach(event => {
+        window.removeEventListener(event, handleActivity);
+      });
+    };
+  }, [user]);
+
   const login = async (email: string, pass: string) => {
     try {
       await signInWithEmailAndPassword(auth, email, pass);

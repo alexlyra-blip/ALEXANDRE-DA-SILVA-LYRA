@@ -504,7 +504,7 @@ export default function Dashboard() {
             <PromotoraAvatar 
               logoUrl={profile.avatarUrl || profile.photoUrl} 
               name={profile.name} 
-              className="size-14 border-2 border-white/30 shadow-xl"
+              className="size-20 border-4 border-white/30 shadow-xl"
             />
             <div>
               <h1 className="text-3xl font-black tracking-tight mb-1">Dashboard</h1>

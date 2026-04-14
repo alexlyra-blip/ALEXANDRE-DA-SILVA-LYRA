@@ -14,24 +14,22 @@ const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '
 
 export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const router = useRouter();
-  const { banks } = useRules();
   const [idade, setIdade] = useState('');
   const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS'>('INSS');
   const [subConvenio, setSubConvenio] = useState('');
   const [codigoBeneficio, setCodigoBeneficio] = useState('');
   
-  const filteredBanks = banks.filter(b => b.convenio === convenio).map(b => b.name);
-  const allBanks = Array.from(new Set([...[
+  const allBanks = Array.from(new Set([
     "121 - AGIBANK", "250 - BCV", "025 - BANCO ALFA", "233 - BANCO CIFRA", "001 - BANCO DO BRASIL",
     "047 - BANCO DO ESTADO DO SERGIPE", "079 - BANCO ORIGINAL", "643 - BANCO PINE", "081 - BANCO SEGURO",
     "041 - BANRISUL", "268 - BARIGUI", "318 - BMG", "237 - BRADESCO S.A.", "070 - BRB", "626 - C6",
     "320 - CCB BRASIL", "104 - CAIXA", "069 - CREFISA", "707 - DAYCOVAL", "335 - DIGIO", "149 - FACTA",
     "012 - INBURSA", "029 - ITAÚ CONSIGNADO", "184 - ITAÚ BBA", "341 - ITAÚ UNIBANCO", "389 - MERCANTIL",
-    "386 - NU FINANCEIRA S.A.", "753 - NBC", "169 - OLÉ", "290 - PAGBANK", "623 - PAN", "254 - PARANÁ BANCO",
-    "752 - PARIBAS", "326 - PARATI", "611 - PAULISTA", "380 - PICPAY", "329 - QI SOCIEDADE", "966 - SABEMI",
+    "386 - NU FINANCEIRA S.A.", "753 - NBC BANK", "169 - OLÉ", "290 - PAGBANK", "623 - PAN", "254 - PARANÁ BANCO",
+    "752 - BNP PARIBAS", "326 - PARATI", "611 - PAULISTA", "380 - PICPAY", "329 - QI SOCIEDADE", "966 - SABEMI",
     "422 - SAFRA", "033 - SANTANDER", "359 - ZEMA", "OUTROS"
-  ], ...filteredBanks]))
-    .filter(bank => bank !== 'C6 CONSIG' && bank !== 'BANRISUL')
+  ]))
+    .filter(bank => !['C6 CONSIG', 'BANRISUL', 'BMG', 'DAYCOVAL', 'DIGIO', 'FACTA', 'HAVECRED'].includes(bank))
     .sort((a, b) => {
       if (a === 'OUTROS') return 1;
       if (b === 'OUTROS') return -1;

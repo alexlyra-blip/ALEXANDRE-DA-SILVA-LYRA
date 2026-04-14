@@ -100,6 +100,8 @@ function ProposalDetailPageContent() {
     tabela: searchParams.get('tabela') || '',
     value: parseFloat(searchParams.get('valor') || '0'),
     troco: parseFloat(searchParams.get('troco') || '0'),
+    parcela: parseFloat(searchParams.get('parcela') || '0'),
+    saldoDevedor: parseFloat(searchParams.get('saldoDevedor') || '0'),
   });
 
   useEffect(() => {
@@ -130,6 +132,8 @@ function ProposalDetailPageContent() {
           tabela: proposal.tabela || '',
           value: proposal.value || 0,
           troco: proposal.troco || 0,
+          parcela: proposal.parcela || 0,
+          saldoDevedor: proposal.saldoDevedor || 0,
         });
       } else {
         router.push('/propostas');
@@ -540,22 +544,76 @@ function ProposalDetailPageContent() {
 
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
               <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Dados da Operação</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Banco</p>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">{formData.bank || '---'}</p>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Banco</label>
+                  <input 
+                    type="text"
+                    value={formData.bank}
+                    onChange={(e) => setFormData({ ...formData, bank: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                  />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Tabela</p>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">{formData.tabela || '---'}</p>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Tabela</label>
+                  <input 
+                    type="text"
+                    value={formData.tabela}
+                    onChange={(e) => setFormData({ ...formData, tabela: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                  />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Valor Contrato</p>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(formData.value)}</p>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Parcela Port.</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">R$</span>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      value={formData.parcela || ''}
+                      onChange={(e) => setFormData({ ...formData, parcela: parseFloat(e.target.value) || 0 })}
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Valor Troco</p>
-                  <p className="text-sm font-bold text-primary">{formatCurrency(formData.troco)}</p>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Saldo Devedor</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">R$</span>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      value={formData.saldoDevedor || ''}
+                      onChange={(e) => setFormData({ ...formData, saldoDevedor: parseFloat(e.target.value) || 0 })}
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Valor Contrato</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">R$</span>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      value={formData.value || ''}
+                      onChange={(e) => setFormData({ ...formData, value: parseFloat(e.target.value) || 0 })}
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Previsão Troco</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-primary">R$</span>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      value={formData.troco || ''}
+                      onChange={(e) => setFormData({ ...formData, troco: parseFloat(e.target.value) || 0 })}
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-primary focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

@@ -34,11 +34,22 @@ export default function Sidebar() {
       
       <div className="p-8 relative z-10">
         <div className="flex items-center gap-3 mb-8">
-          <PromotoraAvatar 
-            logoUrl={profile?.avatarUrl || profile?.photoUrl} 
-            name={profile?.name} 
-            className="size-14 border-2 border-white/30 shadow-xl" 
-          />
+          <motion.div
+            animate={{ y: [0, -4, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            style={{ perspective: 1000 }}
+          >
+            <motion.div
+              animate={{ rotateY: [0, 360, 360] }}
+              transition={{ duration: 120, repeat: Infinity, times: [0, 0.008, 1], ease: "easeInOut" }}
+            >
+              <PromotoraAvatar 
+                logoUrl={profile?.avatarUrl || profile?.photoUrl} 
+                name={profile?.name} 
+                className="size-14 border-2 border-white/30 shadow-xl" 
+              />
+            </motion.div>
+          </motion.div>
           <div className="overflow-hidden">
             <p className="font-black text-sm truncate leading-tight">{profile?.name || 'Usuário'}</p>
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mt-1">{profile?.role || 'Corretor'}</p>

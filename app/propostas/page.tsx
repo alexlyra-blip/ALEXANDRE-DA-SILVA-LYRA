@@ -12,15 +12,18 @@ import {
   AlertCircle,
   Banknote,
   Trash2,
-  Landmark
+  Landmark,
+  Download
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { getProposals, deleteProposal } from '@/lib/data-service';
 import Link from 'next/link';
-import { format, startOfDay, isAfter, addBusinessDays } from 'date-fns';
+import { format, startOfDay, isAfter, addBusinessDays, subDays, isWithinInterval, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function PropostasPage() {
   const { profile, loading: authLoading } = useAuth();
@@ -28,6 +31,9 @@ export default function PropostasPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | '15days' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [proposalToDelete, setProposalToDelete] = useState<any | null>(null);
 
@@ -113,12 +119,81 @@ export default function PropostasPage() {
     return { total, pending, inProgress, paid, rejected, returningToday };
   }, [proposals]);
 
-  const filteredProposals = proposals.filter(p => 
-    (p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     p.clientCpf?.includes(searchTerm) ||
-     p.proposalNumber?.includes(searchTerm)) &&
-    (!statusFilter || p.status === statusFilter)
-  );
+  const filteredProposals = useMemo(() => {
+    return proposals.filter(p => {
+      // Text Search
+      const matchesSearch = (p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.clientCpf?.includes(searchTerm) ||
+        p.proposalNumber?.includes(searchTerm));
+      
+      // Status Filter
+      const matchesStatus = !statusFilter || p.status === statusFilter;
+
+      // Date Filter
+      let matchesDate = true;
+      if (dateFilter !== 'all') {
+        const proposalDate = p.proposalDate ? startOfDay(parseISO(p.proposalDate)) : null;
+        if (!proposalDate) {
+          matchesDate = false;
+        } else {
+          const today = startOfDay(new Date());
+          if (dateFilter === 'today') {
+            matchesDate = proposalDate.getTime() === today.getTime();
+          } else if (dateFilter === 'week') {
+            const weekAgo = subDays(today, 7);
+            matchesDate = isWithinInterval(proposalDate, { start: weekAgo, end: today });
+          } else if (dateFilter === '15days') {
+            const fifteenDaysAgo = subDays(today, 15);
+            matchesDate = isWithinInterval(proposalDate, { start: fifteenDaysAgo, end: today });
+          } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
+            const start = startOfDay(parseISO(customStartDate));
+            const end = startOfDay(parseISO(customEndDate));
+            matchesDate = isWithinInterval(proposalDate, { start, end });
+          }
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesDate;
+    });
+  }, [proposals, searchTerm, statusFilter, dateFilter, customStartDate, customEndDate]);
+
+  const exportToPDF = () => {
+    const doc = new jsPDF('landscape');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    doc.setFontSize(18);
+    doc.setTextColor(17, 82, 212);
+    doc.text('Relatório de Propostas', pageWidth / 2, 15, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 22, { align: 'center' });
+
+    const tableData = filteredProposals.map(p => [
+      p.proposalDate ? format(parseISO(p.proposalDate), 'dd/MM/yyyy') : '---',
+      p.clientName || '---',
+      p.clientCpf || '---',
+      p.bank || '---',
+      p.tabela || '---',
+      formatCurrency(p.parcela || 0),
+      formatCurrency(p.saldoDevedor || 0),
+      formatCurrency(p.value || 0),
+      formatCurrency(p.troco || 0),
+      p.status || '---'
+    ]);
+
+    autoTable(doc, {
+      startY: 30,
+      head: [['Data', 'Cliente', 'CPF', 'Banco', 'Tabela', 'Parcela', 'Saldo Dev.', 'Contrato', 'Troco', 'Status']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [17, 82, 212], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    });
+
+    doc.save('propostas_exportadas.pdf');
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -196,30 +271,74 @@ export default function PropostasPage() {
           </div>
 
           {/* Quick Filters */}
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            <button
-              onClick={() => setStatusFilter(null)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                statusFilter === null 
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' 
-                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
-              }`}
-            >
-              TODAS
-            </button>
-            {['PENDENTE', 'ANDAMENTO', 'PAGO', 'REPROVADO'].map((status) => (
+          <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+            <div className="flex gap-2 overflow-x-auto pb-2 w-full sm:w-auto">
               <button
-                key={status}
-                onClick={() => setStatusFilter(status === statusFilter ? null : status)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  statusFilter === status
-                    ? 'bg-primary text-white'
+                onClick={() => setStatusFilter(null)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                  statusFilter === null 
+                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' 
                     : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
                 }`}
               >
-                {status}
+                TODAS
               </button>
-            ))}
+              {['PENDENTE', 'ANDAMENTO', 'PAGO', 'REPROVADO'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setStatusFilter(status === statusFilter ? null : status)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                    statusFilter === status
+                      ? 'bg-primary text-white'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+            
+            <button
+              onClick={exportToPDF}
+              className="px-4 py-2 bg-secondary hover:bg-secondary/90 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-secondary/20 whitespace-nowrap"
+            >
+              <Download className="w-4 h-4" />
+              Exportar PDF
+            </button>
+          </div>
+
+          {/* Date Filters */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-wrap items-center gap-3">
+            <span className="text-xs font-bold text-slate-500 uppercase">Período:</span>
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as any)}
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:border-primary"
+            >
+              <option value="all">Todo o período</option>
+              <option value="today">Hoje</option>
+              <option value="week">Últimos 7 dias</option>
+              <option value="15days">Últimos 15 dias</option>
+              <option value="custom">Personalizado</option>
+            </select>
+
+            {dateFilter === 'custom' && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:border-primary"
+                />
+                <span className="text-slate-400">até</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:border-primary"
+                />
+              </div>
+            )}
           </div>
 
           {/* Highlight Window: Saldos do Dia */}
@@ -271,7 +390,7 @@ export default function PropostasPage() {
                           </span>
                         </div>
                         <h3 className="font-bold text-slate-900 dark:text-white truncate">{proposal.clientName}</h3>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <AlertCircle className="w-3.5 h-3.5" />
                             <span>CPF: {proposal.clientCpf}</span>
@@ -282,8 +401,26 @@ export default function PropostasPage() {
                           </div>
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <Banknote className="w-3.5 h-3.5" />
-                            <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(proposal.value)}</span>
+                            <span>Contrato: <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(proposal.value)}</span></span>
                           </div>
+                          {parseFloat(proposal.parcela) > 0 && (
+                            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                              <span className="font-medium">Parcela:</span>
+                              <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(parseFloat(proposal.parcela))}</span>
+                            </div>
+                          )}
+                          {parseFloat(proposal.saldoDevedor) > 0 && (
+                            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                              <span className="font-medium">Saldo Dev.:</span>
+                              <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(parseFloat(proposal.saldoDevedor))}</span>
+                            </div>
+                          )}
+                          {parseFloat(proposal.troco) > 0 && (
+                            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                              <span className="font-medium">Troco:</span>
+                              <span className="font-bold text-primary">{formatCurrency(parseFloat(proposal.troco))}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
