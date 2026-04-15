@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import { getBrandingBySlug } from '@/lib/data-service';
-import { safeLocalStorageSet } from '@/lib/utils';
+import { safeLocalStorageSet, safeStringify } from '@/lib/utils';
 
 export default function PromotoraLogin() {
   const { user, login, isAuthReady, resetPassword, loginWithGoogle, setQuotaExceeded } = useAuth();
@@ -74,7 +74,7 @@ export default function PromotoraLogin() {
           setIsFindingPromotora(false);
 
           // Update cache
-          safeLocalStorageSet(CACHE_KEY, JSON.stringify({
+          safeLocalStorageSet(CACHE_KEY, safeStringify({
             data: brandingData,
             timestamp: Date.now()
           }));

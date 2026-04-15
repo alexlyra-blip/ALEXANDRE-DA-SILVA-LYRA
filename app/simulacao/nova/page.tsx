@@ -9,6 +9,7 @@ import TransitionAnimation from '@/components/TransitionAnimation';
 import { useRules } from '@/contexts/RuleContext';
 import { GoogleGenAI, Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
+import { safeStringify } from '@/lib/utils';
 
 const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' });
 
@@ -275,7 +276,7 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
       taxaJurosAnual: interestRate?.annualRate || 0,
       timestamp: Date.now()
     };
-    sessionStorage.setItem('simulationData', JSON.stringify(simulationData));
+    sessionStorage.setItem('simulationData', safeStringify(simulationData));
     router.push('/simulacao/recomendacoes');
   };
 

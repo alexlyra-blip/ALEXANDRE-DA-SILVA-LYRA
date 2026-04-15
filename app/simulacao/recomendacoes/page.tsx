@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GoogleGenAI } from "@google/genai";
+import { safeStringify } from '@/lib/utils';
 
 const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' });
 
@@ -59,7 +60,7 @@ export default function Recomendacoes() {
     const stored = sessionStorage.getItem('selectedOffers');
     const selected = stored ? JSON.parse(stored) : [];
     selected.push(offer);
-    sessionStorage.setItem('selectedOffers', JSON.stringify(selected));
+    sessionStorage.setItem('selectedOffers', safeStringify(selected));
     
     // Redirect to new proposal page
     router.push(`/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}`);
@@ -523,7 +524,7 @@ export default function Recomendacoes() {
                   email: profile?.email,
                 }
               };
-              console.error('Firestore Error: ', JSON.stringify(errInfo));
+              console.error('Firestore Error: ', safeStringify(errInfo));
             });
         } else {
           setDoc(docRef, simulationRecord, { merge: true })
