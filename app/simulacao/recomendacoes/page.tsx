@@ -9,7 +9,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -345,6 +345,32 @@ export default function Recomendacoes() {
             if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by minTicket (Saldo): ${saldoDevedor.toFixed(2)} < ${minTicketValue.toFixed(2)}`);
             return;
           }
+
+          // Regra: Troco > 5% do Novo Endividamento
+          if (bank.requireTrocoMaiorQue5PorcentoEndividamento) {
+            const novoEndividamento = parcelasRestantes * valorParcela;
+            const baseTroco = novoEndividamento * 0.05;
+            if (valorTroco <= baseTroco) {
+              if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by Troco > 5% Endividamento: ${valorTroco.toFixed(2)} <= ${baseTroco.toFixed(2)}`);
+              return;
+            }
+          }
+
+          const originalRate = simDataParsed.taxaJurosMensal ? simDataParsed.taxaJurosMensal * 100 : 0;
+          const taxaTabelaValida = (tabela.taxaTabela !== undefined && tabela.taxaTabela !== null && tabela.taxaTabela > 0) ? tabela.taxaTabela : (bank.refinRate || 0);
+          const taxaDiferencial = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0) ? tabela.taxaDiferencial : taxaTabelaValida;
+          
+          const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || 1.85);
+          
+          // Nova Taxa Port is calculated as (Current Rate + Bank Adjustment)
+          // This matches the logic in the Bank Rules page
+          const bankAdjustment = bank.ajusteTaxa || 0;
+          const novaTaxaPortabilidade = convenioRate + bankAdjustment;
+          
+          // Taxa Ponderada calculation - Adjusted to use novaTaxaPortabilidade as base
+          // This ensures the rule is consistent with the bank's target rate rules
+          const taxaPonderada = ((novaTaxaPortabilidade + taxaDiferencial) / 2) + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
+
           if (isTargetBank) {
             console.log(`${bank.name} - Table ${tabela.nome}:`, {
               coef,
@@ -357,20 +383,6 @@ export default function Recomendacoes() {
             });
           }
 
-          const originalRate = simDataParsed.taxaJurosMensal ? simDataParsed.taxaJurosMensal * 100 : 0;
-          let taxaTabelaValida = (tabela.taxaTabela !== undefined && tabela.taxaTabela !== null && tabela.taxaTabela > 0) ? tabela.taxaTabela : (bank.refinRate || 0);
-          let taxaDiferencial = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0) ? tabela.taxaDiferencial : taxaTabelaValida;
-          
-          const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || 1.85);
-          
-          // Nova Taxa Port is calculated as (Current Rate + Bank Adjustment)
-          // This matches the logic in the Bank Rules page
-          const bankAdjustment = bank.ajusteTaxa || 0;
-          const novaTaxaPortabilidade = convenioRate + bankAdjustment;
-          
-          // Taxa Ponderada calculation - Adjusted to use novaTaxaPortabilidade as base
-          // This ensures the rule is consistent with the bank's target rate rules
-          let taxaPonderada = ((novaTaxaPortabilidade + taxaDiferencial) / 2) + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
           
           // Validação da Taxa Ponderada vs Taxa da Tabela
           // Regra: A oferta só será disponibilizada caso a taxa Base da tabela seja MENOR que a taxa Ponderada
@@ -390,6 +402,7 @@ export default function Recomendacoes() {
           const financeRules = [];
           if (bank.minBalance) financeRules.push(`Saldo Mín: ${formatCurrency(bank.minBalance)}`);
           if (minTicketValue > 0) financeRules.push(`Ticket Mín: ${formatCurrency(minTicketValue)}`);
+          if (bank.requireTrocoMaiorQue5PorcentoEndividamento) financeRules.push(`Troco > 5% Endiv.`);
           if (financeRules.length > 0) rules.push(financeRules);
 
           if (bank.acceptsLOAS) rules.push(['Aceita LOAS']);
@@ -485,8 +498,7 @@ export default function Recomendacoes() {
         topOfferContrato: topOffer?.valorContrato || 0,
         topOfferTroco: topOffer?.valorTroco || 0,
         topOfferTaxa: topOffer?.novaTaxaPortabilidade || 0,
-        topOfferPrazo: topOffer.prazoRefinPort || (simDataParsed.subConvenio === 'Marinha' ? 72 : (simDataParsed.prazoTotal || 96)),
-        createdAt: serverTimestamp()
+        topOfferPrazo: topOffer.prazoRefinPort || (simDataParsed.subConvenio === 'Marinha' ? 72 : (simDataParsed.prazoTotal || 96))
       };
 
       console.log("Saving simulation record:", {
@@ -496,22 +508,30 @@ export default function Recomendacoes() {
         match: simulationRecord.userId === profile.uid
       });
 
-      setDoc(doc(db, 'simulations', simulationId), simulationRecord)
-        .catch(err => {
-          console.error("Error saving simulation:", err);
-          // Firestore error handling as per instructions
-          const errInfo = {
-            error: err instanceof Error ? err.message : String(err),
-            operationType: 'create',
-            path: `simulations/${simulationId}`,
-            authInfo: {
-              userId: profile?.uid,
-              email: profile?.email,
-            }
-          };
-          console.error('Firestore Error: ', JSON.stringify(errInfo));
-          // We don't throw here to avoid breaking the UI, but we log the detailed error
-        });
+      const docRef = doc(db, 'simulations', simulationId);
+      getDoc(docRef).then(docSnap => {
+        if (!docSnap.exists()) {
+          setDoc(docRef, { ...simulationRecord, createdAt: serverTimestamp() })
+            .catch(err => {
+              console.error("Error saving simulation:", err);
+              const errInfo = {
+                error: err instanceof Error ? err.message : String(err),
+                operationType: 'create',
+                path: `simulations/${simulationId}`,
+                authInfo: {
+                  userId: profile?.uid,
+                  email: profile?.email,
+                }
+              };
+              console.error('Firestore Error: ', JSON.stringify(errInfo));
+            });
+        } else {
+          setDoc(docRef, simulationRecord, { merge: true })
+            .catch(err => {
+              console.error("Error updating simulation:", err);
+            });
+        }
+      });
     }
 
   }, [banks, generalRules, isLoaded, profile, promotoraPriorities]);

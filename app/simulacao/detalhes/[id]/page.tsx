@@ -56,16 +56,25 @@ export default function SimulacaoDetalhes() {
         
         const minTroco = (t.useMinTicket !== false) ? (t.minTicket || bank.minTroco || 0) : 0;
 
+        // Regra: Troco > 5% do Novo Endividamento
+        if (bank.requireTrocoMaiorQue5PorcentoEndividamento) {
+          const novoEndividamento = parsedData.parcelasRestantes * parsedData.valorParcela;
+          const baseTroco = novoEndividamento * 0.05;
+          if (valorTroco <= baseTroco) {
+            return;
+          }
+        }
+
         // Weighted Rate Validation (Taxa Ponderada)
         const originalRate = parsedData.taxaJurosMensal ? parsedData.taxaJurosMensal * 100 : 0;
         const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || 1.85);
-        let taxaTabelaValida = (t.taxaTabela !== undefined && t.taxaTabela !== null && t.taxaTabela > 0) ? t.taxaTabela : (bank.refinRate || 0);
-        let taxaDiferencial = (t.taxaDiferencial !== undefined && t.taxaDiferencial !== null && t.taxaDiferencial > 0) ? t.taxaDiferencial : taxaTabelaValida;
+        const taxaTabelaValida = (t.taxaTabela !== undefined && t.taxaTabela !== null && t.taxaTabela > 0) ? t.taxaTabela : (bank.refinRate || 0);
+        const taxaDiferencial = (t.taxaDiferencial !== undefined && t.taxaDiferencial !== null && t.taxaDiferencial > 0) ? t.taxaDiferencial : taxaTabelaValida;
         
         const bankAdjustment = bank.ajusteTaxa || 0;
         const novaTaxaPortabilidade = convenioRate + bankAdjustment;
 
-        let taxaPonderada = ((convenioRate + taxaDiferencial) / 2) + (parseFloat(t.ajusteTaxaPonderada) || 0);
+        const taxaPonderada = ((convenioRate + taxaDiferencial) / 2) + (parseFloat(t.ajusteTaxaPonderada) || 0);
 
         // Regra: Taxa da tabela deve ser menor ou igual à taxa ponderada
         if (t.useTaxaPonderada !== false && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderada) {

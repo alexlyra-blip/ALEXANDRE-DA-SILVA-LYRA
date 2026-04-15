@@ -61,6 +61,7 @@ export default function RegrasBanco() {
   const [specificInstallmentsInput, setSpecificInstallmentsInput] = useState('');
   const [acceptsIlliterate, setAcceptsIlliterate] = useState(false);
   const [acceptsLOAS, setAcceptsLOAS] = useState(false);
+  const [requireTrocoMaiorQue5PorcentoEndividamento, setRequireTrocoMaiorQue5PorcentoEndividamento] = useState(false);
   const [accepts60Mais, setAccepts60Mais] = useState(false);
   const [acceptsInvalidez, setAcceptsInvalidez] = useState(true);
   const [invalidezAgeYears, setInvalidezAgeYears] = useState('');
@@ -282,6 +283,7 @@ export default function RegrasBanco() {
         specificInstallmentRules: specificInstallmentRules.map(r => ({ bank: r.bank, installments: parseInt(r.installments) })),
         acceptsIlliterate,
         acceptsLOAS,
+        requireTrocoMaiorQue5PorcentoEndividamento,
         accepts60Mais,
         acceptsInvalidez,
         invalidezAgeYears: invalidezYears,
@@ -378,6 +380,7 @@ export default function RegrasBanco() {
     setSpecificInstallmentsInput('');
     setAcceptsIlliterate(bank.acceptsIlliterate || false);
     setAcceptsLOAS(bank.acceptsLOAS || false);
+    setRequireTrocoMaiorQue5PorcentoEndividamento(bank.requireTrocoMaiorQue5PorcentoEndividamento || false);
     setAccepts60Mais(bank.accepts60Mais || false);
     setAcceptsInvalidez(bank.acceptsInvalidez !== false);
     setInvalidezAgeYears(bank.invalidezAgeYears?.toString() || '');
@@ -747,6 +750,11 @@ export default function RegrasBanco() {
                   ) : (
                     <span className="flex items-center gap-1 text-red-500">
                       <X className="w-3 h-3" /> Não atende LOAS
+                    </span>
+                  )}
+                  {bank.requireTrocoMaiorQue5PorcentoEndividamento && (
+                    <span className="flex items-center gap-1 text-amber-500">
+                      <ShieldCheck className="w-3 h-3" /> Troco &gt; 5% Endiv.
                     </span>
                   )}
                   {bank.acceptsIlliterate ? (
@@ -1303,6 +1311,11 @@ export default function RegrasBanco() {
                 <label className="flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <input type="checkbox" checked={acceptsLOAS} onChange={e => setAcceptsLOAS(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
                   <span className="text-xs font-medium">Aceita portar benefícios LOAS (87 e 88)</span>
+                </label>
+
+                <label className="flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <input type="checkbox" checked={requireTrocoMaiorQue5PorcentoEndividamento} onChange={e => setRequireTrocoMaiorQue5PorcentoEndividamento(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                  <span className="text-xs font-medium">Troco deve ser maior que 5% do Novo Endividamento</span>
                 </label>
 
                 <label className="flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">

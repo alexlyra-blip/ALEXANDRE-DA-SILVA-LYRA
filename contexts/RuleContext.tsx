@@ -53,6 +53,7 @@ export interface BankRule {
   priority?: number; // Default priority
   isActive?: boolean;
   subConvenio?: string;
+  requireTrocoMaiorQue5PorcentoEndividamento?: boolean;
 }
 
 export interface PromotoraPriorities {
