@@ -186,7 +186,7 @@ export default function Recomendacoes() {
     };
 
     banks.forEach(bank => {
-      const isTargetBank = ['C6', 'FACTA', 'PAN', 'DAYCOVAL', 'ITAÚ'].some(n => bank.name.toUpperCase().includes(n));
+      const isTargetBank = ['C6', 'FACTA', 'PAN', 'DAYCOVAL', 'ITAÚ', 'HAVECRED'].some(n => bank.name.toUpperCase().includes(n));
       if (isTargetBank) console.log(`Checking target bank: ${bank.name} (ID: ${bank.id})`);
       
       // 0. Allowed Banks Filter
@@ -337,11 +337,12 @@ export default function Recomendacoes() {
           const valorContrato = valorParcela / coef;
           const valorTroco = valorContrato - saldoDevedor;
           
-          // Ticket Mínimo (Total Contrato)
-          const minTicketValue = (tabela.useMinTicket !== false) ? (tabela.minTicket || bank.minTroco || 0) : 0;
+          // Ticket Mínimo (Validado contra o Saldo Devedor conforme solicitação)
+          // Só é aplicada se o campo estiver ativo (useMinTicket === true)
+          const minTicketValue = (tabela.useMinTicket === true) ? (tabela.minTicket || bank.minTroco || 0) : 0;
           
-          if (minTicketValue > 0 && valorContrato < minTicketValue) {
-            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by minTicket: ${valorContrato.toFixed(2)} < ${minTicketValue.toFixed(2)}`);
+          if (tabela.useMinTicket === true && minTicketValue > 0 && saldoDevedor < minTicketValue) {
+            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by minTicket (Saldo): ${saldoDevedor.toFixed(2)} < ${minTicketValue.toFixed(2)}`);
             return;
           }
           if (isTargetBank) {
@@ -349,7 +350,10 @@ export default function Recomendacoes() {
               coef,
               valorContrato,
               valorTroco,
-              minTicketValue
+              minTicketValue,
+              taxaTabelaValida,
+              taxaPonderada,
+              useTaxaPonderada: tabela.useTaxaPonderada
             });
           }
 
@@ -364,14 +368,17 @@ export default function Recomendacoes() {
           const bankAdjustment = bank.ajusteTaxa || 0;
           const novaTaxaPortabilidade = convenioRate + bankAdjustment;
           
-          // Taxa Ponderada is the average between current rate and the table's target rate
-          let taxaPonderada = ((convenioRate + taxaDiferencial) / 2) + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
+          // Taxa Ponderada calculation - Adjusted to use novaTaxaPortabilidade as base
+          // This ensures the rule is consistent with the bank's target rate rules
+          let taxaPonderada = ((novaTaxaPortabilidade + taxaDiferencial) / 2) + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
           
           // Validação da Taxa Ponderada vs Taxa da Tabela
-          // Regra: Taxa da tabela deve ser menor ou igual à taxa ponderada
-          // Se useTaxaPonderada for false, ignora esta regra
-          if (tabela.useTaxaPonderada !== false && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderada) {
-            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by taxaPonderada: ${taxaPonderada} < ${taxaTabelaValida}`);
+          // Regra: A oferta só será disponibilizada caso a taxa Base da tabela seja MENOR que a taxa Ponderada
+          // (O usuário mencionou "maior" na última mensagem, mas o exemplo do BMG e a lógica de negócio 
+          // confirmam que a Taxa Base deve ser menor que o limite da Taxa Ponderada para ser válida)
+          // Esta regra só é aplicada se useTaxaPonderada estiver ativo (true)
+          if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida >= taxaPonderada) {
+            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by taxaPonderada: ${taxaPonderada.toFixed(4)} <= ${taxaTabelaValida}`);
             return;
           }
 

@@ -17,7 +17,9 @@ import {
   Info,
   CheckCircle,
   Copy,
-  FileEdit
+  FileEdit,
+  X,
+  Hash
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Sidebar from '@/components/Sidebar';
@@ -32,6 +34,17 @@ const STATUS_OPTIONS = [
   { id: 'ANDAMENTO', label: 'ANDAMENTO', color: 'bg-blue-500', activeColor: 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' },
   { id: 'PAGO', label: 'PAGO', color: 'bg-emerald-500', activeColor: 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' },
   { id: 'REPROVADO', label: 'REPROVADO', color: 'bg-rose-500', activeColor: 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' },
+];
+
+const LOAN_TYPES = [
+  'PORTABILIDADE',
+  'CARTÃO',
+  'SAQUE COMPLEMENTAR',
+  'MARGEM',
+  'REFINANCIAMENTO',
+  'CLT-PRIVADO',
+  'FGTS',
+  'CREDITO PESSOAL'
 ];
 
 const formatCpf = (value: string) => {
@@ -94,6 +107,7 @@ function ProposalDetailPageContent() {
     proposalDate: format(new Date(), 'yyyy-MM-dd'),
     proposalNumber: '',
     status: 'PENDENTE',
+    loanType: 'PORTABILIDADE',
     cipSentDate: '',
     cipReturnDate: '',
     bank: searchParams.get('bank') || '',
@@ -102,7 +116,48 @@ function ProposalDetailPageContent() {
     troco: parseFloat(searchParams.get('troco') || '0'),
     parcela: parseFloat(searchParams.get('parcela') || '0'),
     saldoDevedor: parseFloat(searchParams.get('saldoDevedor') || '0'),
+    corretor: '',
+    corretorId: '',
+    paymentDate: '',
   });
+
+  const [inputValues, setInputValues] = useState({
+    parcela: searchParams.get('parcela') || '0',
+    saldoDevedor: searchParams.get('saldoDevedor') || '0',
+    value: searchParams.get('valor') || '0',
+    troco: searchParams.get('troco') || '0',
+  });
+
+  const formatToCurrencyInput = (val: string | number) => {
+    if (val === undefined || val === null) return '0,00';
+    const numericValue = typeof val === 'number' ? val.toFixed(2) : val.toString();
+    const [int, dec] = numericValue.replace('.', ',').split(',');
+    return `${int},${(dec || '00').padEnd(2, '0').slice(0, 2)}`;
+  };
+
+  const handleCurrencyInputChange = (field: string, value: string) => {
+    // Remove non-numeric characters except comma
+    let cleanValue = value.replace(/[^\d,]/g, '');
+    
+    // Ensure only one comma
+    const commaCount = (cleanValue.match(/,/g) || []).length;
+    if (commaCount > 1) {
+      const parts = cleanValue.split(',');
+      cleanValue = parts[0] + ',' + parts.slice(1).join('');
+    }
+
+    // Limit to 2 decimal places
+    if (cleanValue.includes(',')) {
+      const [int, dec] = cleanValue.split(',');
+      cleanValue = `${int},${dec.slice(0, 2)}`;
+    }
+
+    setInputValues(prev => ({ ...prev, [field]: cleanValue }));
+    
+    // Update numeric value in formData
+    const numericVal = parseFloat(cleanValue.replace(',', '.')) || 0;
+    setFormData(prev => ({ ...prev, [field]: numericVal }));
+  };
 
   useEffect(() => {
     if (profile && !isNew) {
@@ -126,6 +181,7 @@ function ProposalDetailPageContent() {
           proposalDate: proposal.proposalDate || format(new Date(), 'yyyy-MM-dd'),
           proposalNumber: proposal.proposalNumber || '',
           status: proposal.status || 'PENDENTE',
+          loanType: proposal.loanType || 'PORTABILIDADE',
           cipSentDate: cipSent,
           cipReturnDate: cipRetDate,
           bank: proposal.bank || '',
@@ -134,6 +190,16 @@ function ProposalDetailPageContent() {
           troco: proposal.troco || 0,
           parcela: proposal.parcela || 0,
           saldoDevedor: proposal.saldoDevedor || 0,
+          corretor: proposal.corretor || '',
+          corretorId: proposal.corretorId || '',
+          paymentDate: proposal.paymentDate || '',
+        });
+
+        setInputValues({
+          parcela: (proposal.parcela || 0).toString().replace('.', ','),
+          saldoDevedor: (proposal.saldoDevedor || 0).toString().replace('.', ','),
+          value: (proposal.value || 0).toString().replace('.', ','),
+          troco: (proposal.troco || 0).toString().replace('.', ','),
         });
       } else {
         router.push('/propostas');
@@ -146,7 +212,7 @@ function ProposalDetailPageContent() {
   };
 
   const expectedReturnDate = useMemo(() => {
-    if (formData.status !== 'ANDAMENTO') return null;
+    if (formData.status !== 'ANDAMENTO' || formData.loanType !== 'PORTABILIDADE') return null;
     
     if (formData.cipReturnDate) {
       const [y, m, d] = formData.cipReturnDate.split('-');
@@ -333,6 +399,13 @@ function ProposalDetailPageContent() {
                 </button>
               )}
               <button 
+                onClick={() => router.push('/propostas')}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                title="Cancelar e Sair"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <button 
                 onClick={handleSave}
                 disabled={saving}
                 className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20"
@@ -359,6 +432,29 @@ function ProposalDetailPageContent() {
         </AnimatePresence>
 
         <main className="p-4 max-w-3xl mx-auto w-full space-y-6">
+          {/* Status Seals (Farol) */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5" />
+              Tipo de Empréstimo
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {LOAN_TYPES.map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setFormData({ ...formData, loanType: type })}
+                  className={`py-2 px-2 rounded-xl text-[9px] font-black uppercase tracking-tight transition-all border-2 ${
+                    formData.loanType === type 
+                      ? 'bg-primary text-white border-transparent shadow-lg shadow-primary/30' 
+                      : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-600 border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Status Seals (Farol) */}
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
             <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -390,9 +486,9 @@ function ProposalDetailPageContent() {
             </div>
           </div>
 
-          {/* Countdown Timer (Only if status is ANDAMENTO) */}
+          {/* Countdown Timer (Only if status is ANDAMENTO and type is PORTABILIDADE) */}
           <AnimatePresence>
-            {formData.status === 'ANDAMENTO' && (
+            {formData.status === 'ANDAMENTO' && formData.loanType === 'PORTABILIDADE' && (
               <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -513,30 +609,74 @@ function ProposalDetailPageContent() {
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 />
               </div>
+              {formData.loanType === 'PORTABILIDADE' && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5" />
+                      Data de Envio CIP
+                    </label>
+                    <input 
+                      type="date"
+                      value={formData.cipSentDate}
+                      onChange={(e) => {
+                        const newSentDate = e.target.value;
+                        setFormData({ ...formData, cipSentDate: newSentDate });
+                      }}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5" />
+                      Data de Retorno CIP
+                    </label>
+                    <input 
+                      type="date"
+                      value={formData.cipReturnDate}
+                      onChange={(e) => setFormData({ ...formData, cipReturnDate: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    />
+                  </div>
+                </>
+              )}
+              {formData.status === 'PAGO' && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <Calendar className="w-3.5 h-3.5" />
+                    Data de Pagamento
+                  </label>
+                  <input 
+                    type="date"
+                    value={formData.paymentDate}
+                    onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Calendar className="w-3.5 h-3.5" />
-                  Data de Envio CIP
+                  <User className="w-3.5 h-3.5" />
+                  Corretor
                 </label>
                 <input 
-                  type="date"
-                  value={formData.cipSentDate}
-                  onChange={(e) => {
-                    const newSentDate = e.target.value;
-                    setFormData({ ...formData, cipSentDate: newSentDate });
-                  }}
+                  type="text"
+                  value={formData.corretor}
+                  onChange={(e) => setFormData({ ...formData, corretor: e.target.value })}
+                  placeholder="Nome do corretor"
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Calendar className="w-3.5 h-3.5" />
-                  Data de Retorno CIP
+                  <Hash className="w-3.5 h-3.5" />
+                  ID do Corretor
                 </label>
                 <input 
-                  type="date"
-                  value={formData.cipReturnDate}
-                  onChange={(e) => setFormData({ ...formData, cipReturnDate: e.target.value })}
+                  type="text"
+                  value={formData.corretorId}
+                  onChange={(e) => setFormData({ ...formData, corretorId: e.target.value })}
+                  placeholder="ID ou Código"
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 />
               </div>
@@ -568,10 +708,9 @@ function ProposalDetailPageContent() {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">R$</span>
                     <input 
-                      type="number"
-                      step="0.01"
-                      value={formData.parcela || ''}
-                      onChange={(e) => setFormData({ ...formData, parcela: parseFloat(e.target.value) || 0 })}
+                      type="text"
+                      value={inputValues.parcela}
+                      onChange={(e) => handleCurrencyInputChange('parcela', e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                     />
                   </div>
@@ -581,10 +720,9 @@ function ProposalDetailPageContent() {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">R$</span>
                     <input 
-                      type="number"
-                      step="0.01"
-                      value={formData.saldoDevedor || ''}
-                      onChange={(e) => setFormData({ ...formData, saldoDevedor: parseFloat(e.target.value) || 0 })}
+                      type="text"
+                      value={inputValues.saldoDevedor}
+                      onChange={(e) => handleCurrencyInputChange('saldoDevedor', e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                     />
                   </div>
@@ -594,10 +732,9 @@ function ProposalDetailPageContent() {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">R$</span>
                     <input 
-                      type="number"
-                      step="0.01"
-                      value={formData.value || ''}
-                      onChange={(e) => setFormData({ ...formData, value: parseFloat(e.target.value) || 0 })}
+                      type="text"
+                      value={inputValues.value}
+                      onChange={(e) => handleCurrencyInputChange('value', e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                     />
                   </div>
@@ -607,10 +744,9 @@ function ProposalDetailPageContent() {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-primary">R$</span>
                     <input 
-                      type="number"
-                      step="0.01"
-                      value={formData.troco || ''}
-                      onChange={(e) => setFormData({ ...formData, troco: parseFloat(e.target.value) || 0 })}
+                      type="text"
+                      value={inputValues.troco}
+                      onChange={(e) => handleCurrencyInputChange('troco', e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-primary focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                     />
                   </div>

@@ -205,6 +205,16 @@ export default function PropostasPage() {
     }
   };
 
+  const getSoftBgColor = (status: string) => {
+    switch (status) {
+      case 'PENDENTE': return 'bg-amber-50 dark:bg-amber-950/10';
+      case 'ANDAMENTO': return 'bg-blue-50 dark:bg-blue-950/10';
+      case 'PAGO': return 'bg-emerald-50 dark:bg-emerald-950/10';
+      case 'REPROVADO': return 'bg-rose-50 dark:bg-rose-950/10';
+      default: return 'bg-white dark:bg-slate-900';
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -377,7 +387,7 @@ export default function PropostasPage() {
                   <Link 
                     key={proposal.id}
                     href={`/propostas/${proposal.id}`}
-                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 hover:border-primary/50 transition-all group shadow-sm"
+                    className={`${getSoftBgColor(proposal.status)} border border-slate-200 dark:border-slate-800 rounded-2xl p-4 hover:border-primary/50 transition-all group shadow-sm`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
@@ -388,6 +398,16 @@ export default function PropostasPage() {
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                             #{proposal.proposalNumber || '---'}
                           </span>
+                          {proposal.loanType && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                              {proposal.loanType}
+                            </span>
+                          )}
+                          {proposal.corretor && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary/10 text-primary border border-primary/20">
+                              Corretor: {proposal.corretor} {proposal.corretorId ? `(${proposal.corretorId})` : ''}
+                            </span>
+                          )}
                         </div>
                         <h3 className="font-bold text-slate-900 dark:text-white truncate">{proposal.clientName}</h3>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
@@ -438,7 +458,7 @@ export default function PropostasPage() {
                           </div>
                         </div>
                         
-                        {proposal.status === 'ANDAMENTO' && (proposal.expectedReturnDate || proposal.cipSentDate) && (
+                        {proposal.status === 'ANDAMENTO' && proposal.loanType === 'PORTABILIDADE' && (proposal.expectedReturnDate || proposal.cipSentDate) && (
                           <div className="flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg">
                             <Clock className="w-3 h-3" />
                             <span>

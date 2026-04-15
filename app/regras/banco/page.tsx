@@ -1546,7 +1546,7 @@ export default function RegrasBanco() {
                             <div className="flex items-baseline gap-0.5">
                               <span className="text-lg font-black text-primary tracking-tighter">
                                 {(( 
-                                  (parseNumeric(taxaContratoAtualPreview) + 
+                                  (parseNumeric(novaTaxaReferencia) + 
                                   (parseFloat(tabela.taxaDiferencial) || parseFloat(tabela.taxaTabela) || 0)) / 2
                                 ) + (parseNumeric(tabela.ajusteTaxaPonderada) || 0)).toFixed(2)}
                               </span>
