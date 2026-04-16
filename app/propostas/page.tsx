@@ -6,6 +6,7 @@ import {
   Search, 
   Plus, 
   Clock, 
+  Calendar,
   Loader2, 
   ChevronRight,
   TrendingUp,
@@ -34,6 +35,9 @@ export default function PropostasPage() {
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | '15days' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [bankFilter, setBankFilter] = useState<string>('all');
+  const [corretorFilter, setCorretorFilter] = useState<string>('all');
+  const [loanTypeFilter, setLoanTypeFilter] = useState<string>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [proposalToDelete, setProposalToDelete] = useState<any | null>(null);
 
@@ -119,8 +123,15 @@ export default function PropostasPage() {
     return { total, pending, inProgress, paid, rejected, returningToday };
   }, [proposals]);
 
+  const filterOptions = useMemo(() => {
+    const banks = Array.from(new Set(proposals.map(p => p.bank).filter(Boolean))).sort();
+    const corretors = Array.from(new Set(proposals.map(p => p.corretor).filter(Boolean))).sort();
+    const loanTypes = Array.from(new Set(proposals.map(p => p.loanType).filter(Boolean))).sort();
+    return { banks, corretors, loanTypes };
+  }, [proposals]);
+
   const filteredProposals = useMemo(() => {
-    return proposals.filter(p => {
+    const filtered = proposals.filter(p => {
       // Text Search
       const matchesSearch = (p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.clientCpf?.includes(searchTerm) ||
@@ -128,6 +139,15 @@ export default function PropostasPage() {
       
       // Status Filter
       const matchesStatus = !statusFilter || p.status === statusFilter;
+
+      // Bank Filter
+      const matchesBank = bankFilter === 'all' || p.bank === bankFilter;
+
+      // Corretor Filter
+      const matchesCorretor = corretorFilter === 'all' || p.corretor === corretorFilter;
+
+      // Loan Type Filter
+      const matchesLoanType = loanTypeFilter === 'all' || p.loanType === loanTypeFilter;
 
       // Date Filter
       let matchesDate = true;
@@ -153,9 +173,16 @@ export default function PropostasPage() {
         }
       }
 
-      return matchesSearch && matchesStatus && matchesDate;
+      return matchesSearch && matchesStatus && matchesBank && matchesCorretor && matchesLoanType && matchesDate;
     });
-  }, [proposals, searchTerm, statusFilter, dateFilter, customStartDate, customEndDate]);
+
+    // Sort by remaining days (ascending)
+    return filtered.sort((a, b) => {
+      const daysA = calculateRemainingDays(a.expectedReturnDate, a.cipSentDate) ?? 999;
+      const daysB = calculateRemainingDays(b.expectedReturnDate, b.cipSentDate) ?? 999;
+      return daysA - daysB;
+    });
+  }, [proposals, searchTerm, statusFilter, dateFilter, customStartDate, customEndDate, bankFilter, corretorFilter, loanTypeFilter]);
 
   const exportToPDF = () => {
     const doc = new jsPDF('landscape');
@@ -234,7 +261,7 @@ export default function PropostasPage() {
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row">
       <Sidebar />
       
-      <div className="flex-1 flex flex-col pb-20 md:pb-0">
+      <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-0">
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-10">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -315,32 +342,85 @@ export default function PropostasPage() {
               <Download className="w-4 h-4" />
               Exportar PDF
             </button>
+            <Link
+              href="/propostas/dashboard"
+              className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-primary/20 whitespace-nowrap"
+            >
+              <TrendingUp className="w-4 h-4" />
+              Ver Dashboard
+            </Link>
           </div>
 
-          {/* Date Filters */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-wrap items-center gap-3">
-            <span className="text-xs font-bold text-slate-500 uppercase">Período:</span>
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as any)}
-              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:border-primary"
-            >
-              <option value="all">Todo o período</option>
-              <option value="today">Hoje</option>
-              <option value="week">Últimos 7 dias</option>
-              <option value="15days">Últimos 15 dias</option>
-              <option value="custom">Personalizado</option>
-            </select>
+          {/* Date and Advanced Filters */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Período:</span>
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value as any)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
+                >
+                  <option value="all">Todo o período</option>
+                  <option value="today">Hoje</option>
+                  <option value="week">Últimos 7 dias</option>
+                  <option value="15days">Últimos 15 dias</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Banco:</span>
+                <select
+                  value={bankFilter}
+                  onChange={(e) => setBankFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
+                >
+                  <option value="all">Todos os Bancos</option>
+                  {filterOptions.banks.map(bank => (
+                    <option key={bank} value={bank}>{bank}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Corretor:</span>
+                <select
+                  value={corretorFilter}
+                  onChange={(e) => setCorretorFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
+                >
+                  <option value="all">Todos os Corretores</option>
+                  {filterOptions.corretors.map(corretor => (
+                    <option key={corretor} value={corretor}>{corretor}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tipo:</span>
+                <select
+                  value={loanTypeFilter}
+                  onChange={(e) => setLoanTypeFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
+                >
+                  <option value="all">Todos os Tipos</option>
+                  {filterOptions.loanTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             {dateFilter === 'custom' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <input
                   type="date"
                   value={customStartDate}
                   onChange={(e) => setCustomStartDate(e.target.value)}
                   className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:border-primary"
                 />
-                <span className="text-slate-400">até</span>
+                <span className="text-slate-400 text-xs font-bold">até</span>
                 <input
                   type="date"
                   value={customEndDate}
@@ -405,7 +485,7 @@ export default function PropostasPage() {
                           )}
                           {proposal.corretor && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary/10 text-primary border border-primary/20">
-                              Corretor: {proposal.corretor} {proposal.corretorId ? `(${proposal.corretorId})` : ''}
+                              Corretor/Vendedor: {proposal.corretor} {proposal.corretorId ? `(${proposal.corretorId})` : ''}
                             </span>
                           )}
                         </div>
@@ -468,6 +548,24 @@ export default function PropostasPage() {
                             </span>
                           </div>
                         )}
+
+                        {proposal.status === 'PAGO' && proposal.paymentDate && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg">
+                            <Calendar className="w-3 h-3" />
+                            <span>
+                              Pago em: {format(parseISO(proposal.paymentDate), 'dd/MM/yyyy')}
+                            </span>
+                          </div>
+                        )}
+
+                        {proposal.status === 'REPROVADO' && proposal.rejectionDate && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-rose-500 bg-rose-500/10 px-2 py-1 rounded-lg">
+                            <Calendar className="w-3 h-3" />
+                            <span>
+                              Reprovado em: {format(parseISO(proposal.rejectionDate), 'dd/MM/yyyy')}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Link>
@@ -486,7 +584,9 @@ export default function PropostasPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-sm shadow-xl border border-slate-200 dark:border-slate-800">
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">Confirmar Exclusão</h3>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">Tem certeza que deseja excluir esta proposta?</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Tem certeza que deseja excluir esta proposta? Esta ação é irreversível e removerá todos os dados do banco de dados.
+              </p>
               <div className="flex gap-3">
                 <button 
                   onClick={() => setProposalToDelete(null)}

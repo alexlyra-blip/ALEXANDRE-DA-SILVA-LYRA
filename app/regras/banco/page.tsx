@@ -819,7 +819,7 @@ export default function RegrasBanco() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Taxa Portabilidade (%)</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Taxa Mínima Port (%)</label>
                         <input 
                           type="number" 
                           step="0.01"
@@ -1207,7 +1207,7 @@ export default function RegrasBanco() {
                     <input type="number" value={minTroco} onChange={e => setMinTroco(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 200.00" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-slate-500">Taxa Portabilidade (%)</label>
+                    <label className="text-[10px] font-medium text-slate-500">Taxa Mínima Port (%)</label>
                     <input type="number" step="0.01" value={portabilityRate} onChange={e => setPortabilityRate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 1.80" />
                   </div>
                   <div className="space-y-1">

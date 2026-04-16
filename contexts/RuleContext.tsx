@@ -119,9 +119,29 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
         const banksQuery = query(collection(db, 'bankRules'));
         const unsubscribeBanks = onSnapshot(banksQuery, (snapshot) => {
           const banksData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BankRule));
-          setBanks(banksData);
+          console.log("RuleContext: Received banks from Firestore:", banksData.length);
+          
+          // Aggressive deduplication by Name, Convenio and Sub-Convenio
+          // This prevents duplicate cards if the database has multiple entries for the same bank
+          const uniqueBanks: BankRule[] = [];
+          const seenKeys = new Set<string>();
+          
+          // Sort by ID to ensure consistent selection if duplicates exist
+          const sortedBanks = [...banksData].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+          
+          sortedBanks.forEach(bank => {
+            const key = `${bank.name}-${bank.convenio}-${bank.subConvenio || ''}`.toUpperCase();
+            if (!seenKeys.has(key)) {
+              uniqueBanks.push(bank);
+              seenKeys.add(key);
+            } else {
+              console.warn(`RuleContext: Duplicate bank filtered: ${key} (ID: ${bank.id})`);
+            }
+          });
+
+          setBanks(uniqueBanks);
           safeLocalStorageSet('rules_banks', JSON.stringify({
-            data: banksData,
+            data: uniqueBanks,
             timestamp: Date.now()
           }));
           setIsLoaded(true);

@@ -27,7 +27,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-[var(--sidebar-bg)] dark:bg-black text-white h-screen sticky top-0 shadow-2xl z-50 border-r border-white/5 dark:border-white/10 overflow-hidden">
+    <aside className="hidden md:flex flex-col w-64 shrink-0 bg-[var(--sidebar-bg)] dark:bg-black text-white h-screen sticky top-0 shadow-2xl z-50 border-r border-white/5 dark:border-white/10 overflow-hidden">
       {/* Decorative elements to match dashboard header pattern */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl animate-pulse pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary/10 rounded-full -ml-12 -mb-12 blur-xl pointer-events-none" />
@@ -115,9 +115,9 @@ export default function Sidebar() {
         </Link>
         <button 
           onClick={() => logout()}
-          className="flex items-center gap-3 p-4 rounded-2xl w-full text-left hover:bg-red-500/20 text-white/80 hover:text-red-200 transition-all"
+          className="flex items-center gap-3 p-4 rounded-2xl w-full text-left hover:bg-red-600 hover:text-white text-white/80 transition-all"
         >
-          <LogOut className="w-5 h-5 opacity-60" />
+          <LogOut className="w-5 h-5 opacity-60 group-hover:opacity-100" />
           <span className="text-sm">Sair</span>
         </button>
       </div>

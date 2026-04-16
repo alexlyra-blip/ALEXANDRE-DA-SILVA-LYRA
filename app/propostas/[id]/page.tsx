@@ -25,7 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { saveProposal, deleteProposal, getProposals } from '@/lib/data-service';
-import { format, addBusinessDays, differenceInBusinessDays, isAfter, startOfDay } from 'date-fns';
+import { format, addBusinessDays, differenceInBusinessDays, isAfter, startOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const STATUS_OPTIONS = [
@@ -119,21 +119,29 @@ function ProposalDetailPageContent() {
     corretor: '',
     corretorId: '',
     paymentDate: '',
-  });
-
-  const [inputValues, setInputValues] = useState({
-    parcela: searchParams.get('parcela') || '0',
-    saldoDevedor: searchParams.get('saldoDevedor') || '0',
-    value: searchParams.get('valor') || '0',
-    troco: searchParams.get('troco') || '0',
+    rejectionDate: '',
+    bancoPortado: searchParams.get('bancoPortado') || '',
+    numeroContrato: '',
   });
 
   const formatToCurrencyInput = (val: string | number) => {
     if (val === undefined || val === null) return '0,00';
-    const numericValue = typeof val === 'number' ? val.toFixed(2) : val.toString();
-    const [int, dec] = numericValue.replace('.', ',').split(',');
-    return `${int},${(dec || '00').padEnd(2, '0').slice(0, 2)}`;
+    let numericValue = val;
+    if (typeof val === 'string') {
+      const parsed = parseFloat(val);
+      numericValue = isNaN(parsed) ? 0 : parsed;
+    }
+    const fixedValue = (numericValue as number).toFixed(2);
+    const [int, dec] = fixedValue.split('.');
+    return `${int},${dec}`;
   };
+
+  const [inputValues, setInputValues] = useState({
+    parcela: formatToCurrencyInput(searchParams.get('parcela') || '0'),
+    saldoDevedor: formatToCurrencyInput(searchParams.get('saldoDevedor') || '0'),
+    value: formatToCurrencyInput(searchParams.get('valor') || '0'),
+    troco: formatToCurrencyInput(searchParams.get('troco') || '0'),
+  });
 
   const handleCurrencyInputChange = (field: string, value: string) => {
     // Remove non-numeric characters except comma
@@ -193,13 +201,16 @@ function ProposalDetailPageContent() {
           corretor: proposal.corretor || '',
           corretorId: proposal.corretorId || '',
           paymentDate: proposal.paymentDate || '',
+          rejectionDate: proposal.rejectionDate || '',
+          bancoPortado: proposal.bancoPortado || '',
+          numeroContrato: proposal.numeroContrato || '',
         });
 
         setInputValues({
-          parcela: (proposal.parcela || 0).toString().replace('.', ','),
-          saldoDevedor: (proposal.saldoDevedor || 0).toString().replace('.', ','),
-          value: (proposal.value || 0).toString().replace('.', ','),
-          troco: (proposal.troco || 0).toString().replace('.', ','),
+          parcela: formatToCurrencyInput(proposal.parcela || 0),
+          saldoDevedor: formatToCurrencyInput(proposal.saldoDevedor || 0),
+          value: formatToCurrencyInput(proposal.value || 0),
+          troco: formatToCurrencyInput(proposal.troco || 0),
         });
       } else {
         router.push('/propostas');
@@ -360,7 +371,7 @@ function ProposalDetailPageContent() {
     <div className={`min-h-screen ${getSoftBackgroundColor(formData.status)} dark:bg-background flex flex-col md:flex-row`}>
       <Sidebar />
       
-      <div className="flex-1 flex flex-col pb-20 md:pb-0">
+      <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-0">
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-10">
           <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -391,7 +402,7 @@ function ProposalDetailPageContent() {
               )}
               {!isNew && (
                 <button 
-                  onClick={handleDelete}
+                  onClick={() => setShowDeleteConfirm(true)}
                   disabled={deleting}
                   className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
                 >
@@ -467,11 +478,16 @@ function ProposalDetailPageContent() {
                   key={option.id}
                   onClick={() => {
                     const updates: any = { status: option.id };
+                    const todayStr = format(new Date(), 'yyyy-MM-dd');
+                    
                     if (option.id === 'ANDAMENTO' && !formData.cipSentDate) {
-                      const todayStr = format(new Date(), 'yyyy-MM-dd');
                       updates.cipSentDate = todayStr;
-                      // cipReturnDate remains blank so it calculates automatically
+                    } else if (option.id === 'PAGO' && !formData.paymentDate) {
+                      updates.paymentDate = todayStr;
+                    } else if (option.id === 'REPROVADO' && !formData.rejectionDate) {
+                      updates.rejectionDate = todayStr;
                     }
+                    
                     setFormData({ ...formData, ...updates });
                   }}
                   className={`py-3 px-2 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2 ${
@@ -524,6 +540,33 @@ function ProposalDetailPageContent() {
                     )}
                   </div>
                 )}
+              </motion.div>
+            )}
+
+            {formData.status === 'PAGO' && formData.paymentDate && (
+              <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                    <CheckCircle className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Pagamento Realizado</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      Proposta paga com sucesso
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                    {format(parseISO(formData.paymentDate), 'dd/MM/yyyy')}
+                  </p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Data do Pagamento</p>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -650,7 +693,21 @@ function ProposalDetailPageContent() {
                     type="date"
                     value={formData.paymentDate}
                     onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                  />
+                </div>
+              )}
+              {formData.status === 'REPROVADO' && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <Calendar className="w-3.5 h-3.5" />
+                    Data de Reprovação
+                  </label>
+                  <input 
+                    type="date"
+                    value={formData.rejectionDate}
+                    onChange={(e) => setFormData({ ...formData, rejectionDate: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-rose-600 dark:text-rose-400 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition-all"
                   />
                 </div>
               )}
@@ -686,7 +743,7 @@ function ProposalDetailPageContent() {
               <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Dados da Operação</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Banco</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Banco Solicitado</label>
                   <input 
                     type="text"
                     value={formData.bank}
@@ -703,6 +760,30 @@ function ProposalDetailPageContent() {
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                   />
                 </div>
+                {formData.loanType === 'PORTABILIDADE' && (
+                  <>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Banco Portado</label>
+                      <input 
+                        type="text"
+                        value={formData.bancoPortado}
+                        onChange={(e) => setFormData({ ...formData, bancoPortado: e.target.value })}
+                        placeholder="Nome do banco de origem"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Número do Contrato</label>
+                      <input 
+                        type="text"
+                        value={formData.numeroContrato}
+                        onChange={(e) => setFormData({ ...formData, numeroContrato: e.target.value })}
+                        placeholder="Nº do contrato no banco orig."
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                      />
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Parcela Port.</label>
                   <div className="relative">
@@ -766,6 +847,43 @@ function ProposalDetailPageContent() {
       </div>
 
       <BottomNav activeTab="propostas" />
+
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-sm shadow-xl border border-slate-200 dark:border-slate-800"
+            >
+              <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center mb-4">
+                <Trash2 className="w-6 h-6 text-rose-600 dark:text-rose-400" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">Confirmar Exclusão</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Tem certeza que deseja excluir esta proposta? Esta ação é irreversível e removerá todos os dados do banco de dados.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 py-3 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 transition-all flex items-center justify-center gap-2"
+                >
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Excluir'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -63,7 +63,7 @@ export default function Recomendacoes() {
     sessionStorage.setItem('selectedOffers', safeStringify(selected));
     
     // Redirect to new proposal page
-    router.push(`/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}`);
+    router.push(`/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}&bancoPortado=${encodeURIComponent(simData?.bancoAtual || '')}`);
   };
 
   const handleShareWhatsApp = (offer: Offer) => {
@@ -114,14 +114,32 @@ export default function Recomendacoes() {
     }
   };
 
+  // 1. Load simulation data from sessionStorage
   useEffect(() => {
-    if (!isLoaded || !profile) return;
-
     const storedData = sessionStorage.getItem('simulationData');
-    if (!storedData) return;
+    if (storedData) {
+      try {
+        const parsed = JSON.parse(storedData);
+        setSimData(parsed);
+      } catch (e) {
+        console.error("Error parsing simulationData:", e);
+      }
+    }
+  }, [isSimulatorOpen]); // Re-check when simulator closes/opens
 
-    const simDataParsed = JSON.parse(storedData);
-    setSimData(simDataParsed);
+  // 2. Calculate offers when data or rules change
+  useEffect(() => {
+    if (!isLoaded || !profile || !simData) return;
+
+    console.log("--- CALCULATING OFFERS ---");
+    console.log("Total banks in rules:", banks.length);
+    console.log("Simulation Data:", simData);
+    
+    if (!profile) {
+      console.log("Profile not loaded");
+      return;
+    }
+
     const {
       id: simulationId,
       idade,
@@ -130,8 +148,20 @@ export default function Recomendacoes() {
       bancoAtual,
       valorParcela,
       saldoDevedor,
-      parcelasPagas
-    } = simDataParsed;
+      parcelasPagas,
+      parcelasRestantes
+    } = simData;
+
+    const originalRate = simData.taxaJurosMensal ? simData.taxaJurosMensal * 100 : 0;
+
+    console.log("--- SIMULATION DATA ---", {
+      idade,
+      convenio: simData.convenio,
+      valorParcela,
+      saldoDevedor,
+      taxaJurosMensal: simData.taxaJurosMensal,
+      originalRate: originalRate.toFixed(4)
+    });
 
     const calculatedOffers: Offer[] = [];
 
@@ -187,7 +217,7 @@ export default function Recomendacoes() {
     };
 
     banks.forEach(bank => {
-      const isTargetBank = ['C6', 'FACTA', 'PAN', 'DAYCOVAL', 'ITAÚ', 'HAVECRED'].some(n => bank.name.toUpperCase().includes(n));
+      const isTargetBank = ['C6', 'FACTA', 'PAN', 'DAYCOVAL', 'ITAÚ', 'HAVECRED', 'DIGIO'].some(n => bank.name.toUpperCase().includes(n));
       if (isTargetBank) console.log(`Checking target bank: ${bank.name} (ID: ${bank.id})`);
       
       // 0. Allowed Banks Filter
@@ -198,15 +228,15 @@ export default function Recomendacoes() {
 
       // 0.1 Convenio Filter
       const bankConvenio = bank.convenio || 'INSS'; // Default to INSS if not set
-      const simConvenio = simDataParsed.convenio || 'INSS'; // Default to INSS if not set
+      const simConvenio = simData.convenio || 'INSS'; // Default to INSS if not set
       if (bankConvenio !== simConvenio) {
         if (isTargetBank) console.log(`${bank.name} filtered by convenio: ${bankConvenio} !== ${simConvenio}`);
         return;
       }
 
       // 0.2 Sub-Convenio Filter
-      if (bank.subConvenio && bank.subConvenio !== simDataParsed.subConvenio) {
-        if (isTargetBank) console.log(`${bank.name} filtered by subConvenio: ${bank.subConvenio} !== ${simDataParsed.subConvenio}`);
+      if (bank.subConvenio && bank.subConvenio !== simData.subConvenio) {
+        if (isTargetBank) console.log(`${bank.name} filtered by subConvenio: ${bank.subConvenio} !== ${simData.subConvenio}`);
         return;
       }
 
@@ -280,14 +310,14 @@ export default function Recomendacoes() {
           if (isTargetBank) console.log(`${bank.name} filtered by acceptsLOAS`);
           return;
         }
-        if (simDataParsed.isAnalfabeto && !bank.acceptsIlliterate) {
+        if (simData.isAnalfabeto && !bank.acceptsIlliterate) {
           if (isTargetBank) console.log(`${bank.name} filtered by acceptsIlliterate (LOAS)`);
           return;
         }
       }
 
       // 5.1 Analfabeto (Geral)
-      if (simDataParsed.isAnalfabeto && !bank.acceptsIlliterate) {
+      if (simData.isAnalfabeto && !bank.acceptsIlliterate) {
         if (isTargetBank) console.log(`${bank.name} filtered by acceptsIlliterate (General)`);
         return;
       }
@@ -357,39 +387,39 @@ export default function Recomendacoes() {
             }
           }
 
-          const originalRate = simDataParsed.taxaJurosMensal ? simDataParsed.taxaJurosMensal * 100 : 0;
+          const originalRateCalc = simData.taxaJurosMensal ? simData.taxaJurosMensal * 100 : 0;
           const taxaTabelaValida = (tabela.taxaTabela !== undefined && tabela.taxaTabela !== null && tabela.taxaTabela > 0) ? tabela.taxaTabela : (bank.refinRate || 0);
-          const taxaDiferencial = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0) ? tabela.taxaDiferencial : taxaTabelaValida;
           
-          const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || 1.85);
-          
-          // Nova Taxa Port is calculated as (Current Rate + Bank Adjustment)
-          // This matches the logic in the Bank Rules page
           const bankAdjustment = bank.ajusteTaxa || 0;
-          const novaTaxaPortabilidade = convenioRate + bankAdjustment;
           
-          // Taxa Ponderada calculation - Adjusted to use novaTaxaPortabilidade as base
-          // This ensures the rule is consistent with the bank's target rate rules
-          const taxaPonderada = ((novaTaxaPortabilidade + taxaDiferencial) / 2) + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
+          // Se a tabela possuir uma taxa diferencial estipulada via UI (Nova Taxa), usamos ela. 
+          // Caso contrário, calculamos dinamicamente (Taxa Original + Ajuste do Banco).
+          const novaTaxaPortabilidadeAvaliada = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0)
+              ? tabela.taxaDiferencial
+              : (originalRateCalc + bankAdjustment);
+
+          const taxaParaCalculo = novaTaxaPortabilidadeAvaliada;
+
+          // Regra Nova: Taxa Mínima Port (portabilityRate)
+          // Usada EXCLUSIVAMENTE para verificar se o banco/tabela fica elegível para simulação.
+          // Se a Nova Taxa Port (taxaParaCalculo) for abaixo da Taxa Mínima Port (portabilityRate), indisponibiliza a tabela.
+          if (bank.portabilityRate && bank.portabilityRate > 0 && taxaParaCalculo < bank.portabilityRate) {
+            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered: Nova Taxa (${taxaParaCalculo}) < Taxa Mínima Port (${bank.portabilityRate})`);
+            return;
+          }
+          
+          // Taxa Ponderada calculation - Adjusted to use taxaParaCalculo as base
+          const taxaPonderadaBase = (originalRateCalc + taxaParaCalculo) / 2;
+          const taxaPonderada = taxaPonderadaBase + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
 
           if (isTargetBank) {
-            console.log(`${bank.name} - Table ${tabela.nome}:`, {
-              coef,
-              valorContrato,
-              valorTroco,
-              minTicketValue,
-              taxaTabelaValida,
-              taxaPonderada,
-              useTaxaPonderada: tabela.useTaxaPonderada
-            });
+            console.log(`${bank.name} - Table ${tabela.nome}:`, 
+              `coef: ${coef}, valorContrato: ${valorContrato}, valorTroco: ${valorTroco}, minTicketValue: ${minTicketValue}, taxaTabelaValida: ${taxaTabelaValida}, taxaPonderada: ${taxaPonderada}, useTaxaPonderada: ${tabela.useTaxaPonderada}`
+            );
           }
 
-          
           // Validação da Taxa Ponderada vs Taxa da Tabela
-          // Regra: A oferta só será disponibilizada caso a taxa Base da tabela seja MENOR que a taxa Ponderada
-          // (O usuário mencionou "maior" na última mensagem, mas o exemplo do BMG e a lógica de negócio 
-          // confirmam que a Taxa Base deve ser menor que o limite da Taxa Ponderada para ser válida)
-          // Esta regra só é aplicada se useTaxaPonderada estiver ativo (true)
+          // Regra: Para uma tabela ser ofertada, a taxa base da tabela (taxaTabelaValida) tem que estar sempre ABAIXO da taxa ponderada (taxaPonderada)
           if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida >= taxaPonderada) {
             if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by taxaPonderada: ${taxaPonderada.toFixed(4)} <= ${taxaTabelaValida}`);
             return;
@@ -440,7 +470,7 @@ export default function Recomendacoes() {
               valorContrato,
               valorTroco,
               saldoDevedor,
-              novaTaxaPortabilidade,
+              novaTaxaPortabilidade: taxaParaCalculo,
               taxaPonderada,
               taxaBase: taxaTabelaValida,
               priority: bank.priority || 0,
@@ -486,7 +516,7 @@ export default function Recomendacoes() {
       
       const topOffer = calculatedOffers[0];
       const simulationRecord = {
-        ...simDataParsed,
+        ...simData,
         userId: profile.uid,
         userName: profile.name,
         userAvatar: profile.avatarUrl || profile.photoUrl || null,
@@ -499,7 +529,7 @@ export default function Recomendacoes() {
         topOfferContrato: topOffer?.valorContrato || 0,
         topOfferTroco: topOffer?.valorTroco || 0,
         topOfferTaxa: topOffer?.novaTaxaPortabilidade || 0,
-        topOfferPrazo: topOffer.prazoRefinPort || (simDataParsed.subConvenio === 'Marinha' ? 72 : (simDataParsed.prazoTotal || 96))
+        topOfferPrazo: topOffer.prazoRefinPort || (simData.subConvenio === 'Marinha' ? 72 : (simData.prazoTotal || 96))
       };
 
       console.log("Saving simulation record:", {
@@ -535,7 +565,7 @@ export default function Recomendacoes() {
       });
     }
 
-  }, [banks, generalRules, isLoaded, profile, promotoraPriorities]);
+  }, [banks, generalRules, isLoaded, profile, promotoraPriorities, simData]);
 
   // Update 'Principais Ofertas' (offers) whenever allCalculatedOffers or sortBy changes
   useEffect(() => {
@@ -847,18 +877,20 @@ export default function Recomendacoes() {
                 {sortedBanks.length} encontradas
               </span>
             </h2>
-            <button
-              onClick={handleAIShareWhatsApp}
-              disabled={isAISummarizing || sortedBanks.length === 0}
-              className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-lg shadow-emerald-500/20"
-            >
-              {isAISummarizing ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Sparkles className="w-3 h-3" />
-              )}
-              Resumo IA WhatsApp
-            </button>
+            {profile?.role === 'admin' && (
+              <button
+                onClick={handleAIShareWhatsApp}
+                disabled={isAISummarizing || sortedBanks.length === 0}
+                className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-lg shadow-emerald-500/20"
+              >
+                {isAISummarizing ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3 h-3" />
+                )}
+                Resumo IA WhatsApp
+              </button>
+            )}
           </div>
         )}
         {sortedBanks.length === 0 ? (
