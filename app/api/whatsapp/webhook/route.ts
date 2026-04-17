@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI, SchemaType } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { runSimulation, SimulationInput } from '@/lib/simulation-service';
 
 const ai = new GoogleGenAI({ 
@@ -13,35 +13,35 @@ const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
 // Schema para extração de dados da simulação
 const simulationSchema = {
-  type: SchemaType.OBJECT,
+  type: Type.OBJECT,
   properties: {
     isSimulationData: {
-      type: SchemaType.BOOLEAN,
+      type: Type.BOOLEAN,
       description: "Verdadeiro se a mensagem contém dados suficientes para uma simulação."
     },
     data: {
-      type: SchemaType.OBJECT,
+      type: Type.OBJECT,
       properties: {
-        valorParcela: { type: SchemaType.NUMBER },
-        saldoDevedor: { type: SchemaType.NUMBER },
-        idade: { type: SchemaType.NUMBER },
+        valorParcela: { type: Type.NUMBER },
+        saldoDevedor: { type: Type.NUMBER },
+        idade: { type: Type.NUMBER },
         convenio: { 
-          type: SchemaType.STRING,
+          type: Type.STRING,
           enum: ['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS']
         },
-        subConvenio: { type: SchemaType.STRING },
-        parcelasPagas: { type: SchemaType.NUMBER },
-        parcelasRestantes: { type: SchemaType.NUMBER },
-        codigoBeneficio: { type: SchemaType.STRING },
-        dataConcessao: { type: SchemaType.STRING, description: "Formato YYYY-MM-DD" },
-        isAnalfabeto: { type: SchemaType.BOOLEAN },
-        bancoAtual: { type: SchemaType.STRING },
-        taxaJurosMensal: { type: SchemaType.NUMBER, description: "Taxa de juros mensal atual do contrato (ex: 1.85)" }
+        subConvenio: { type: Type.STRING },
+        parcelasPagas: { type: Type.NUMBER },
+        parcelasRestantes: { type: Type.NUMBER },
+        codigoBeneficio: { type: Type.STRING },
+        dataConcessao: { type: Type.STRING, description: "Formato YYYY-MM-DD" },
+        isAnalfabeto: { type: Type.BOOLEAN },
+        bancoAtual: { type: Type.STRING },
+        taxaJurosMensal: { type: Type.NUMBER, description: "Taxa de juros mensal atual do contrato (ex: 1.85)" }
       }
     },
     missingFields: {
-      type: SchemaType.ARRAY,
-      items: { type: SchemaType.STRING },
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
       description: "Lista de campos que ainda faltam para completar a simulação."
     }
   },

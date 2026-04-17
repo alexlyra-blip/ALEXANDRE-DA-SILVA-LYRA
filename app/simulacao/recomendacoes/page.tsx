@@ -51,6 +51,8 @@ export default function Recomendacoes() {
   const [showAllOffers, setShowAllOffers] = useState(false);
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('all');
   const [simData, setSimData] = useState<any>(null);
+  const [filterReasons, setFilterReasons] = useState<{bankName: string, reason: string, tabela?: string}[]>([]);
+  const [showFilterLog, setShowFilterLog] = useState(false);
   const [isAISummarizing, setIsAISummarizing] = useState(false);
   const { banks, generalRules, promotoraPriorities, isLoaded } = useRules();
   const { profile } = useAuth();
@@ -128,8 +130,18 @@ export default function Recomendacoes() {
   }, [isSimulatorOpen]); // Re-check when simulator closes/opens
 
   // 2. Calculate offers when data or rules change
+  const lastCalculatedOffersRef = useRef<string>('');
+  const lastSimulationTimeRef = useRef<number>(0);
+
   useEffect(() => {
-    if (!isLoaded || !profile || !simData) return;
+    if (!isLoaded || !profile || !simData || !banks.length) return;
+
+    // Rate limiting: Don't run simulation more than once per 500ms
+    const nowTime = Date.now();
+    if (nowTime - lastSimulationTimeRef.current < 500) {
+      return;
+    }
+    lastSimulationTimeRef.current = nowTime;
 
     console.log("--- CALCULATING OFFERS ---");
     console.log("Total banks in rules:", banks.length);
@@ -164,6 +176,7 @@ export default function Recomendacoes() {
     });
 
     const calculatedOffers: Offer[] = [];
+    const localFilterReasons: {bankName: string, reason: string, tabela?: string}[] = [];
 
     // Calculate time of benefit in months
     let benefitTimeMonths = 0;
@@ -217,12 +230,14 @@ export default function Recomendacoes() {
     };
 
     banks.forEach(bank => {
-      const isTargetBank = ['C6', 'FACTA', 'PAN', 'DAYCOVAL', 'ITAÚ', 'HAVECRED', 'DIGIO'].some(n => bank.name.toUpperCase().includes(n));
-      if (isTargetBank) console.log(`Checking target bank: ${bank.name} (ID: ${bank.id})`);
-      
+      const log = (reason: string, tabela?: string) => {
+        localFilterReasons.push({ bankName: bank.name, reason, tabela });
+        console.log(`[${bank.name}] ${tabela ? `- Tabela ${tabela}: ` : ''}${reason}`);
+      };
+
       // 0. Allowed Banks Filter
       if (profile.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) {
-        if (isTargetBank) console.log(`${bank.name} filtered by allowedBanks`);
+        log(`filtrado por allowedBanks`);
         return;
       }
 
@@ -230,13 +245,13 @@ export default function Recomendacoes() {
       const bankConvenio = bank.convenio || 'INSS'; // Default to INSS if not set
       const simConvenio = simData.convenio || 'INSS'; // Default to INSS if not set
       if (bankConvenio !== simConvenio) {
-        if (isTargetBank) console.log(`${bank.name} filtered by convenio: ${bankConvenio} !== ${simConvenio}`);
+        log(`filtrado por convenio: ${bankConvenio} !== ${simConvenio}`);
         return;
       }
 
       // 0.2 Sub-Convenio Filter
       if (bank.subConvenio && bank.subConvenio !== simData.subConvenio) {
-        if (isTargetBank) console.log(`${bank.name} filtered by subConvenio: ${bank.subConvenio} !== ${simData.subConvenio}`);
+        log(`filtrado por subConvenio: ${bank.subConvenio} !== ${simData.subConvenio}`);
         return;
       }
 
@@ -244,7 +259,7 @@ export default function Recomendacoes() {
       const isInvalidity = ['4', '04', '32', '92'].includes(cleanBeneficio);
       if (isInvalidity) {
         if (bank.acceptsInvalidez === false) {
-          if (isTargetBank) console.log(`${bank.name} filtrado: Não aceita espécie Invalidez`);
+          log(`filtrado: Não aceita espécie Invalidez`);
           return;
         }
 
@@ -256,19 +271,19 @@ export default function Recomendacoes() {
         if (!isOver60AndAccepted) {
           // Se o banco marcou "Aceita > 60" mas não configurou idade mínima alternativa, e o cliente tem < 60, bloqueia.
           if (bank.acceptsOver60Invalidez && ageLimit === 0) {
-            if (isTargetBank) console.log(`${bank.name} filtrado: Exige idade >= 60 para Invalidez`);
+            log(`filtrado: Exige idade >= 60 para Invalidez`);
             return;
           }
 
           // Valida idade mínima específica
           if (ageLimit > 0 && idade < ageLimit) {
-            if (isTargetBank) console.log(`${bank.name} filtrado por idade mínima invalidez: ${idade} < ${ageLimit}`);
+            log(`filtrado por idade mínima invalidez: ${idade} < ${ageLimit}`);
             return;
           }
           
           // Valida tempo de benefício
           if (requiredMonths > 0 && benefitTimeMonths < requiredMonths) {
-            if (isTargetBank) console.log(`${bank.name} filtrado por tempo de benefício: ${benefitTimeMonths} < ${requiredMonths} meses`);
+            log(`filtrado por tempo de benefício: ${benefitTimeMonths} < ${requiredMonths} meses`);
             return;
           }
         }
@@ -276,29 +291,31 @@ export default function Recomendacoes() {
 
       // 2. Parcela Mínima
       if (bank.minInstallmentValue && valorParcela < bank.minInstallmentValue) {
-        if (isTargetBank) console.log(`${bank.name} filtered by minInstallmentValue`);
+        log(`filtrado por minInstallmentValue`);
         return;
       }
 
-      // 3. Saldo Mínimo
-      if (bank.minBalance && saldoDevedor < bank.minBalance) {
-        if (isTargetBank) console.log(`${bank.name} filtered by minBalance`);
+      /* 
+      // 3. Saldo Mínimo (Removido para permitir validação exclusiva por tabela com soma saldo+troco)
+      if (bank.minBalance && !bank.sumSaldoTroco && saldoDevedor < bank.minBalance) {
+        log(`filtrado por minBalance (${saldoDevedor} < ${bank.minBalance})`);
         return;
       }
+      */
 
       // 4. Idade Geral
       // Se for invalidez, a regra de idade já foi validada acima (ou o banco não tem regra específica)
       // Mas o maxAge geral do banco ainda deve ser respeitado como limite absoluto
       if (!isInvalidity) {
         if ((bank.minAge > 0 && idade < bank.minAge) || (bank.maxAge > 0 && idade > bank.maxAge)) {
-          if (isTargetBank) console.log(`${bank.name} filtered by general age: ${idade} (min: ${bank.minAge}, max: ${bank.maxAge})`);
+          log(`filtered by general age: ${idade} (min: ${bank.minAge}, max: ${bank.maxAge})`);
           return;
         }
       } else {
         // Para invalidez, se o banco NÃO tem ageLimit específico, ainda validamos o maxAge geral
         const ageLimit = bank.invalidezAgeYears || 0;
         if (ageLimit === 0 && bank.maxAge > 0 && idade > bank.maxAge) {
-          if (isTargetBank) console.log(`${bank.name} filtered by general maxAge (Invalidez fallback): ${idade} > ${bank.maxAge}`);
+          log(`filtered by general maxAge (Invalidez fallback): ${idade} > ${bank.maxAge}`);
           return;
         }
       }
@@ -307,24 +324,24 @@ export default function Recomendacoes() {
       const isLOAS = ['87', '88'].includes(cleanBeneficio);
       if (isLOAS) {
         if (!bank.acceptsLOAS) {
-          if (isTargetBank) console.log(`${bank.name} filtered by acceptsLOAS`);
+          log(`filtered by acceptsLOAS`);
           return;
         }
         if (simData.isAnalfabeto && !bank.acceptsIlliterate) {
-          if (isTargetBank) console.log(`${bank.name} filtered by acceptsIlliterate (LOAS)`);
+          log(`filtered by acceptsIlliterate (LOAS)`);
           return;
         }
       }
 
       // 5.1 Analfabeto (Geral)
       if (simData.isAnalfabeto && !bank.acceptsIlliterate) {
-        if (isTargetBank) console.log(`${bank.name} filtered by acceptsIlliterate (General)`);
+        log(`filtered by acceptsIlliterate (General)`);
         return;
       }
 
       // 6. Banco Atual (Não portam)
-      if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some(b => checkBankMatch(b, bancoAtual))) {
-        if (isTargetBank) console.log(`${bank.name} filtered by nonAcceptedBanks: ${bancoAtual}`);
+      if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) {
+        log(`filtered by nonAcceptedBanks: ${bancoAtual}`);
         return;
       }
 
@@ -332,137 +349,108 @@ export default function Recomendacoes() {
       let requiredInstallments = 0;
       
       // Check specific rule first
-      const specificRule = bank.specificInstallmentRules?.find(r => checkBankMatch(r.bank, bancoAtual));
+      const specificRule = bank.specificInstallmentRules?.find((r: any) => checkBankMatch(r.bank, bancoAtual));
       if (specificRule) {
         requiredInstallments = specificRule.installments;
       } else {
         // Check general rule
-        const generalRule = generalRules.find(r => checkBankMatch(r.banco, bancoAtual));
+        const generalRule = generalRules.find((r: any) => checkBankMatch(r.banco, bancoAtual));
         if (generalRule) {
           requiredInstallments = generalRule.parcelasAceitas;
         }
       }
 
       if (requiredInstallments > 0 && parcelasPagas < requiredInstallments) {
-        if (isTargetBank) console.log(`${bank.name} filtered by requiredInstallments: ${parcelasPagas} < ${requiredInstallments}`);
+        log(`filtered by requiredInstallments: ${parcelasPagas} < ${requiredInstallments}`);
         return;
       }
 
       // 7.1 Mínimo de parcelas pagas (New field)
       if (bank.minPaidInstallments && parcelasPagas < bank.minPaidInstallments) {
-        if (isTargetBank) console.log(`${bank.name} filtered by minPaidInstallments: ${parcelasPagas} < ${bank.minPaidInstallments}`);
+        log(`filtered by minPaidInstallments: ${parcelasPagas} < ${bank.minPaidInstallments}`);
         return;
       }
 
+      let hasValidTable = false;
+
       // If eligible, calculate for each table
       if (bank.tabelas && bank.tabelas.length > 0) {
-        bank.tabelas.forEach(tabela => {
+        bank.tabelas.forEach((tabela: any) => {
           const coef = tabela.coeficiente;
           
           // Skip if coefficient is not valid for division
           if (!coef || coef <= 0) {
-            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} skipped: invalid coefficient ${coef}`);
+            log(`invalid coefficient ${coef}`, tabela.nome);
             return;
           }
 
           const valorContrato = valorParcela / coef;
           const valorTroco = valorContrato - saldoDevedor;
           
-          // Ticket Mínimo (Validado contra o Saldo Devedor conforme solicitação)
-          // Só é aplicada se o campo estiver ativo (useMinTicket === true)
-          const minTicketValue = (tabela.useMinTicket === true) ? (tabela.minTicket || bank.minTroco || 0) : 0;
-          
-          if (tabela.useMinTicket === true && minTicketValue > 0 && saldoDevedor < minTicketValue) {
-            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by minTicket (Saldo): ${saldoDevedor.toFixed(2)} < ${minTicketValue.toFixed(2)}`);
+          // REFINEMENT: Ticket Mínimo / Saldo Mínimo Check
+          // PRIORIDADE MÁXIMA: Valida Saldo+Troco primeiro, ignorando saldoDevedor puro se somar
+          // O campo real no Banco é 'sumBalanceAndTroco' (conforme RuleContext.tsx)
+          const isC6 = bank.name.toUpperCase().includes('C6');
+          const bSumSaldoTroco = isC6 || !!(bank.sumBalanceAndTroco || bank.sumSaldoTroco);
+          const valorAValidar = bSumSaldoTroco ? (saldoDevedor + valorTroco) : saldoDevedor;
+          const limiteMinimo = bank.minBalance || 0;
+
+          // LOG PARA DEPURAÇÃO
+          if (isC6) {
+            console.log(`[C6_DEBUG] Saldo: ${saldoDevedor} | Troco: ${valorTroco} | AValidar: ${valorAValidar} | Min: ${limiteMinimo}`);
+          }
+
+          if (limiteMinimo > 0 && valorAValidar < limiteMinimo) {
+            log(`filtered by minBalance (${bSumSaldoTroco ? 'Saldo+Troco' : 'Saldo'} ${valorAValidar.toFixed(2)} < ${limiteMinimo.toFixed(2)})`, tabela.nome);
             return;
           }
 
-          // Regra: Troco > 5% do Novo Endividamento
-          if (bank.requireTrocoMaiorQue5PorcentoEndividamento) {
-            const novoEndividamento = parcelasRestantes * valorParcela;
-            const baseTroco = novoEndividamento * 0.05;
-            if (valorTroco <= baseTroco) {
-              if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by Troco > 5% Endividamento: ${valorTroco.toFixed(2)} <= ${baseTroco.toFixed(2)}`);
-              return;
-            }
+          // Ticket Mínimo (Específico da tabela, se configurado)
+          const minTicketValue = (tabela.useMinTicket === true) ? (tabela.minTicket || bank.minTroco || 0) : 0;
+          if (tabela.useMinTicket === true && minTicketValue > 0 && valorAValidar < minTicketValue) {
+            log(`filtered by minTicket (${bSumSaldoTroco ? 'Saldo+Troco' : 'Saldo'}): ${valorAValidar.toFixed(2)} < ${minTicketValue.toFixed(2)}`, tabela.nome);
+            return;
           }
 
-          const originalRateCalc = simData.taxaJurosMensal ? simData.taxaJurosMensal * 100 : 0;
+          // 2. Parcela Mínima
+          if (bank.minInstallmentValue && valorParcela < bank.minInstallmentValue) {
+            log(`filtered by minInstallmentValue: ${valorParcela} < ${bank.minInstallmentValue}`, tabela.nome);
+            return;
+          }
+
+          // Cálculo das Taxas (Restaurando o motor de taxas)
           const taxaTabelaValida = (tabela.taxaTabela !== undefined && tabela.taxaTabela !== null && tabela.taxaTabela > 0) ? tabela.taxaTabela : (bank.refinRate || 0);
-          
           const bankAdjustment = bank.ajusteTaxa || 0;
           
-          // Se a tabela possuir uma taxa diferencial estipulada via UI (Nova Taxa), usamos ela. 
-          // Caso contrário, calculamos dinamicamente (Taxa Original + Ajuste do Banco).
-          const novaTaxaPortabilidadeAvaliada = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0)
-              ? tabela.taxaDiferencial
-              : (originalRateCalc + bankAdjustment);
+          const taxaParaCalculo = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0)
+            ? tabela.taxaDiferencial
+            : (originalRate + bankAdjustment);
 
-          const taxaParaCalculo = novaTaxaPortabilidadeAvaliada;
-
-          // Regra Nova: Taxa Mínima Port (portabilityRate)
-          // Usada EXCLUSIVAMENTE para verificar se o banco/tabela fica elegível para simulação.
-          // Se a Nova Taxa Port (taxaParaCalculo) for abaixo da Taxa Mínima Port (portabilityRate), indisponibiliza a tabela.
+          // Regra: Taxa Mínima Port (portabilityRate)
           if (bank.portabilityRate && bank.portabilityRate > 0 && taxaParaCalculo < bank.portabilityRate) {
-            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered: Nova Taxa (${taxaParaCalculo}) < Taxa Mínima Port (${bank.portabilityRate})`);
+            log(`filtered by min portability rate: ${taxaParaCalculo.toFixed(2)} < ${bank.portabilityRate.toFixed(2)}`, tabela.nome);
+            return;
+          }
+
+          const taxaPonderadaBase = (originalRate + taxaParaCalculo) / 2;
+          const taxaPonderadaFinal = taxaPonderadaBase + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
+          
+          if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida >= taxaPonderadaFinal) {
+            log(`filtered by weighted rate: ${taxaTabelaValida.toFixed(2)} >= ${taxaPonderadaFinal.toFixed(4)}`, tabela.nome);
             return;
           }
           
-          // Taxa Ponderada calculation - Adjusted to use taxaParaCalculo as base
-          const taxaPonderadaBase = (originalRateCalc + taxaParaCalculo) / 2;
-          const taxaPonderada = taxaPonderadaBase + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
-
-          if (isTargetBank) {
-            console.log(`${bank.name} - Table ${tabela.nome}:`, 
-              `coef: ${coef}, valorContrato: ${valorContrato}, valorTroco: ${valorTroco}, minTicketValue: ${minTicketValue}, taxaTabelaValida: ${taxaTabelaValida}, taxaPonderada: ${taxaPonderada}, useTaxaPonderada: ${tabela.useTaxaPonderada}`
-            );
-          }
-
-          // Validação da Taxa Ponderada vs Taxa da Tabela
-          // Regra: Para uma tabela ser ofertada, a taxa base da tabela (taxaTabelaValida) tem que estar sempre ABAIXO da taxa ponderada (taxaPonderada)
-          if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida >= taxaPonderada) {
-            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by taxaPonderada: ${taxaPonderada.toFixed(4)} <= ${taxaTabelaValida}`);
-            return;
-          }
-
-          const cleanBeneficio = codigoBeneficio.replace(/^0+/, '');
-          const isInvalidity = ['4', '04', '32', '92'].includes(cleanBeneficio);
-
+          const taxaPonderada = taxaPonderadaFinal;
           const rules: string[][] = [];
-          
-          const financeRules = [];
-          if (bank.minBalance) financeRules.push(`Saldo Mín: ${formatCurrency(bank.minBalance)}`);
-          if (minTicketValue > 0) financeRules.push(`Ticket Mín: ${formatCurrency(minTicketValue)}`);
-          if (bank.requireTrocoMaiorQue5PorcentoEndividamento) financeRules.push(`Troco > 5% Endiv.`);
-          if (financeRules.length > 0) rules.push(financeRules);
 
-          if (bank.acceptsLOAS) rules.push(['Aceita LOAS']);
-          if (bank.acceptsIlliterate) rules.push(['Aceita Analfabeto']);
-          if (bank.minPaidInstallments) rules.push([`Mín. ${bank.minPaidInstallments} Parc. Pagas`]);
-          
-          if (isInvalidity) {
-            const invalidezRules = [];
-            if (bank.acceptsOver60Invalidez && bank.invalidezAgeYears) {
-              invalidezRules.push(`Invalidez: 60+ anos ou ${bank.invalidezAgeYears}+ anos`);
-            } else if (bank.acceptsOver60Invalidez) {
-              invalidezRules.push(`Invalidez: 60+ anos`);
-            } else if (bank.invalidezAgeYears) {
-              invalidezRules.push(`Invalidez: ${bank.invalidezAgeYears}+ anos`);
-            }
-            
-            if (bank.minBenefitTimeYears || bank.minBenefitTimeMonths) {
-              const timeStr = `Tempo Benefício: ${bank.minBenefitTimeYears || 0}a ${bank.minBenefitTimeMonths || 0}m+`;
-              if (bank.acceptsOver60Invalidez) {
-                invalidezRules.push(`${timeStr} (se < 60 anos)`);
-              } else {
-                invalidezRules.push(timeStr);
-              }
-            }
-            if (invalidezRules.length > 0) rules.push(invalidezRules);
+          // Regra final de elegibilidade básica
+          if (valorTroco <= 0) {
+            log(`filtered by valorTroco <= 0: ${valorTroco.toFixed(2)}`, tabela.nome);
+            return;
           }
 
-          if (valorTroco > 0) {
-            calculatedOffers.push({
+          hasValidTable = true;
+          calculatedOffers.push({
               id: `${bank.id}-${tabela.nome}`,
               name: bank.name,
               logo: bank.logoUrl || 'https://images.unsplash.com/photo-1501167786227-4cba60f6d58f?q=80&w=100&auto=format&fit=crop',
@@ -480,25 +468,27 @@ export default function Recomendacoes() {
               tabelasCount: bank.tabelas.length,
               prazoRefinPort: tabela.prazoRefinPort
             });
-          } else {
-            if (isTargetBank) console.log(`${bank.name} - Table ${tabela.nome} filtered by valorTroco <= 0: ${valorTroco}`);
-          }
         });
       } else {
-        if (isTargetBank) console.log(`${bank.name} filtered by no tables`);
+        log(`filtered: sem tabelas`);
+      }
+      
+      if (!hasValidTable && bank.tabelas && bank.tabelas.length > 0) {
+        // Se tinha tabelas mas nenhuma passou, log extra opcional
       }
     });
+
+    setFilterReasons(localFilterReasons);
+    // Removed /api/log to prevent network congestion
 
     // Sort by priority (ascending, lower is better) then by valorTroco (descending)
     calculatedOffers.sort((a, b) => {
       const bankIdA = a.id.split('-')[0];
       const bankIdB = b.id.split('-')[0];
       
-      // Use promotora priority if set, otherwise fallback to bank's default priority
       const pA = promotoraPriorities[bankIdA] ?? a.priority ?? 999;
       const pB = promotoraPriorities[bankIdB] ?? b.priority ?? 999;
       
-      // Treat 0 or undefined as lowest priority (999)
       const finalPA = (pA === 0 || pA === undefined) ? 999 : pA;
       const finalPB = (pB === 0 || pB === undefined) ? 999 : pB;
       
@@ -508,7 +498,10 @@ export default function Recomendacoes() {
       return b.valorTroco - a.valorTroco;
     });
     
-    setAllCalculatedOffers(calculatedOffers);
+    // Check if offers actually changed before updating state
+    if (JSON.stringify(calculatedOffers) !== JSON.stringify(allCalculatedOffers)) {
+        setAllCalculatedOffers(calculatedOffers);
+    }
     
     // Save simulation to Firestore if it hasn't been saved yet
     if (simulationId && savedSimulationId.current !== simulationId && calculatedOffers.length > 0) {
@@ -1156,6 +1149,46 @@ export default function Recomendacoes() {
       </div>
         </div>
       </div>
+      {/* Filter Reasons Modal (Debug) */}
+      {showFilterLog && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h3 className="font-bold text-slate-900 dark:text-white">Motivos de Filtragem</h3>
+              <button onClick={() => setShowFilterLog(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
+                ✕
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 font-mono text-xs">
+              {filterReasons.length === 0 ? (
+                <p className="text-slate-500">Nenhum banco filtrado ou dados não carregados.</p>
+              ) : (
+                <ul className="space-y-4">
+                  {filterReasons.map((log, i) => (
+                    <li key={i} className="border-l-2 border-amber-500 pl-3">
+                      <strong className="text-amber-600 dark:text-amber-400">{log.bankName}</strong>
+                      {log.tabela && <span className="ml-2 text-slate-500">- Tabela: {log.tabela}</span>}
+                      <p className="text-slate-700 dark:text-slate-300 mt-1 break-words">{log.reason}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Button for Debugging */}
+      {process.env.NODE_ENV === 'development' || true ? (
+        <button
+          onClick={() => setShowFilterLog(true)}
+          className="fixed bottom-20 right-4 z-40 bg-slate-800 text-white rounded-full p-3 shadow-lg hover:bg-slate-700 transition"
+          title="Ver motivos de bancos filtrados"
+        >
+          <Sparkles className="w-5 h-5" />
+        </button>
+      ) : null}
+
     </div>
   );
 }
