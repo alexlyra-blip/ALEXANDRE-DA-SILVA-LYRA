@@ -382,9 +382,12 @@ export default function Recomendacoes() {
         return;
       }
 
-      // 7.1 Mínimo de parcelas pagas (New field)
-      if (bank.minPaidInstallments && parcelasPagas < bank.minPaidInstallments) {
-        log(`filtered by minPaidInstallments: ${parcelasPagas} < ${bank.minPaidInstallments}`);
+      // 7.1 Mínimo de parcelas pagas do Banco de Destino
+      const targetGeneralRule = generalRules.find((r: any) => checkBankMatch(r.banco, bank.name));
+      const effectiveMinPaidInstallments = bank.minPaidInstallments || 0;
+
+      if (effectiveMinPaidInstallments > 0 && parcelasPagas < effectiveMinPaidInstallments) {
+        log(`filtered by minPaidInstallments (Bank limits): ${parcelasPagas} < ${effectiveMinPaidInstallments}`);
         return;
       }
 
@@ -456,12 +459,12 @@ export default function Recomendacoes() {
           const orig = Number(originalRate.toFixed(2));
           const port = Number(taxaParaCalculo.toFixed(2));
           
-          const taxaPonderadaBase = Number(((orig + port) / 2).toFixed(2));
+          const taxaPonderadaBase = Math.round(((orig + port) / 2) * 100) / 100;
           const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));
-          const taxaPonderadaFinal = Number((taxaPonderadaBase + ajusteTabela).toFixed(2));
+          const taxaPonderadaFinal = Math.round((taxaPonderadaBase + ajusteTabela) * 100) / 100;
           
-          if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida >= taxaPonderadaFinal) {
-            log(`filtered by weighted rate: ${taxaTabelaValida.toFixed(2)} >= ${taxaPonderadaFinal.toFixed(2)}`, tabela.nome);
+          if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
+            log(`filtered by weighted rate: ${taxaTabelaValida.toFixed(2)} > ${taxaPonderadaFinal.toFixed(2)}`, tabela.nome);
             return;
           }
           
@@ -485,8 +488,9 @@ export default function Recomendacoes() {
               saldoDevedor,
               novaTaxaPortabilidade: taxaParaCalculo,
               taxaPonderada,
+              originalRateCalculated: orig,
               taxaBase: taxaTabelaValida,
-              priority: bank.priority || 0,
+              priority: (targetGeneralRule?.priority && targetGeneralRule.priority > 0) ? targetGeneralRule.priority : (bank.priority || 0),
               rules,
               convenio: bank.convenio || 'INSS',
               subConvenio: bank.subConvenio,
@@ -1100,6 +1104,14 @@ export default function Recomendacoes() {
                             Saldo Dev.: <span className="text-slate-900 dark:text-white font-bold">{formatCurrency(currentOffer.saldoDevedor)}</span>
                           </p>
                         </div>
+                        {currentOffer.novaTaxaPortabilidade !== undefined && (
+                          <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                            <Percent className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <p className="text-xs font-medium truncate">
+                              Taxa da Port.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.novaTaxaPortabilidade.toFixed(2)}%</span>
+                            </p>
+                          </div>
+                        )}
                         {currentOffer.novaTaxaPortabilidade !== undefined && currentOffer.originalRateCalculated !== undefined && (
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                             <Calculator className="w-3.5 h-3.5 text-slate-400 shrink-0" />

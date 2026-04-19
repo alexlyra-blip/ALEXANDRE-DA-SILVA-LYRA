@@ -64,6 +64,7 @@ export interface GeneralRule {
   id: string;
   banco: string;
   parcelasAceitas: number;
+  priority?: number;
 }
 
 interface RuleContextType {

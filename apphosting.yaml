@@ -2,6 +2,6 @@ version: v1
 build:
   command: npm run build
   environment:
-    NODE_VERSION: "22"
+    NODE_VERSION: "20"
 run:
   command: npm run start

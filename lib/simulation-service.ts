@@ -238,23 +238,24 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
         const port = Number(taxaParaCalculo.toFixed(2));
         
         // Aplica média e fixa em 2 casas decimais rigorosamente
-        const taxaPonderadaBase = Number(((orig + port) / 2).toFixed(2));
+        // Using Math.round(x*100)/100 for better precision instead of toFixed(2)
+        const taxaPonderadaBase = Math.round(((orig + port) / 2) * 100) / 100;
         
         // Soma o ajuste da tabela 
         const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));
         
         // Resultado final estritamente com 2 casas
-        const taxaPonderadaFinal = Number((taxaPonderadaBase + ajusteTabela).toFixed(2));
+        const taxaPonderadaFinal = Math.round((taxaPonderadaBase + ajusteTabela) * 100) / 100;
 
         console.log(`[DEBUG] Banco ${bank.name} - Tabela: ${tabela.nome}`);
         console.log(`[DEBUG]   ORIGINAL (${orig}) + PORT (${port}) = ${orig + port} / 2 = ${taxaPonderadaBase}`);
         console.log(`[DEBUG]   BASE (${taxaPonderadaBase}) + AJUSTE (${ajusteTabela}) = FINAL (${taxaPonderadaFinal})`);
 
         // Regra de Elegibilidade:
-        // Para uma tabela ser ofertada, a Taxa Base da Tabela (taxaTabelaValida) tem que ser ESTITAMENTE MENOR que a Taxa Ponderada Final
-        // Se Taxa Base >= Taxa Ponderada Final, a tabela fica indisponível.
-        if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida >= taxaPonderadaFinal) {
-            console.log(`[DEBUG]   -> filtered by weighted rate: ${taxaTabelaValida} >= ${taxaPonderadaFinal}`);
+        // Para uma tabela ser ofertada, a Taxa Base da Tabela (taxaTabelaValida) tem que ser MENOR OU IGUAL que a Taxa Ponderada Final
+        // Se Taxa Base > Taxa Ponderada Final, a tabela fica indisponível.
+        if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
+            console.log(`[DEBUG]   -> filtered by weighted rate: ${taxaTabelaValida} > ${taxaPonderadaFinal}`);
             return;
         }
         

@@ -27,16 +27,16 @@ export default function RegrasBanco() {
 
   const isAdmin = profile?.role === 'admin';
   const isPromotora = profile?.role === 'promotora';
+  const isCorretor = profile?.role === 'corretor';
 
   useEffect(() => {
-    if (profile && profile.role !== 'admin' && profile.role !== 'promotora') {
+    if (profile && profile.role !== 'admin' && profile.role !== 'promotora' && profile.role !== 'corretor') {
       router.push('/dashboard');
     }
   }, [profile, router]);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [bankToDeleteId, setBankToDeleteId] = useState<string | null>(null);
-  const [isGeneralModalOpen, setIsGeneralModalOpen] = useState(false);
   const [editingGeneralRuleId, setEditingGeneralRuleId] = useState<string | null>(null);
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
   const [maxRateFilter] = useState('');
@@ -122,6 +122,7 @@ export default function RegrasBanco() {
   // Form states for General Rules
   const [generalRuleBanco, setGeneralRuleBanco] = useState('');
   const [generalRuleParcelas, setGeneralRuleParcelas] = useState('');
+  const [generalRulePrioridade, setGeneralRulePrioridade] = useState('');
 
   const addTabela = () => {
     setTabelas([...tabelas, { nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '' }]);
@@ -409,7 +410,8 @@ export default function RegrasBanco() {
     setIsBankModalOpen(true);
   };
 
-  const handleSaveGeneralRule = async () => {
+  const handleSaveGeneralRule = async (e?: React.MouseEvent | React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!generalRuleBanco || !generalRuleParcelas) return;
     
     setIsSaving(true);
@@ -417,28 +419,21 @@ export default function RegrasBanco() {
     try {
       const ruleData = {
         banco: generalRuleBanco,
-        parcelasAceitas: parseInt(generalRuleParcelas) || 0
+        parcelasAceitas: parseInt(generalRuleParcelas) || 0,
+        priority: parseInt(generalRulePrioridade) || 0
       };
 
       if (editingGeneralRuleId) {
         await updateGeneralRule(editingGeneralRuleId, ruleData);
-        setSaveFeedback({ type: 'success', message: "Regra geral atualizada com sucesso!" });
-        setTimeout(() => {
-          setEditingGeneralRuleId(null);
-          setIsGeneralModalOpen(false);
-        }, 1500);
+        setEditingGeneralRuleId(null);
       } else {
         await addGeneralRule(ruleData);
-        setSaveFeedback({ type: 'success', message: "Regra geral adicionada com sucesso!" });
-        setTimeout(() => {
-          setGeneralRuleBanco('');
-          setGeneralRuleParcelas('');
-          setIsGeneralModalOpen(false);
-        }, 1500);
       }
+      setGeneralRuleBanco('');
+      setGeneralRuleParcelas('');
+      setGeneralRulePrioridade('');
     } catch (error) {
       console.error("Erro ao salvar regra geral:", error);
-      setSaveFeedback({ type: 'error', message: "Erro ao salvar regra geral. Tente novamente." });
     } finally {
       setIsSaving(false);
     }
@@ -447,8 +442,8 @@ export default function RegrasBanco() {
   const handleEditGeneralRule = (rule: GeneralRule) => {
     setEditingGeneralRuleId(rule.id);
     setGeneralRuleBanco(rule.banco);
-    setGeneralRuleParcelas(rule.parcelasAceitas.toString());
-    setIsGeneralModalOpen(true);
+    setGeneralRuleParcelas(rule.parcelasAceitas?.toString() || '');
+    setGeneralRulePrioridade(rule.priority?.toString() || '');
   };
 
   const handleDeleteBank = (id: string) => {
@@ -563,17 +558,17 @@ export default function RegrasBanco() {
         </div>
 
         {/* Action Buttons */}
-        {(isAdmin || isPromotora) && (
+        {(isAdmin || isPromotora || isCorretor) && (
           <div className={`grid ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
-            <button 
-              onClick={() => setIsGeneralModalOpen(true)}
+            <Link 
+              href="/regras/gerais"
               className="flex flex-col items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl p-4 transition-all"
             >
               <div className="w-10 h-10 bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center">
                 <Settings className="w-5 h-5" />
               </div>
-              <span className="text-sm font-bold text-center">Adicionar Regra Geral</span>
-            </button>
+              <span className="text-sm font-bold text-center">Regras Gerais (Prioridade e Parcelas)</span>
+            </Link>
 
             {isAdmin && (
               <button 
@@ -591,76 +586,6 @@ export default function RegrasBanco() {
             )}
           </div>
         )}
-
-        {isPromotora && (
-          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4">
-            <div className="flex items-center gap-3 text-primary">
-              <ShieldCheck className="w-5 h-5" />
-              <p className="text-sm font-bold">Configuração de Prioridades</p>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Como promotora, você pode definir sua própria ordem de preferência para os bancos. 
-              Isso afetará apenas as simulações realizadas por você e seus corretores.
-            </p>
-          </div>
-        )}
-
-        {/* General Rules List */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400">Regras Gerais</h3>
-            {generalRules.length > 0 && (
-              <span className="text-[10px] font-bold bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-full">
-                {generalRules.length} {generalRules.length === 1 ? 'Regra' : 'Regras'}
-              </span>
-            )}
-          </div>
-
-          {generalRules.length === 0 ? (
-            <div className="bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center">
-              <div className="size-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
-                <Settings className="w-6 h-6 text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Nenhuma regra geral configurada.</p>
-              <p className="text-[10px] text-slate-400 mt-1">Regras gerais são aplicadas a todas as simulações.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {generalRules.map(rule => (
-                <div key={rule.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex justify-between items-center shadow-sm hover:border-primary/30 transition-all group">
-                  <div className="flex items-center gap-4">
-                    <div className="size-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
-                      <ShieldCheck className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-900 dark:text-slate-100">{rule.banco}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parcelas:</span>
-                        <span className="text-xs font-black text-primary">{rule.parcelasAceitas}x</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button 
-                      onClick={() => handleEditGeneralRule(rule)} 
-                      className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
-                      title="Editar regra"
-                    >
-                      <Edit className="w-5 h-5" />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteGeneralRule(rule.id)} 
-                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                      title="Excluir regra"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
 
         {/* Banks List */}
         <section className="space-y-4">
@@ -1558,12 +1483,30 @@ export default function RegrasBanco() {
                             <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest lg:mb-0.5">Resultado</span>
                             <div className="flex items-baseline gap-0.5">
                               <span className="text-lg font-black text-primary tracking-tighter">
-                                {(( 
-                                  (parseNumeric(novaTaxaReferencia) + 
-                                  (parseFloat(tabela.taxaDiferencial) || parseFloat(tabela.taxaTabela) || 0)) / 2
-                                ) + (parseNumeric(tabela.ajusteTaxaPonderada) || 0)).toFixed(2)}
+                                {(() => {
+                                  // Usa a Taxa Atual (taxaContratoAtualPreview) como o valor Original real
+                                  const original = parseNumeric(taxaContratoAtualPreview);
+                                  // Nova Taxa (taxaDiferencial) é usada pura na média
+                                  const novaTaxa = parseNumeric(tabela.taxaDiferencial) || 0;
+                                  // Ajuste é aplicado APÓS a média, conforme solicitado
+                                  const ajuste = parseNumeric(tabela.ajusteTaxaPonderada) || 0;
+                                  
+                                  // Cálculo: ((Original + Nova) / 2) + Ajuste
+                                  const media = Math.round(((original + novaTaxa) / 2) * 100) / 100;
+                                  const final = Math.round((media + ajuste) * 100) / 100;
+                                  return (
+                                    <div className="flex flex-col items-center lg:items-end">
+                                      <div className="flex items-baseline gap-0.5">
+                                        <span className="text-lg font-black text-primary tracking-tighter">{final.toFixed(2)}</span>
+                                        <span className="text-[8px] font-black text-primary/60">%</span>
+                                      </div>
+                                      <div className="text-[6px] font-bold text-slate-400 tracking-tight whitespace-nowrap">
+                                        ({original.toFixed(2)} + {novaTaxa.toFixed(2)})/2 {ajuste !== 0 ? (ajuste > 0 ? `+ ${ajuste}` : ajuste) : ''}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </span>
-                              <span className="text-[8px] font-black text-primary/60">%</span>
                             </div>
                           </div>
                         </div>
@@ -1594,51 +1537,6 @@ export default function RegrasBanco() {
               >
                 <Save className="w-4 h-4" />
                 {isSaving ? 'Salvando...' : 'Salvar Banco e Regras'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Adicionar Regra Geral */}
-      {isGeneralModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
-              <h2 className="text-lg font-bold">Adicionar Regra Geral</h2>
-              <button onClick={() => setIsGeneralModalOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 space-y-4">
-              {saveFeedback && (
-                <div className={`p-3 rounded-xl flex items-center gap-3 ${
-                  saveFeedback.type === 'success' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
-                }`}>
-                  {saveFeedback.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-                  <p className="text-sm font-bold">{saveFeedback.message}</p>
-                </div>
-              )}
-              <p className="text-sm text-slate-500">Esta regra será validada em todas as simulações, informando o banco e a quantidade de parcelas aceita para que a simulação seja liberada.</p>
-              
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-500">Banco</label>
-                <input type="text" value={generalRuleBanco} onChange={e => setGeneralRuleBanco(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: Banco do Brasil" />
-              </div>
-              
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-500">Quantidade de parcelas aceita</label>
-                <input type="number" value={generalRuleParcelas} onChange={e => setGeneralRuleParcelas(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 12" />
-              </div>
-            </div>
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-              <button 
-                onClick={handleSaveGeneralRule} 
-                disabled={isSaving}
-                className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
-              >
-                <Save className="w-5 h-5" />
-                {isSaving ? 'Salvando...' : 'Salvar Regra Geral'}
               </button>
             </div>
           </div>

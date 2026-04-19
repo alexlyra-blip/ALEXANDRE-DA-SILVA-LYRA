@@ -79,15 +79,6 @@ export default function TransitionAnimation({ onComplete, availableBanks }: { on
         
         if (uniqueBanks.length > 0) {
           setBanks(uniqueBanks.sort(() => 0.5 - Math.random()).slice(0, 8));
-        } else {
-          // High quality fallbacks
-          setBanks([
-            { name: 'Banco do Brasil', logo: 'https://logodownload.org/wp-content/uploads/2014/05/banco-do-brasil-logo-1.png' },
-            { name: 'Caixa', logo: 'https://logodownload.org/wp-content/uploads/2014/02/caixa-logo-1.png' },
-            { name: 'Itaú', logo: 'https://logodownload.org/wp-content/uploads/2014/05/itau-logo-1.png' },
-            { name: 'Bradesco', logo: 'https://logodownload.org/wp-content/uploads/2014/05/bradesco-logo-1.png' },
-            { name: 'Santander', logo: 'https://logodownload.org/wp-content/uploads/2014/05/santander-logo-1.png' },
-          ]);
         }
       } catch (e) {
         console.error("Error fetching banks for animation", e);

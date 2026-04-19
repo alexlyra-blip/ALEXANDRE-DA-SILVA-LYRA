@@ -74,7 +74,10 @@ export default function SimulacaoDetalhes() {
         const bankAdjustment = bank.ajusteTaxa || 0;
         const novaTaxaPortabilidade = convenioRate + bankAdjustment;
 
-        const taxaPonderada = ((convenioRate + taxaDiferencial) / 2) + (parseFloat(t.ajusteTaxaPonderada) || 0);
+        // Correct Calculation: Average of (ConvenioRate + BankAdjustment) and (TaxaDiferencial), then add Adjustment
+        // Wait, the requirement was (Original + NovaTaxaPort) / 2
+        const portRate = (convenioRate + bankAdjustment); // This is what is used in simulation
+        const taxaPonderada = ((convenioRate + novaTaxaPortabilidade) / 2) + (parseFloat(t.ajusteTaxaPonderada) || 0);
 
         // Regra: Taxa da tabela deve ser menor ou igual à taxa ponderada
         if (t.useTaxaPonderada !== false && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderada) {
