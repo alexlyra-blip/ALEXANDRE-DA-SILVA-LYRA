@@ -8,11 +8,11 @@ import { useState, useEffect } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { motion, AnimatePresence } from 'motion/react';
 import { safeStringify } from '@/lib/utils';
 
-const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' });
+const ai = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
 
 export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const { profile } = useAuth();
@@ -197,30 +197,31 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
     
     setIsAILoading(true);
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Extraia os dados de simulação de portabilidade do seguinte texto: "${aiInput}". 
-        Retorne um JSON com os campos: idade (número), convenio (uma das opções: INSS, SIAPE, GOVERNO, FORÇAS ARMADAS), codigoBeneficio (string), bancoAtual (string), valorParcela (número), prazoTotal (número), parcelasRestantes (número), saldoDevedor (número).
-        Se não encontrar um campo, deixe nulo.`,
-        config: {
+      const model = ai.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        generationConfig: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
-              idade: { type: Type.NUMBER },
-              convenio: { type: Type.STRING },
-              codigoBeneficio: { type: Type.STRING },
-              bancoAtual: { type: Type.STRING },
-              valorParcela: { type: Type.NUMBER },
-              prazoTotal: { type: Type.NUMBER },
-              parcelasRestantes: { type: Type.NUMBER },
-              saldoDevedor: { type: Type.NUMBER },
+              idade: { type: SchemaType.NUMBER },
+              convenio: { type: SchemaType.STRING },
+              codigoBeneficio: { type: SchemaType.STRING },
+              bancoAtual: { type: SchemaType.STRING },
+              valorParcela: { type: SchemaType.NUMBER },
+              prazoTotal: { type: SchemaType.NUMBER },
+              parcelasRestantes: { type: SchemaType.NUMBER },
+              saldoDevedor: { type: SchemaType.NUMBER },
             }
           }
         }
       });
 
-      const data = JSON.parse(response.text);
+      const response = await model.generateContent(`Extraia os dados de simulação de portabilidade do seguinte texto: "${aiInput}". 
+        Retorne um JSON com os campos: idade (número), convenio (uma das opções: INSS, SIAPE, GOVERNO, FORÇAS ARMADAS), codigoBeneficio (string), bancoAtual (string), valorParcela (número), prazoTotal (número), parcelasRestantes (número), saldoDevedor (número).
+        Se não encontrar um campo, deixe nulo.`);
+
+      const data = JSON.parse(response.response.text());
       
       if (data.idade) setIdade(data.idade.toString());
       if (data.convenio) {

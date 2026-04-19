@@ -13,10 +13,10 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { safeStringify } from '@/lib/utils';
 
-const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' });
+const ai = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
 
 type SortOption = 'menor_troco' | 'valor_troco' | 'valor_contrato';
 
@@ -1116,9 +1116,13 @@ export default function Recomendacoes() {
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                             <Calculator className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <p className="text-xs font-medium truncate">
-                              Taxa Ponderada Prev.: <span className="text-slate-900 dark:text-white font-bold">{(Math.round(((currentOffer.originalRateCalculated + currentOffer.novaTaxaPortabilidade) / 2) * 100) / 100).toFixed(2)}%</span>
+                              Taxa Ponderada Prev.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.taxaPonderada.toFixed(2)}%</span>
                               <span className="text-[9px] ml-1 block opacity-70">
-                                ({currentOffer.originalRateCalculated.toFixed(2)}% + {currentOffer.novaTaxaPortabilidade.toFixed(2)}%)/2
+                                ({currentOffer.originalRateCalculated.toFixed(2)}% + {currentOffer.novaTaxaPortabilidade.toFixed(2)}%)/2 {currentOffer.ajusteTaxaPonderada !== 0 && (
+                                  currentOffer.ajusteTaxaPonderada > 0 
+                                    ? `+ ${currentOffer.ajusteTaxaPonderada.toFixed(2).replace('.', ',')}` 
+                                    : `- ${Math.abs(currentOffer.ajusteTaxaPonderada).toFixed(2).replace('.', ',')}`
+                                )}
                               </span>
                             </p>
                           </div>

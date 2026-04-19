@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { runSimulation, SimulationInput } from '@/lib/simulation-service';
 
-const ai = new GoogleGenAI({ 
-  apiKey: process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' 
-});
+const ai = new GoogleGenerativeAI(
+  process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' 
+);
 
 // Tokens de configuração
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'simulador_token_123';
@@ -13,35 +13,35 @@ const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
 // Schema para extração de dados da simulação
 const simulationSchema = {
-  type: Type.OBJECT,
+  type: SchemaType.OBJECT,
   properties: {
     isSimulationData: {
-      type: Type.BOOLEAN,
+      type: SchemaType.BOOLEAN,
       description: "Verdadeiro se a mensagem contém dados suficientes para uma simulação."
     },
     data: {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       properties: {
-        valorParcela: { type: Type.NUMBER },
-        saldoDevedor: { type: Type.NUMBER },
-        idade: { type: Type.NUMBER },
+        valorParcela: { type: SchemaType.NUMBER },
+        saldoDevedor: { type: SchemaType.NUMBER },
+        idade: { type: SchemaType.NUMBER },
         convenio: { 
-          type: Type.STRING,
+          type: SchemaType.STRING,
           enum: ['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS']
         },
-        subConvenio: { type: Type.STRING },
-        parcelasPagas: { type: Type.NUMBER },
-        parcelasRestantes: { type: Type.NUMBER },
-        codigoBeneficio: { type: Type.STRING },
-        dataConcessao: { type: Type.STRING, description: "Formato YYYY-MM-DD" },
-        isAnalfabeto: { type: Type.BOOLEAN },
-        bancoAtual: { type: Type.STRING },
-        taxaJurosMensal: { type: Type.NUMBER, description: "Taxa de juros mensal atual do contrato (ex: 1.85)" }
+        subConvenio: { type: SchemaType.STRING },
+        parcelasPagas: { type: SchemaType.NUMBER },
+        parcelasRestantes: { type: SchemaType.NUMBER },
+        codigoBeneficio: { type: SchemaType.STRING },
+        dataConcessao: { type: SchemaType.STRING, description: "Formato YYYY-MM-DD" },
+        isAnalfabeto: { type: SchemaType.BOOLEAN },
+        bancoAtual: { type: SchemaType.STRING },
+        taxaJurosMensal: { type: SchemaType.NUMBER, description: "Taxa de juros mensal atual do contrato (ex: 1.85)" }
       }
     },
     missingFields: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
+      type: SchemaType.ARRAY,
+      items: { type: SchemaType.STRING },
       description: "Lista de campos que ainda faltam para completar a simulação."
     }
   },

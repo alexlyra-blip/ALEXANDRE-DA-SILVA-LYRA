@@ -28,6 +28,7 @@ export interface Offer {
   taxaPonderada: number;
   taxaBase: number;
   originalRateCalculated: number; // Added
+  ajusteTaxaPonderada: number; // Added
   priority: number;
   rules: string[][];
   convenio: string;
@@ -274,6 +275,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
             taxaPonderada,
             taxaBase: taxaTabelaValida,
             originalRateCalculated: originalRate,
+            ajusteTaxaPonderada: ajusteTabela,
             priority: bank.priority || 999,
             rules: [],
             convenio: bank.convenio || 'INSS',
