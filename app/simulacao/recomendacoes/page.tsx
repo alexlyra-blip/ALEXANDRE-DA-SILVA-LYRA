@@ -31,6 +31,7 @@ interface Offer {
   novaTaxaPortabilidade?: number;
   taxaPonderada?: number;
   taxaBase?: number;
+  originalRateCalculated?: number;
   priority?: number;
   rules?: string[][];
   convenio: 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS';
@@ -58,7 +59,23 @@ export default function Recomendacoes() {
   const { profile } = useAuth();
   const savedSimulationId = useRef<string | null>(null);
 
-  const handleSelectOffer = (offer: Offer) => {
+  const handleSelectOffer = async (offer: Offer) => {
+    try {
+      if (simData?.id) {
+        const docRef = doc(db, 'simulations', simData.id);
+        await setDoc(docRef, {
+          topOffer: offer.name,
+          topOfferTabela: offer.tabela,
+          topOfferContrato: offer.valorContrato,
+          topOfferTroco: offer.valorTroco,
+          topOfferTaxa: offer.novaTaxaPortabilidade,
+          topOfferPrazo: offer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))
+        }, { merge: true });
+      }
+    } catch (err) {
+      console.error('Error updating selected offer in simulations:', err);
+    }
+
     const stored = sessionStorage.getItem('selectedOffers');
     const selected = stored ? JSON.parse(stored) : [];
     selected.push(offer);
@@ -432,11 +449,19 @@ export default function Recomendacoes() {
             return;
           }
 
-          const taxaPonderadaBase = (originalRate + taxaParaCalculo) / 2;
-          const taxaPonderadaFinal = taxaPonderadaBase + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
+          // Regra de Cálculo Solicitada:
+          // 1. Taxa Ponderada = ((Taxa Original [originalRate] + Nova Taxa Portabilidade [taxaParaCalculo]) / 2) com 2 casas decimais
+          // 2. Resultado = Taxa Ponderada + Ajuste Tabela
+          
+          const orig = Number(originalRate.toFixed(2));
+          const port = Number(taxaParaCalculo.toFixed(2));
+          
+          const taxaPonderadaBase = Number(((orig + port) / 2).toFixed(2));
+          const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));
+          const taxaPonderadaFinal = Number((taxaPonderadaBase + ajusteTabela).toFixed(2));
           
           if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida >= taxaPonderadaFinal) {
-            log(`filtered by weighted rate: ${taxaTabelaValida.toFixed(2)} >= ${taxaPonderadaFinal.toFixed(4)}`, tabela.nome);
+            log(`filtered by weighted rate: ${taxaTabelaValida.toFixed(2)} >= ${taxaPonderadaFinal.toFixed(2)}`, tabela.nome);
             return;
           }
           
@@ -514,6 +539,7 @@ export default function Recomendacoes() {
         userName: profile.name,
         userAvatar: profile.avatarUrl || profile.photoUrl || null,
         userRole: profile.role,
+        corretorId: (profile.role === 'corretor' || profile.role === 'vendedor') ? profile.uid : null,
         createdBy: profile.createdBy || null,
         promotoraId: profile.role === 'promotora' ? profile.uid : (profile.promotoraId || profile.createdBy || 'admin'),
         recommendedBanks: calculatedOffers.slice(0, 3).map(o => o.name),
@@ -1068,11 +1094,20 @@ export default function Recomendacoes() {
                             Contrato: <span className={`${isMaiorContrato ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'} font-bold`}>{formatCurrency(currentOffer.valorContrato)}</span>
                           </p>
                         </div>
-                        {currentOffer.novaTaxaPortabilidade !== undefined && (
+                        <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                          <Banknote className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <p className="text-xs font-medium truncate">
+                            Saldo Dev.: <span className="text-slate-900 dark:text-white font-bold">{formatCurrency(currentOffer.saldoDevedor)}</span>
+                          </p>
+                        </div>
+                        {currentOffer.novaTaxaPortabilidade !== undefined && currentOffer.originalRateCalculated !== undefined && (
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                            <Percent className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <Calculator className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <p className="text-xs font-medium truncate">
-                              Taxa da Port.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.novaTaxaPortabilidade.toFixed(2)}%</span>
+                              Taxa Ponderada Prev.: <span className="text-slate-900 dark:text-white font-bold">{(Math.round(((currentOffer.originalRateCalculated + currentOffer.novaTaxaPortabilidade) / 2) * 100) / 100).toFixed(2)}%</span>
+                              <span className="text-[9px] ml-1 block opacity-70">
+                                ({currentOffer.originalRateCalculated.toFixed(2)}% + {currentOffer.novaTaxaPortabilidade.toFixed(2)}%)/2
+                              </span>
                             </p>
                           </div>
                         )}
@@ -1117,6 +1152,43 @@ export default function Recomendacoes() {
                         title="Baixar PDF"
                       >
                         <Download className="w-4 h-4" />
+                      </button>
+                      
+                      <button 
+                        onClick={async () => {
+                          try {
+                            const docRef = doc(db, 'simulations', simData?.id || crypto.randomUUID());
+                            await setDoc(docRef, {
+                              userId: simData?.userId || profile?.uid,
+                              userName: simData?.userName || profile?.name,
+                              userAvatar: simData?.userAvatar || profile?.photoUrl || profile?.avatarUrl || null,
+                              promotoraId: simData?.promotoraId || profile?.promotoraId || profile?.uid,
+                              corretorId: profile?.role === 'corretor' || profile?.role === 'vendedor' ? profile?.uid : null,
+                              createdBy: profile?.createdBy || null,
+                              createdAt: new Date().toISOString(),
+                              simData: simData,
+                              offers: allCalculatedOffers.slice(0, 10).map(offer => ({
+                                ...offer,
+                                rules: [] // Remove rules to save space
+                              })),
+                              recommendedBanks: allCalculatedOffers.slice(0, 3).map(o => o.name),
+                              topOffer: currentOffer.name,
+                              topOfferTabela: currentOffer.tabela,
+                              topOfferContrato: currentOffer.valorContrato,
+                              topOfferTroco: currentOffer.valorTroco,
+                              topOfferTaxa: currentOffer.novaTaxaPortabilidade,
+                              topOfferPrazo: currentOffer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))
+                            }, { merge: true });
+                            alert('Simulação salva com sucesso no Dashboard!');
+                          } catch (err) {
+                            console.error('Erro ao salvar simulação', err);
+                            alert('Erro ao salvar a simulação.');
+                          }
+                        }}
+                        className={`flex items-center justify-center gap-1.5 rounded-lg p-1.5 text-xs font-bold transition-all duration-300 bg-primary/10 text-primary hover:bg-primary/20`}
+                        title="Salvar no Dashboard"
+                      >
+                        <FileText className="w-4 h-4" />
                       </button>
                     </div>
                   </div>

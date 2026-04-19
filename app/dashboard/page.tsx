@@ -14,11 +14,12 @@ import {
   Clock,
   Download,
   FileText,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  Save
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { QuotaAlert } from '@/components/QuotaAlert';
-import { collection, query, onSnapshot, orderBy, where, limit, Timestamp, doc } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, where, limit, Timestamp, doc, or, and, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PromotoraAvatar } from '@/components/PromotoraAvatar';
@@ -139,53 +140,44 @@ export default function Dashboard() {
     }
     const startTimestamp = Timestamp.fromDate(startDateObj);
 
-    let q;
-    if (profile.role === 'admin') {
-      q = query(
-        collection(db, 'simulations'), 
-        where('createdAt', '>=', startTimestamp),
-        orderBy('createdAt', 'desc'),
-        limit(1000)
-      );
-    } else if (profile.role === 'promotora') {
-      q = query(
-        collection(db, 'simulations'), 
-        or(
-          where('promotoraId', '==', profile.uid),
-          where('createdBy', '==', profile.uid)
-        ),
-        where('createdAt', '>=', startTimestamp),
-        orderBy('createdAt', 'desc'),
-        limit(500)
-      );
-    } else {
-      q = query(
-        collection(db, 'simulations'), 
-        where('userId', '==', profile.uid),
-        where('createdAt', '>=', startTimestamp),
-        orderBy('createdAt', 'desc'),
-        limit(200)
-      );
-    }
+    let unsubscribeFn: () => void = () => {};
+    let isFallback = false;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const simsData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toISOString() : data.createdAt) : null,
-          timestamp: data.timestamp || (data.createdAt && data.createdAt.toDate ? data.createdAt.toDate().getTime() : null)
-        };
+    const setupQuery = (useOrderBy: boolean) => {
+      let q;
+      // Removed orderBy temporarily to avoid index issues
+      if (profile.role === 'admin') {
+        q = query(collection(db, 'simulations'), limit(500));
+      } else if (profile.role === 'promotora') {
+        q = query(collection(db, 'simulations'), where('promotoraId', '==', profile.uid), limit(500));
+      } else {
+        q = query(collection(db, 'simulations'), where('userId', '==', profile.uid), limit(500));
+      }
+
+      const listener = onSnapshot(q, (snapshot) => {
+        const simsData = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toISOString() : data.createdAt) : null,
+            timestamp: data.timestamp || (data.createdAt && data.createdAt.toDate ? data.createdAt.toDate().getTime() : 0)
+          };
+        });
+        // Sort descending so the most recent is first
+        simsData.sort((a, b) => b.timestamp - a.timestamp);
+        
+        setSimulations(simsData);
+        setLoading(false);
+      }, (error) => {
+        console.error("Error fetching simulations:", error);
+        setLoading(false);
       });
-      setSimulations(simsData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching simulations:", error);
-      setLoading(false);
-    });
+      return listener;
+    };
 
-    return () => unsubscribe();
+    unsubscribeFn = setupQuery(false);
+    return () => { if (unsubscribeFn) unsubscribeFn(); };
   }, [profile, dateRange, setQuotaExceeded]);
 
   // Filter simulations based on role and filters
@@ -196,7 +188,7 @@ export default function Dashboard() {
 
     // 1. Role-based filtering (already partially done by query, but good for safety)
     if (profile.role === 'corretor' || profile.role === 'vendedor') {
-      filtered = filtered.filter(sim => sim.userId === profile.uid);
+      filtered = filtered.filter(sim => sim.userId === profile.uid || sim.corretorId === profile.uid);
     } else if (profile.role === 'promotora') {
       // Promotora sees her own and her sellers' simulations
       filtered = filtered.filter(sim => sim.promotoraId === profile.uid || sim.createdBy === profile.uid || sim.userId === profile.uid);
@@ -388,6 +380,12 @@ export default function Dashboard() {
     } finally {
       setGeneratingReport(false);
     }
+  };
+
+  const loadSimulation = (sim: any) => {
+    // Save to session storage and redirect to recommendations page to view details
+    sessionStorage.setItem('simulationData', JSON.stringify(sim));
+    router.push('/simulacao/recomendacoes');
   };
 
   const generateSimulationPDF = (sim: any) => {
@@ -829,11 +827,15 @@ export default function Dashboard() {
           
           {/* Mobile List View */}
           <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800">
-            {simulations.slice(0, 10).map((sim) => {
+            {filteredSimulations.slice(0, 10).map((sim) => {
               const conv = (sim.convenio || 'INSS').toUpperCase();
               const badgeColor = stats.CONVENIO_COLORS[conv] || '#94a3b8';
               return (
-                <div key={sim.id} className="p-4 flex flex-col gap-3">
+                <div 
+                  key={sim.id} 
+                  className="p-4 flex flex-col gap-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  onClick={() => loadSimulation(sim)}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-8" />
@@ -866,8 +868,8 @@ export default function Dashboard() {
                   </div>
                   <div className="flex justify-end">
                     <button 
-                      onClick={() => generateSimulationPDF(sim)}
-                      className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 font-bold text-xs"
+                      onClick={(e) => { e.stopPropagation(); generateSimulationPDF(sim); }}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                     >
                       <Download className="w-4 h-4" /> Baixar PDF
                     </button>
@@ -893,12 +895,16 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {simulations.slice(0, 10).map((sim) => {
+                {filteredSimulations.slice(0, 10).map((sim) => {
                   const conv = (sim.convenio || 'INSS').toUpperCase();
                   const badgeColor = stats.CONVENIO_COLORS[conv] || '#94a3b8';
                   
                   return (
-                    <tr key={sim.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr 
+                      key={sim.id} 
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                      onClick={() => loadSimulation(sim)}
+                    >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-8" />
@@ -934,10 +940,18 @@ export default function Dashboard() {
                           {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.topOfferContrato || 0)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                         <button 
-                          onClick={() => generateSimulationPDF(sim)}
+                          onClick={(e) => { e.stopPropagation(); console.log("Salvar proposta", sim); /* Implementar lógica de salvar aqui */ }}
+                          className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-400 hover:text-blue-600 transition-colors"
+                          title="Salvar Proposta"
+                        >
+                          <Save className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); generateSimulationPDF(sim); }}
                           className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-400 hover:text-primary transition-colors"
+                          title="Baixar PDF"
                         >
                           <Download className="w-4 h-4" />
                         </button>

@@ -40,7 +40,7 @@ export default function PromotoraLogin() {
 
     const findPromotora = async () => {
       const CACHE_KEY = `branding_promotora_${slug}`;
-      const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+      const CACHE_EXPIRY = 5 * 1000; // 5 seconds
 
       // Try to load from cache first
       const cached = localStorage.getItem(CACHE_KEY);

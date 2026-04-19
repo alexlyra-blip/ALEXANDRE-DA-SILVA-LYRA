@@ -31,7 +31,8 @@ import {
   Clock,
   Phone,
   Eye,
-  EyeOff
+  EyeOff,
+  Users
 } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { PasswordStrength } from '@/components/PasswordStrength';
@@ -47,6 +48,7 @@ import {
   deleteDoc,
   serverTimestamp,
   setDoc,
+  addDoc,
   limit,
   orderBy,
   or
@@ -122,6 +124,7 @@ function UsuariosAdminContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddingUser, setIsAddingUser] = useState(false);
+  const [promotoraCreatedCount, setPromotoraCreatedCount] = useState<number | null>(null);
   
   // Branding states
   const [loginImageUrl, setLoginImageUrl] = useState('');
@@ -162,6 +165,7 @@ function UsuariosAdminContent() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all');
+  const [filterPromotora, setFilterPromotora] = useState('all');
   const [sortBy, setSortBy] = useState<'name' | 'email' | 'createdAt'>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
@@ -210,6 +214,23 @@ function UsuariosAdminContent() {
 
     return () => unsubscribe();
   }, [profile, usersLimit]);
+
+  useEffect(() => {
+    const fetchExactCount = async () => {
+      if (profile?.role === 'promotora' && profile.maxUsers !== undefined && profile.maxUsers > 0) {
+        try {
+          const { getCountFromServer, query, collection, where } = await import('firebase/firestore');
+          const countSnap = await getCountFromServer(query(collection(db, 'users'), where('createdBy', '==', profile.uid)));
+          setPromotoraCreatedCount(countSnap.data().count);
+        } catch (e) {
+          console.error("Failed to fetch exact created count", e);
+          // Fallback
+          setPromotoraCreatedCount(users.filter(u => u.createdBy === profile.uid).length);
+        }
+      }
+    };
+    fetchExactCount();
+  }, [profile, users]);
 
   const handleLoadMore = () => {
     if (hasMore && !loadingMore) {
@@ -354,9 +375,9 @@ function UsuariosAdminContent() {
       if (imageFile) {
         console.log("handleSaveBranding: [STEP 1] Validating image file...", imageFile.name, imageFile.size, imageFile.type);
         
-        // Validate file size (max 2MB for branding logo)
-        if (imageFile.size > 2 * 1024 * 1024) {
-          throw new Error("A logo deve ter no máximo 2MB.");
+        // Validate file size (max 5MB for branding logo)
+        if (imageFile.size > 5 * 1024 * 1024) {
+          throw new Error("A logo deve ter no máximo 5MB. Reduza o arquivo ou envie uma imagem menor.");
         }
 
         if (!imageFile.type.startsWith('image/')) {
@@ -433,6 +454,11 @@ function UsuariosAdminContent() {
         data: brandingData,
         timestamp: Date.now()
       }));
+      
+      // Also strictly clear the slug cache so it reflects immediately
+      if (cleanSlug) {
+        localStorage.removeItem(`branding_promotora_${cleanSlug}`);
+      }
 
       // Removed automatic reload and global cache update
       console.log("handleSaveBranding: Branding save completed successfully");
@@ -479,6 +505,23 @@ function UsuariosAdminContent() {
     });
   };
 
+  const logAuditAction = async (action: string, targetId: string, details: string) => {
+    if (!profile) return;
+    try {
+      await addDoc(collection(db, 'audit_logs'), {
+        action,
+        actorId: profile.uid,
+        actorName: profile.name || 'Admin',
+        actorRole: profile.role,
+        targetId,
+        details,
+        timestamp: serverTimestamp()
+      });
+    } catch (e) {
+      console.error("Failed to log audit action:", e);
+    }
+  };
+
   const handleEditUser = (user: any) => {
     setEditingUser(user);
     setEditName(user.name || '');
@@ -523,6 +566,8 @@ function UsuariosAdminContent() {
         role: editRole
       });
       
+      await logAuditAction('UPDATE_USER', editingUser.id, `Nome: ${editName}, Email: ${editEmail}, Perfil: ${editRole}`);
+      
       showToast("Usuário atualizado com sucesso!", "success");
       setShowEditModal(false);
       setEditingUser(null);
@@ -561,6 +606,7 @@ function UsuariosAdminContent() {
       }
 
       await deleteDoc(doc(db, 'users', userToDelete.id));
+      await logAuditAction('DELETE_USER', userToDelete.id, `Nome deletado: ${userToDelete.name}, Email: ${userToDelete.email}`);
       alert("Usuário excluído com sucesso!");
       setUserToDelete(null);
       setDeleteConfirmationName('');
@@ -685,6 +731,8 @@ function UsuariosAdminContent() {
       if (user?.role === 'promotora' && newStatus === 'inactive') {
         // setUsers(prev => prev.map(u => u.createdBy === userId ? { ...u, status: 'inactive' } : u));
       }
+      
+      await logAuditAction('UPDATE_STATUS', userId, `Novo status: ${newStatus}`);
 
       showToast("Status atualizado!", "success");
     } catch (error) {
@@ -705,6 +753,7 @@ function UsuariosAdminContent() {
       await updateDoc(doc(db, 'users', userId), {
         role: newRole
       });
+      await logAuditAction('UPDATE_ROLE', userId, `Novo perfil: ${newRole}`);
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
       showToast("Nível de acesso atualizado!", "success");
     } catch (error) {
@@ -745,6 +794,7 @@ function UsuariosAdminContent() {
       await updateDoc(doc(db, 'users', userId), {
         permissions: permissions
       });
+      await logAuditAction('UPDATE_PERMISSIONS', userId, `Permissões: ${permissions.join(', ')}`);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
       console.error("Error updating permissions:", error);
@@ -911,10 +961,22 @@ function UsuariosAdminContent() {
     }
 
     if (profile?.role === 'promotora' && profile.maxUsers !== undefined && profile.maxUsers > 0) {
-      const createdUsersCount = users.filter(u => u.createdBy === profile.uid).length;
-      if (createdUsersCount >= profile.maxUsers) {
-        setCreateError(`Limite de usuários atingido. Você pode cadastrar no máximo ${profile.maxUsers} usuários.`);
-        return;
+      try {
+        const { getCountFromServer, query, collection, where } = await import('firebase/firestore');
+        const countSnap = await getCountFromServer(query(collection(db, 'users'), where('createdBy', '==', profile.uid)));
+        const createdUsersCount = countSnap.data().count;
+        if (createdUsersCount >= profile.maxUsers) {
+          setCreateError(`Limite de usuários atingido. Você pode cadastrar no máximo ${profile.maxUsers} usuários.`);
+          return;
+        }
+      } catch (err) {
+        console.error("Erro ao validar limite de usuários:", err);
+        // Fallback to local filtering if count fails
+        const createdUsersCount = users.filter(u => u.createdBy === profile.uid).length;
+        if (createdUsersCount >= profile.maxUsers) {
+          setCreateError(`Limite de usuários atingido. Você pode cadastrar no máximo ${profile.maxUsers} usuários.`);
+          return;
+        }
       }
     }
 
@@ -1022,6 +1084,8 @@ function UsuariosAdminContent() {
       // Sign out from the secondary app and delete it
       await signOut(secondaryAuth);
       
+      await logAuditAction('CREATE_USER', newUser.uid, `Nome: ${newName}, Email: ${newEmail}, Perfil: ${newRole}`);
+      
       // Send welcome email
       try {
         await fetch('/api/send-welcome-email', {
@@ -1098,6 +1162,13 @@ function UsuariosAdminContent() {
         return false;
       }
 
+      // Promotora specific filter (Admin only)
+      if (profile.role === 'admin' && filterPromotora !== 'all') {
+        if (u.promotoraId !== filterPromotora && u.createdBy !== filterPromotora) {
+          return false;
+        }
+      }
+
       // Role visibility filter
       if (profile.role === 'admin') {
         return true; // Admin sees all
@@ -1129,7 +1200,7 @@ function UsuariosAdminContent() {
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [users, profile, searchTerm, startDate, endDate, statusFilter, sortBy, sortOrder]);
+  }, [users, profile, searchTerm, startDate, endDate, statusFilter, filterPromotora, sortBy, sortOrder]);
 
   if (loading) {
     return (
@@ -1188,7 +1259,7 @@ function UsuariosAdminContent() {
             </div>
           )}
           <button 
-            onClick={() => fetchUsers()}
+            onClick={() => window.location.reload()}
             className="size-10 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-all"
             title="Atualizar lista"
           >
@@ -1205,6 +1276,33 @@ function UsuariosAdminContent() {
 
       <main className="flex-1 p-4 overflow-y-auto">
         <QuotaAlert />
+        
+        {/* Promotora User Limit Banner */}
+        {profile?.role === 'promotora' && profile.maxUsers !== undefined && profile.maxUsers > 0 && promotoraCreatedCount !== null && (
+          <div className="mb-6 bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="size-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                <Users className="w-5 h-5" />
+              </div>
+              <div className="flex flex-col">
+                <p className="font-bold text-sm">Limite de Usuários</p>
+                <p className="text-xs opacity-90 font-medium">
+                  Você cadastrou <span className="font-bold">{promotoraCreatedCount}</span> de <span className="font-bold">{profile.maxUsers}</span> permitidos
+                </p>
+              </div>
+            </div>
+            <div className={`font-bold text-xs px-3 py-1.5 rounded-lg border ${
+              (profile.maxUsers - promotoraCreatedCount) <= 0 
+                ? 'bg-red-500/10 text-red-500 border-red-500/20' 
+                : (profile.maxUsers - promotoraCreatedCount) <= Math.ceil(profile.maxUsers * 0.2)
+                  ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20'
+                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+            }`}>
+              {Math.max(0, profile.maxUsers - promotoraCreatedCount)} restantes
+            </div>
+          </div>
+        )}
+
         {/* Branding Settings Toggle */}
         {(profile?.role === 'admin' || profile?.role === 'promotora') && (
           <>
@@ -1565,11 +1663,28 @@ function UsuariosAdminContent() {
                     </div>
                   </div>
 
+                  {profile?.role === 'admin' && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Filtrar por Promotora</label>
+                      <select 
+                        value={filterPromotora}
+                        onChange={(e) => setFilterPromotora(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-surface-dark border border-slate-200 dark:border-white/10 rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        <option value="all">Todas as Promotoras</option>
+                        {users.filter(u => u.role === 'promotora').map(p => (
+                          <option key={p.id} value={p.id}>{p.name} ({p.email})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <button 
                     onClick={() => {
                       setStartDate('');
                       setEndDate('');
                       setStatusFilter('all');
+                      setFilterPromotora('all');
                       setSortBy('createdAt');
                       setSortOrder('desc');
                     }}

@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { db, auth } from '@/firebase';
 import { safeStringify } from '@/lib/utils';
-import { doc, getDoc, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, setDoc, orderBy, limit, or, serverTimestamp, startAfter } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, setDoc, orderBy, limit, or, serverTimestamp, startAfter, onSnapshot } from 'firebase/firestore';
 
 export enum OperationType {
   CREATE = 'create',
@@ -154,16 +154,21 @@ export const getBrandingBySlug = async (slug: string): Promise<BrandingData | nu
 
   // Fallback to Firestore
   try {
+    console.log("DataService: Querying Firestore for slug:", slug);
     const q = query(collection(db, 'settings'), where('slug', '==', slug));
     const querySnapshot = await getDocs(q);
+    console.log("DataService: Query result size:", querySnapshot.size);
     if (!querySnapshot.empty) {
       const data = querySnapshot.docs[0].data();
+      console.log("DataService: Found branding data for slug:", slug, data);
       return {
         loginImageUrl: data.loginImageUrl || null,
         primaryColor: data.primaryColor || '#1152d4',
         promoterName: data.promoterName || 'Portal do Agente',
         slug: data.slug
       };
+    } else {
+      console.log("DataService: No branding found for slug:", slug);
     }
   } catch (e) {
     console.error("DataService: Firestore branding fetch by slug failed", e);
@@ -247,28 +252,19 @@ export const getSimulations = async (profile: any, startTimestamp: any, limitCou
     if (profile.role === 'admin') {
       q = query(
         collection(db, 'simulations'), 
-        where('createdAt', '>=', startTimestamp),
-        orderBy('createdAt', 'desc'),
         limit(limitCount)
       );
     } else if (profile.role === 'promotora') {
       // Use promotoraId or createdBy for backward compatibility
       q = query(
         collection(db, 'simulations'), 
-        or(
-          where('promotoraId', '==', profile.uid),
-          where('createdBy', '==', profile.uid)
-        ),
-        where('createdAt', '>=', startTimestamp),
-        orderBy('createdAt', 'desc'),
+        where('promotoraId', '==', profile.uid),
         limit(limitCount)
       );
     } else {
       q = query(
         collection(db, 'simulations'), 
         where('userId', '==', profile.uid),
-        where('createdAt', '>=', startTimestamp),
-        orderBy('createdAt', 'desc'),
         limit(limitCount)
       );
     }
@@ -460,33 +456,25 @@ export const deleteGeneralRule = async (id: string) => {
 };
 
 // Proposal methods
-export const getProposals = async (profile: any, limitCount: number = 100): Promise<any[]> => {
+export const getProposals = async (profile: any, limitCount: number = 100, useOrderBy: boolean = true): Promise<any[]> => {
   try {
     let q;
     if (profile.role === 'admin') {
-      q = query(
-        collection(db, 'proposals'), 
-        orderBy('createdAt', 'desc'),
-        limit(limitCount)
-      );
+      q = useOrderBy
+        ? query(collection(db, 'proposals'), orderBy('createdAt', 'desc'), limit(limitCount))
+        : query(collection(db, 'proposals'), limit(limitCount));
     } else if (profile.role === 'promotora') {
-      q = query(
-        collection(db, 'proposals'), 
-        where('promotoraId', '==', profile.uid),
-        orderBy('createdAt', 'desc'),
-        limit(limitCount)
-      );
+      q = useOrderBy
+        ? query(collection(db, 'proposals'), where('promotoraId', '==', profile.uid), orderBy('createdAt', 'desc'), limit(limitCount))
+        : query(collection(db, 'proposals'), where('promotoraId', '==', profile.uid), limit(limitCount));
     } else {
-      q = query(
-        collection(db, 'proposals'), 
-        where('userId', '==', profile.uid),
-        orderBy('createdAt', 'desc'),
-        limit(limitCount)
-      );
+      q = useOrderBy
+        ? query(collection(db, 'proposals'), where('userId', '==', profile.uid), orderBy('createdAt', 'desc'), limit(limitCount))
+        : query(collection(db, 'proposals'), where('userId', '==', profile.uid), limit(limitCount));
     }
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => {
+    const results = snapshot.docs.map(doc => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -495,9 +483,20 @@ export const getProposals = async (profile: any, limitCount: number = 100): Prom
         updatedAt: data.updatedAt ? (data.updatedAt.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt) : null,
         cipSentDate: data.cipSentDate ? (data.cipSentDate.toDate ? data.cipSentDate.toDate().toISOString() : data.cipSentDate) : null,
         expectedReturnDate: data.expectedReturnDate ? (data.expectedReturnDate.toDate ? data.expectedReturnDate.toDate().toISOString() : data.expectedReturnDate) : null,
+        // Make sure we have a number to sort by
+        _time: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().getTime() : 0) : 0
       };
     });
-  } catch (e) {
+
+    results.sort((a, b) => b._time - a._time);
+    
+    // remove _time to keep data clean
+    return results.map(({ _time, ...rest }) => rest);
+  } catch (e: any) {
+    if (useOrderBy && e.message && e.message.includes('index')) {
+      console.log('Falling back to proposals query without orderBy due to missing index');
+      return getProposals(profile, limitCount, false);
+    }
     handleFirestoreError(e, OperationType.LIST, 'proposals');
   }
   return [];

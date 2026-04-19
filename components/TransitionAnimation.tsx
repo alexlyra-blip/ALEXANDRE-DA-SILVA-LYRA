@@ -15,7 +15,7 @@ const LOADING_STEPS = [
   "Finalizando recomendações personalizadas..."
 ];
 
-export default function TransitionAnimation({ onComplete }: { onComplete: () => void }) {
+export default function TransitionAnimation({ onComplete, availableBanks }: { onComplete: () => void, availableBanks?: any[] }) {
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
   const [banks, setBanks] = useState<{name: string, logo: string}[]>([]);
@@ -58,12 +58,24 @@ export default function TransitionAnimation({ onComplete }: { onComplete: () => 
   useEffect(() => {
     const fetchBanks = async () => {
       try {
-        const rules = await getBankRules();
-        const uniqueBanks = Array.from(new Map(
-          rules
-            .filter(r => r.logoUrl)
-            .map(r => [r.name, { name: r.name, logo: r.logoUrl }])
-        ).values());
+        let uniqueBanks: {name: string, logo: string}[] = [];
+        
+        if (availableBanks && availableBanks.length > 0) {
+          // Use provided context banks - they are already populated and fast
+          uniqueBanks = Array.from(new Map(
+            availableBanks
+              .filter(r => r.logoUrl)
+              .map(r => [r.name, { name: r.name, logo: r.logoUrl }])
+          ).values());
+        } else {
+           // Fallback to fetch explicitly if not provided
+          const rules = await getBankRules();
+          uniqueBanks = Array.from(new Map(
+            rules
+              .filter(r => r.logoUrl)
+              .map(r => [r.name, { name: r.name, logo: r.logoUrl }])
+          ).values());
+        }
         
         if (uniqueBanks.length > 0) {
           setBanks(uniqueBanks.sort(() => 0.5 - Math.random()).slice(0, 8));
@@ -82,7 +94,7 @@ export default function TransitionAnimation({ onComplete }: { onComplete: () => 
       }
     };
     fetchBanks();
-  }, []);
+  }, [availableBanks]);
 
   // Progress and step logic
   useEffect(() => {

@@ -7,6 +7,7 @@ import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useEffect } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
 import { useRules } from '@/contexts/RuleContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { GoogleGenAI, Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 import { safeStringify } from '@/lib/utils';
@@ -14,6 +15,7 @@ import { safeStringify } from '@/lib/utils';
 const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' });
 
 export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boolean }) {
+  const { profile } = useAuth();
   const router = useRouter();
   const [idade, setIdade] = useState('');
   const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS'>('INSS');
@@ -253,6 +255,12 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
       return;
     }
 
+    const valorParcelaParsed = parseCurrency(valorParcela);
+    if (profile?.limiteCredito && valorParcelaParsed > profile.limiteCredito) {
+      alert(`Valor da parcela (${formatCurrency(valorParcela)}) excede o limite de crédito permitido (${formatCurrency(profile.limiteCredito.toString())}).`);
+      return;
+    }
+
     setIsSimulating(true);
   };
 
@@ -283,7 +291,7 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
   return (
     <div className={`flex w-full ${isEmbedded ? 'h-full' : 'min-h-screen'} bg-background text-foreground`}>
       <div className={`flex flex-col w-full ${isEmbedded ? '' : 'md:w-[450px]'} shrink-0 border-r border-slate-200 dark:border-slate-800 bg-background text-foreground font-display relative`}>
-        {isSimulating && <TransitionAnimation onComplete={onAnimationComplete} />}
+        {isSimulating && <TransitionAnimation onComplete={onAnimationComplete} availableBanks={banks} />}
         {/* Top Navigation Bar */}
       {!isEmbedded && (
         <header className="sticky top-0 z-50 bg-white dark:bg-black/80 backdrop-blur-md border-b border-primary/10">

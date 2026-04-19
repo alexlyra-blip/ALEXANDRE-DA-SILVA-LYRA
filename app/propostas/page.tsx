@@ -14,7 +14,8 @@ import {
   Banknote,
   Trash2,
   Landmark,
-  Download
+  Download,
+  CheckCircle
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Sidebar from '@/components/Sidebar';
@@ -176,8 +177,24 @@ export default function PropostasPage() {
       return matchesSearch && matchesStatus && matchesBank && matchesCorretor && matchesLoanType && matchesDate;
     });
 
-    // Sort by remaining days (ascending)
+    // Sort by rules prioritizing 'AG. AVERBAÇÃO PORT', then active by remaining days, then finished statuses
     return filtered.sort((a, b) => {
+      const getSortTier = (p: any) => {
+        if (p.portabilityStatus === 'AG. AVERBAÇÃO PORT') return 1;
+        const statusUpper = p.status?.toUpperCase() || '';
+        if (statusUpper === 'PAGO' || statusUpper === 'PAGA' || p.portabilityStatus === 'PORTABILIDADE FINALIZADA' || ['CANCELADO', 'CANCELADA', 'RECUSADO', 'DEVOLVIDO'].includes(statusUpper)) {
+          return 3;
+        }
+        return 2;
+      };
+
+      const tierA = getSortTier(a);
+      const tierB = getSortTier(b);
+
+      if (tierA !== tierB) {
+        return tierA - tierB;
+      }
+
       const daysA = calculateRemainingDays(a.expectedReturnDate, a.cipSentDate) ?? 999;
       const daysB = calculateRemainingDays(b.expectedReturnDate, b.cipSentDate) ?? 999;
       return daysA - daysB;
@@ -265,7 +282,7 @@ export default function PropostasPage() {
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-10">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+              <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
                 <ClipboardList className="w-6 h-6 text-primary" />
                 Propostas
               </h1>
@@ -287,23 +304,23 @@ export default function PropostasPage() {
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total</p>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.total}</p>
+              <p className="text-2xl font-black text-slate-900">{stats.total}</p>
             </div>
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-1">Pendentes</p>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.pending}</p>
+              <p className="text-2xl font-black text-slate-900">{stats.pending}</p>
             </div>
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1">Andamento</p>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.inProgress}</p>
+              <p className="text-2xl font-black text-slate-900">{stats.inProgress}</p>
             </div>
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1">Pago</p>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.paid}</p>
+              <p className="text-2xl font-black text-slate-900">{stats.paid}</p>
             </div>
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-1">Reprovados</p>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.rejected}</p>
+              <p className="text-2xl font-black text-slate-900">{stats.rejected}</p>
             </div>
           </div>
 
@@ -438,7 +455,7 @@ export default function PropostasPage() {
                 <TrendingUp className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Saldos do Dia</h2>
+                <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">Saldos do Dia</h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Propostas com retorno previsto para hoje</p>
               </div>
             </div>
@@ -489,7 +506,7 @@ export default function PropostasPage() {
                             </span>
                           )}
                         </div>
-                        <h3 className="font-bold text-slate-900 dark:text-white truncate">{proposal.clientName}</h3>
+                        <h3 className="font-bold text-slate-900 truncate">{proposal.clientName}</h3>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <AlertCircle className="w-3.5 h-3.5" />
@@ -501,18 +518,18 @@ export default function PropostasPage() {
                           </div>
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <Banknote className="w-3.5 h-3.5" />
-                            <span>Contrato: <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(proposal.value)}</span></span>
+                            <span>Contrato: <span className="font-bold text-slate-900">{formatCurrency(proposal.value)}</span></span>
                           </div>
                           {parseFloat(proposal.parcela) > 0 && (
                             <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                               <span className="font-medium">Parcela:</span>
-                              <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(parseFloat(proposal.parcela))}</span>
+                              <span className="font-bold text-slate-900">{formatCurrency(parseFloat(proposal.parcela))}</span>
                             </div>
                           )}
                           {parseFloat(proposal.saldoDevedor) > 0 && (
                             <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                               <span className="font-medium">Saldo Dev.:</span>
-                              <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(parseFloat(proposal.saldoDevedor))}</span>
+                              <span className="font-bold text-slate-900">{formatCurrency(parseFloat(proposal.saldoDevedor))}</span>
                             </div>
                           )}
                           {parseFloat(proposal.troco) > 0 && (
@@ -539,14 +556,21 @@ export default function PropostasPage() {
                         </div>
                         
                         {proposal.status === 'ANDAMENTO' && proposal.loanType === 'PORTABILIDADE' && (proposal.expectedReturnDate || proposal.cipSentDate) && (
-                          <div className="flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg">
-                            <Clock className="w-3 h-3" />
-                            <span>
-                              {calculateRemainingDays(proposal.expectedReturnDate, proposal.cipSentDate) === 0 
-                                ? 'Retorno Hoje' 
-                                : `Faltam ${calculateRemainingDays(proposal.expectedReturnDate, proposal.cipSentDate)} dias`}
-                            </span>
-                          </div>
+                          proposal.portabilityStatus ? (
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg">
+                              <CheckCircle className="w-3 h-3" />
+                              <span>{proposal.portabilityStatus}</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg">
+                              <Clock className="w-3 h-3" />
+                              <span>
+                                {calculateRemainingDays(proposal.expectedReturnDate, proposal.cipSentDate) === 0 
+                                  ? 'Retorno Hoje' 
+                                  : `Faltam ${calculateRemainingDays(proposal.expectedReturnDate, proposal.cipSentDate)} dias`}
+                              </span>
+                            </div>
+                          )
                         )}
 
                         {proposal.status === 'PAGO' && proposal.paymentDate && (

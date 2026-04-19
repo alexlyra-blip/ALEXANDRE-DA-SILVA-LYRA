@@ -3,31 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Fields: uid, email, name, role, status, createdAt, createdBy, promotoraId, allowedBanks, maxUsers, permissions
-    //
-    // Collection: simulations
-    // Fields: userId, userName, userAvatar, userRole, createdBy, promotoraId, recommendedBanks, topOffer, ...
-    //
-    // Collection: bankRules
-    // Fields: id, name, minAge, maxAge, tabelas, subConvenio, ...
-    //
-    // Collection: generalRules
-    // Fields: id, banco, parcelasAceitas
-    //
-    // Collection: settings
-    // Fields: loginImageUrl, primaryColor, promoterName, slug
-    //
-    // ===============================================================
-
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-    
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -35,163 +10,63 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && 
         (
-          (request.auth.token.email == "alexlyra@gmail.com") || 
-          (request.auth.token.email == "alexandrelyra@msn.com") || 
-          (
-            exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-          )
+          request.auth.token.email == 'alexlyra@gmail.com' ||
+          request.auth.token.email == 'alexandrelyra@msn.com' ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
         );
     }
 
-    function isPromotora() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'promotora';
-    }
-
-    function isNotInactive() {
-      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return isAdmin() || !exists(userPath) || get(userPath).data.status != 'inactive';
-    }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isDocOwner() {
-      return isAuthenticated() && request.auth.uid == resource.data.userId;
-    }
-
-    function isValidUser(data) {
-      return (!('uid' in data) || data.uid is string) && 
-             (!('email' in data) || data.email is string) && 
-             (!('name' in data) || data.name is string) &&
-             (!('photoUrl' in data) || data.photoUrl is string) &&
-             (!('avatarUrl' in data) || data.avatarUrl is string) &&
-             (!('role' in data) || data.role is string) &&
-             (!('status' in data) || data.status is string);
-    }
-
-    function isValidSimulation(data) {
-      return 'userId' in data && data.userId is string;
-    }
-
-    // ===============================================================
-    // Rules
-    // ===============================================================
-
-    // Users Collection
     match /users/{userId} {
-      allow read: if isAuthenticated() && (
-        isAdmin() || 
-        (isNotInactive() && (
-          isOwner(userId) || 
-          (isPromotora() && 'createdBy' in resource.data && resource.data.createdBy == request.auth.uid)
-        ))
-      );
-      
-      allow create: if isAuthenticated() && 
-        isValidUser(request.resource.data) && 
-        request.resource.data.uid == userId &&
-        (
-          isAdmin() || 
-          (
-            isPromotora() && 
-            'createdBy' in request.resource.data && 
-            request.resource.data.createdBy == request.auth.uid && 
-            (!('role' in request.resource.data) || (request.resource.data.role != 'admin' && request.resource.data.role != 'promotora'))
-          ) ||
-          (isOwner(userId) && (!('role' in request.resource.data) || request.resource.data.role == 'corretor'))
-        );
-
-      allow update: if isAuthenticated() && 
-        (
-          isAdmin() || 
-          (
-            isValidUser(request.resource.data) &&
-            (request.resource.data.uid == resource.data.uid) &&
-            (request.resource.data.createdAt == resource.data.createdAt) &&
-            (
-              isOwner(userId) || 
-              (isPromotora() && resource.data.createdBy == request.auth.uid)
-            ) &&
-            (request.resource.data.role == resource.data.role || isAdmin())
-          )
-        );
-
-      allow delete: if isAdmin();
-    }
-
-    // Simulations Collection
-    match /simulations/{simulationId} {
-      allow read: if isAuthenticated() && 
-        isNotInactive() &&
-        (
-          ('userId' in resource.data && resource.data.userId == request.auth.uid) || 
-          isAdmin() || 
-          (isPromotora() && 'createdBy' in resource.data && resource.data.createdBy == request.auth.uid)
-        );
-      
-      allow create: if isAuthenticated() && 
-        isNotInactive() &&
-        (
-          request.resource.data.userId == request.auth.uid ||
-          isAdmin() ||
-          (isPromotora() && request.resource.data.promotoraId == request.auth.uid)
-        );
-
-      allow update: if isAuthenticated() && 
-        isNotInactive() &&
-        isValidSimulation(request.resource.data) &&
-        (!('userId' in resource.data) || request.resource.data.userId == resource.data.userId) &&
-        (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt) &&
-        (('userId' in resource.data && resource.data.userId == request.auth.uid) || isAdmin());
-
-      allow delete: if isAdmin();
-    }
-
-    // Bank Rules
-    match /bankRules/{ruleId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
-    // General Rules
-    match /generalRules/{ruleId} {
+    function isValidId(id) { 
+        return id is string && id.size() <= 128; 
+    }
+
+    match /simulations/{id} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // Settings
-    match /settings/{settingId} {
-      allow read: if true; // Branding settings are public for login page
-      allow write: if isAdmin();
-    }
-
-    // Proposals Collection
-    match /proposals/{proposalId} {
-      allow read: if isAuthenticated() && 
-        isNotInactive() &&
-        (
-          ('userId' in resource.data && resource.data.userId == request.auth.uid) || 
-          isAdmin() || 
-          (isPromotora() && 'promotoraId' in resource.data && resource.data.promotoraId == request.auth.uid)
-        );
-      
-      allow create: if isAuthenticated() && 
-        isNotInactive() &&
-        'userId' in request.resource.data && request.resource.data.userId == request.auth.uid;
-
-      allow update: if isAuthenticated() && 
-        isNotInactive() &&
-        (
-          ('userId' in resource.data && resource.data.userId == request.auth.uid) || 
-          isAdmin() || 
-          (isPromotora() && 'promotoraId' in resource.data && resource.data.promotoraId == request.auth.uid)
-        );
-
+      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow delete: if isAdmin();
+    }
+
+    match /proposals/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /bankRules/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /banks/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /generalRules/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /general_rules/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

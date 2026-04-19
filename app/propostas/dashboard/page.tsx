@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { getProposals } from '@/lib/data-service';
 import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/firebase';
+import { collection, query, where, orderBy, limit, or, onSnapshot } from 'firebase/firestore';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { ArrowLeft, TrendingUp, DollarSign, Users, Clock, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
@@ -38,22 +39,39 @@ export default function DashboardPropostasPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile) {
-      fetchProposals();
+    if (!profile) return;
+    
+    let q;
+    if (profile.role === 'admin') {
+      q = query(
+        collection(db, 'proposals'), 
+        limit(100)
+      );
+    } else if (profile.role === 'promotora') {
+      q = query(
+        collection(db, 'proposals'), 
+        where('promotoraId', '==', profile.uid),
+        limit(100)
+      );
+    } else {
+      q = query(
+        collection(db, 'proposals'), 
+        where('userId', '==', profile.uid),
+        limit(100)
+      );
     }
-  }, [profile]);
 
-  const fetchProposals = async () => {
-    setLoading(true);
-    try {
-      const data = await getProposals(profile);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setProposals(data);
-    } catch (error) {
-      console.error('Error fetching proposals:', error);
-    } finally {
       setLoading(false);
-    }
-  };
+    }, (err) => {
+      console.error("Error fetching proposals:", err);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [profile]);
 
   const [dateRange, setDateRange] = useState<'7d' | '15d' | '30d'>('7d');
 
@@ -159,73 +177,71 @@ export default function DashboardPropostasPage() {
         
         <main className="p-6 space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex items-center gap-4 mb-4">
                 <div className="p-3 bg-primary/10 text-primary rounded-xl"><TrendingUp className="w-6 h-6" /></div>
                 <h3 className="font-bold text-slate-500">Total</h3>
               </div>
-              <p className="text-3xl font-black">{stats.total}</p>
+              <p className="text-3xl font-black text-slate-900">{stats.total}</p>
             </div>
             
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex items-center gap-4 mb-4">
                 <div className="p-3 bg-blue-500/10 text-blue-600 rounded-xl"><DollarSign className="w-6 h-6" /></div>
                 <h3 className="font-bold text-slate-500">Contratado</h3>
               </div>
-              <p className="text-3xl font-black">{formatCurrency(stats.totalValue)}</p>
+              <p className="text-3xl font-black text-slate-900">{formatCurrency(stats.totalValue)}</p>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex items-center gap-4 mb-4">
                 <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-xl"><DollarSign className="w-6 h-6" /></div>
                 <h3 className="font-bold text-slate-500">Pago</h3>
               </div>
-              <p className="text-3xl font-black">{formatCurrency(stats.totalPago)}</p>
+              <p className="text-3xl font-black text-slate-900">{formatCurrency(stats.totalPago)}</p>
             </div>
             
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex items-center gap-4 mb-4">
                 <div className="p-3 bg-rose-500/10 text-rose-600 rounded-xl"><DollarSign className="w-6 h-6" /></div>
                 <h3 className="font-bold text-slate-500">Reprovado</h3>
               </div>
-              <p className="text-3xl font-black">{formatCurrency(stats.totalReprovado)}</p>
+              <p className="text-3xl font-black text-slate-900">{formatCurrency(stats.totalReprovado)}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="font-black text-lg flex items-center gap-2">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <h3 className="font-black text-lg text-slate-900 flex items-center gap-2">
                     <Clock className="w-5 h-5 text-indigo-500" />
                     Propostas Adicionadas por Dia
                   </h3>
                   <select 
                     value={dateRange} 
                     onChange={(e) => setDateRange(e.target.value as '7d' | '15d' | '30d')}
-                    className="bg-slate-100 dark:bg-slate-800 border-none rounded-lg text-xs font-bold px-3 py-1.5 outline-none"
+                    className="bg-slate-100 border-none rounded-lg text-xs font-bold px-3 py-1.5 outline-none text-slate-900"
                   >
                     <option value="7d">Últimos 7 dias</option>
                     <option value="15d">Últimos 15 dias</option>
                     <option value="30d">Últimos 30 dias</option>
                   </select>
+                  <div className="h-80 w-full mt-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={stats.lineData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-                <div className="h-80 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={stats.lineData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                  <h3 className="font-black text-lg mb-6 flex items-center gap-2">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <h3 className="font-black text-lg text-slate-900 mb-6 flex items-center gap-2">
                     <BarChart3 className="w-5 h-5 text-primary" />
                     Distribuição por Status
                   </h3>
@@ -233,9 +249,9 @@ export default function DashboardPropostasPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={stats.statusData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                        <Tooltip />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'currentColor' }} className="text-slate-500 dark:text-slate-400" />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'currentColor' }} className="text-slate-500 dark:text-slate-400" />
+                        <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'transparent' }} />
                         <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                           {stats.statusData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -246,8 +262,8 @@ export default function DashboardPropostasPage() {
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                  <h3 className="font-black text-lg mb-6 flex items-center gap-2">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <h3 className="font-black text-lg text-slate-900 mb-6 flex items-center gap-2">
                     <PieChartIcon className="w-5 h-5 text-pink-500" />
                     Distribuição por Banco
                   </h3>
@@ -267,7 +283,7 @@ export default function DashboardPropostasPage() {
                             <Cell key={`cell-${index}`} fill={`hsl(${(index * 45) % 360}, 70%, 60%)`} />
                           ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'transparent' }} />
                         <Legend iconType="circle" />
                       </PieChart>
                     </ResponsiveContainer>
@@ -277,8 +293,8 @@ export default function DashboardPropostasPage() {
             </div>
 
             <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <h3 className="font-black text-lg mb-6 flex items-center gap-2">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <h3 className="font-black text-lg text-slate-900 mb-6 flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-emerald-500" />
                   Aproveitamento
                 </h3>
@@ -306,15 +322,15 @@ export default function DashboardPropostasPage() {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">
+                    <p className="text-3xl font-black text-slate-900 tracking-tighter">
                       {stats.totalValue > 0 ? Math.round((stats.totalPago / stats.totalValue) * 100) : 0}%
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <h3 className="font-black text-lg mb-6 flex items-center gap-2">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <h3 className="font-black text-lg text-slate-900 mb-6 flex items-center gap-2">
                   <Users className="w-5 h-5 text-primary" />
                   Distribuição por Corretor/Vendedor
                 </h3>
@@ -322,9 +338,9 @@ export default function DashboardPropostasPage() {
                   {stats.userCounts.map((user, idx) => (
                     <div key={idx} className="flex items-center justify-between group">
                       <div className="flex items-center gap-3">
-                        <PromotoraAvatar logoUrl={user.avatar} name={user.name} className="size-10 border-2 border-white dark:border-slate-800 shadow-sm" />
+                        <PromotoraAvatar logoUrl={user.avatar} name={user.name} className="size-10 border-2 border-white shadow-sm" />
                         <div>
-                          <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{user.name}</p>
+                          <p className="text-sm font-bold text-slate-900 group-hover:text-primary transition-colors">{user.name}</p>
                           <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">
                             {user.value} {user.value === 1 ? 'PROPOSTA' : 'PROPOSTAS'}
                           </p>

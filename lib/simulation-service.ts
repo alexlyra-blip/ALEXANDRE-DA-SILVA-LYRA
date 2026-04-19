@@ -27,6 +27,7 @@ export interface Offer {
   novaTaxaPortabilidade: number;
   taxaPonderada: number;
   taxaBase: number;
+  originalRateCalculated: number; // Added
   priority: number;
   rules: string[][];
   convenio: string;
@@ -215,8 +216,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
         const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || 1.85);
         const bankAdjustment = bank.ajusteTaxa || 0;
         
-        // Se a tabela possuir uma taxa diferencial estipulada via UI (Nova Taxa), usamos ela. 
-        // Caso contrário, calculamos dinamicamente (Taxa Original + Ajuste do Banco).
+        // New Rate calculation: Original Rate + Bank Adjustment
         const novaTaxaPortabilidadeAvaliada = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0)
             ? tabela.taxaDiferencial
             : (originalRate + bankAdjustment);
@@ -224,31 +224,41 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
         const taxaParaCalculo = novaTaxaPortabilidadeAvaliada;
 
         // Regra Nova: Taxa Mínima Port (portabilityRate)
-        // Usada EXCLUSIVAMENTE para verificar se o banco/tabela fica elegível para simulação.
-        // Se a Nova Taxa Port (taxaParaCalculo) for abaixo da Taxa Mínima Port (portabilityRate), indisponibiliza a tabela.
         if (bank.portabilityRate && bank.portabilityRate > 0 && taxaParaCalculo < bank.portabilityRate) {
           console.log(`[DEBUG] Filtrando banco ${bank.name} - Tabela ${tabela.nome}: Nova Taxa (${taxaParaCalculo}) < Taxa Mínima Port (${bank.portabilityRate})`);
           return;
         }
 
-        // Regra solicitada:
-        // 1. taxaPonderada = (Taxa Juros Mensal do Contrato + Nova Taxa Portabilidade) / 2
-        // 2. A taxa ponderada pode sofrer alteração conforme um diferencial (ajusteTaxaPonderada)
-        // 3. taxaPonderadaFinal = taxaPonderada + ajusteTaxaPonderada
+        // Regra de Cálculo Solicitada:
+        // 1. Taxa Ponderada = ((Taxa Original [originalRate] + Nova Taxa Portabilidade [taxaParaCalculo]) / 2) com 2 casas decimais
+        // 2. Resultado = Taxa Ponderada + Ajuste Tabela
         
-        const taxaPonderadaBase = (originalRate + taxaParaCalculo) / 2;
-        const taxaPonderadaFinal = taxaPonderadaBase + (parseFloat(tabela.ajusteTaxaPonderada) || 0);
+        // Garante precisão absoluta convertendo para string formatada e de volta para número
+        const orig = Number(originalRate.toFixed(2));
+        const port = Number(taxaParaCalculo.toFixed(2));
+        
+        // Aplica média e fixa em 2 casas decimais rigorosamente
+        const taxaPonderadaBase = Number(((orig + port) / 2).toFixed(2));
+        
+        // Soma o ajuste da tabela 
+        const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));
+        
+        // Resultado final estritamente com 2 casas
+        const taxaPonderadaFinal = Number((taxaPonderadaBase + ajusteTabela).toFixed(2));
 
-        console.log(`[DEBUG] Banco ${bank.name} - Tabela ${tabela.nome}: originalRate (${originalRate}), taxaParaCalculo (${taxaParaCalculo}), taxaPonderadaBase (${taxaPonderadaBase.toFixed(4)}), ajuste (${parseFloat(tabela.ajusteTaxaPonderada) || 0}), taxaPonderadaFinal (${taxaPonderadaFinal.toFixed(4)})`);
+        console.log(`[DEBUG] Banco ${bank.name} - Tabela: ${tabela.nome}`);
+        console.log(`[DEBUG]   ORIGINAL (${orig}) + PORT (${port}) = ${orig + port} / 2 = ${taxaPonderadaBase}`);
+        console.log(`[DEBUG]   BASE (${taxaPonderadaBase}) + AJUSTE (${ajusteTabela}) = FINAL (${taxaPonderadaFinal})`);
 
-        // Regra: Para uma tabela ser ofertada, a taxa base da tabela (taxaTabelaValida) tem que estar sempre ABAIXO da taxa ponderada (taxaPonderadaFinal)
-        // Logo, se taxa base >= taxa ponderada, a tabela fica indisponível.
+        // Regra de Elegibilidade:
+        // Para uma tabela ser ofertada, a Taxa Base da Tabela (taxaTabelaValida) tem que ser ESTITAMENTE MENOR que a Taxa Ponderada Final
+        // Se Taxa Base >= Taxa Ponderada Final, a tabela fica indisponível.
         if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida >= taxaPonderadaFinal) {
-            console.log(`[DEBUG] Filtrando banco ${bank.name} - Tabela ${tabela.nome}: taxaTabelaValida (${taxaTabelaValida}) >= taxaPonderadaFinal (${taxaPonderadaFinal.toFixed(4)})`);
+            console.log(`[DEBUG]   -> filtered by weighted rate: ${taxaTabelaValida} >= ${taxaPonderadaFinal}`);
             return;
         }
         
-        const taxaPonderada = taxaPonderadaFinal; // Para uso posterior no objeto de oferta
+        const taxaPonderada = taxaPonderadaFinal; 
 
         if (valorTroco > 0) {
           calculatedOffers.push({
@@ -262,6 +272,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
             novaTaxaPortabilidade: taxaParaCalculo, // Use a taxa correta aqui
             taxaPonderada,
             taxaBase: taxaTabelaValida,
+            originalRateCalculated: originalRate,
             priority: bank.priority || 999,
             rules: [],
             convenio: bank.convenio || 'INSS',

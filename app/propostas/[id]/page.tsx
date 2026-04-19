@@ -116,12 +116,13 @@ function ProposalDetailPageContent() {
     troco: parseFloat(searchParams.get('troco') || '0'),
     parcela: parseFloat(searchParams.get('parcela') || '0'),
     saldoDevedor: parseFloat(searchParams.get('saldoDevedor') || '0'),
-    corretor: '',
+    corretor: searchParams.get('corretor') || '',
     corretorId: '',
     paymentDate: '',
     rejectionDate: '',
     bancoPortado: searchParams.get('bancoPortado') || '',
     numeroContrato: '',
+    portabilityStatus: '',
   });
 
   const formatToCurrencyInput = (val: string | number) => {
@@ -204,6 +205,7 @@ function ProposalDetailPageContent() {
           rejectionDate: proposal.rejectionDate || '',
           bancoPortado: proposal.bancoPortado || '',
           numeroContrato: proposal.numeroContrato || '',
+          portabilityStatus: proposal.portabilityStatus || '',
         });
 
         setInputValues({
@@ -509,35 +511,71 @@ function ProposalDetailPageContent() {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 flex items-center justify-between"
+                className={`${formData.portabilityStatus ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-blue-500/10 border-blue-500/20'} border rounded-2xl p-4 flex flex-col gap-4`}
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                    <Clock className="w-6 h-6 text-blue-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Prazo de Retorno</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                      {expectedReturnDate 
-                        ? `Previsão: ${format(expectedReturnDate, 'dd/MM/yyyy', { locale: ptBR })}`
-                        : 'Informe a data de envio ao CIP'}
-                    </p>
-                  </div>
-                </div>
-                {remainingDays !== null && (
-                  <div className="text-right">
-                    {remainingDays === 0 ? (
-                      <p className="text-xs font-black text-rose-600 dark:text-rose-400 animate-pulse">
-                        Verificar retorno do saldo
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${formData.portabilityStatus ? 'bg-emerald-500/20' : 'bg-blue-500/20'}`}>
+                      <Clock className={`w-6 h-6 ${formData.portabilityStatus ? 'text-emerald-500' : 'text-blue-500'}`} />
+                    </div>
+                    <div>
+                      <h3 className={`text-sm font-black uppercase tracking-tight ${formData.portabilityStatus ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
+                        {formData.portabilityStatus ? 'Saldo Quitado' : 'Prazo de Retorno'}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        {expectedReturnDate 
+                          ? `Previsão: ${format(expectedReturnDate, 'dd/MM/yyyy', { locale: ptBR })}`
+                          : 'Informe a data de envio ao CIP'}
                       </p>
-                    ) : (
-                      <>
-                        <p className="text-2xl font-black text-blue-600 dark:text-blue-400">
-                          {remainingDays} {remainingDays === 1 ? 'Dia' : 'Dias'}
+                    </div>
+                  </div>
+                  {remainingDays !== null && !formData.portabilityStatus && (
+                    <div className="text-right">
+                      {remainingDays === 0 ? (
+                        <p className="text-xs font-black text-rose-600 dark:text-rose-400 animate-pulse">
+                          Verificar retorno do saldo
                         </p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Restantes</p>
-                      </>
-                    )}
+                      ) : (
+                        <>
+                          <p className="text-2xl font-black text-blue-600 dark:text-blue-400">
+                            {remainingDays} {remainingDays === 1 ? 'Dia' : 'Dias'}
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Restantes</p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {formData.portabilityStatus && (
+                    <div className="text-right">
+                      <p className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                        {formData.portabilityStatus}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {remainingDays !== null && remainingDays <= 0 && (
+                  <div className={`grid grid-cols-2 gap-2 pt-4 border-t ${formData.portabilityStatus ? 'border-emerald-500/20' : 'border-blue-500/20'}`}>
+                    <button
+                      onClick={() => setFormData({ ...formData, portabilityStatus: formData.portabilityStatus === 'AG. AVERBAÇÃO PORT' ? '' : 'AG. AVERBAÇÃO PORT' })}
+                      className={`py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2 ${
+                        formData.portabilityStatus === 'AG. AVERBAÇÃO PORT'
+                          ? 'bg-emerald-500 text-white border-transparent shadow-lg shadow-emerald-500/30'
+                          : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:text-emerald-500'
+                      }`}
+                    >
+                      AG. AVERBAÇÃO PORT
+                    </button>
+                    <button
+                      onClick={() => setFormData({ ...formData, portabilityStatus: formData.portabilityStatus === 'PORTABILIDADE FINALIZADA' ? '' : 'PORTABILIDADE FINALIZADA' })}
+                      className={`py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2 ${
+                        formData.portabilityStatus === 'PORTABILIDADE FINALIZADA'
+                          ? 'bg-emerald-500 text-white border-transparent shadow-lg shadow-emerald-500/30'
+                          : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:text-emerald-500'
+                      }`}
+                    >
+                      PORTABILIDADE FINALIZADA
+                    </button>
                   </div>
                 )}
               </motion.div>
@@ -785,7 +823,9 @@ function ProposalDetailPageContent() {
                   </>
                 )}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Parcela Port.</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">
+                    {formData.loanType === 'PORTABILIDADE' ? 'Parcela Port.' : 'Valor de Parcela'}
+                  </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">R$</span>
                     <input 
