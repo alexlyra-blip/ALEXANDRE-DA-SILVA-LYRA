@@ -43,7 +43,7 @@ interface Offer {
   prazoRefinPort?: number;
 }
 
-import NovaSimulacao from '../nova/page';
+import SimulationForm from '@/components/SimulationForm';
 
 export default function Recomendacoes() {
   const router = useRouter();
@@ -195,7 +195,8 @@ export default function Recomendacoes() {
       valorParcela,
       saldoDevedor,
       parcelasPagas,
-      parcelasRestantes
+      parcelasRestantes,
+      isCliente60Mais
     } = simData;
 
     const originalRate = simData.taxaJurosMensal ? simData.taxaJurosMensal * 100 : 0;
@@ -363,7 +364,8 @@ export default function Recomendacoes() {
       }
 
       // 4.1 60 Mais
-      if (idade >= 60 && bank.accepts60Mais === false) {
+      const effectiveIs60Mais = isCliente60Mais != null ? isCliente60Mais : (idade >= 60);
+      if (effectiveIs60Mais && bank.accepts60Mais === false) {
         log(`filtered: Não aceita 60+`);
         return;
       }
@@ -853,7 +855,7 @@ export default function Recomendacoes() {
         className="hidden md:flex flex-col shrink-0 border-r border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark relative overflow-y-auto"
       >
         <div className="w-[450px]">
-          <NovaSimulacao isEmbedded={true} />
+          <SimulationForm isEmbedded={true} />
         </div>
       </motion.div>
 

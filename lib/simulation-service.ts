@@ -12,6 +12,7 @@ export interface SimulationInput {
   codigoBeneficio: string;
   dataConcessao?: string;
   isAnalfabeto: boolean;
+  isCliente60Mais: boolean | null;
   bancoAtual: string;
   taxaJurosMensal?: number;
 }
@@ -59,6 +60,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
     convenio,
     subConvenio,
     isAnalfabeto,
+    isCliente60Mais,
     taxaJurosMensal
   } = input;
 
@@ -135,6 +137,10 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
     
     // ... (rest of the code)
 
+    // 1. Idade e Espécie Invalidez
+    const isInvalidity = ['4', '04', '32', '92'].includes(cleanBeneficio);
+    const isLOAS = ['87', '88'].includes(cleanBeneficio);
+
     // Idade Geral
     if (!isInvalidity) {
       if ((bank.minAge > 0 && idade < bank.minAge) || (bank.maxAge > 0 && idade > bank.maxAge)) {
@@ -149,8 +155,6 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
       }
     }
 
-    // 1. Idade e Espécie Invalidez
-    const isInvalidity = ['4', '04', '32', '92'].includes(cleanBeneficio);
     if (isInvalidity) {
       if (bank.acceptsInvalidez === false) {
           console.log(`[DEBUG] Filtrando banco ${bank.name}: Não aceita Invalidez`);
@@ -168,7 +172,6 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
     }
 
     // 2. LOAS (87, 88)
-    const isLOAS = ['87', '88'].includes(cleanBeneficio);
     if (isLOAS) {
       if (!bank.acceptsLOAS) {
         console.log(`[DEBUG] Filtrando banco ${bank.name}: Não aceita LOAS`);
@@ -199,7 +202,8 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
     }
 
     // 60 Mais
-    if (idade >= 60 && bank.accepts60Mais === false) {
+    const effectiveIs60Mais = isCliente60Mais != null ? isCliente60Mais : (idade >= 60);
+    if (effectiveIs60Mais && bank.accepts60Mais === false) {
       console.log(`[DEBUG] Filtrando banco ${bank.name}: Não aceita 60+`);
       return;
     }
