@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useEffect, useRef } from 'react';
@@ -16,7 +16,10 @@ import autoTable from 'jspdf-autotable';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { safeStringify } from '@/lib/utils';
 
-const ai = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
+const getAI = () => {
+  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+  return new GoogleGenerativeAI(apiKey);
+};
 
 type SortOption = 'menor_troco' | 'valor_troco' | 'valor_contrato';
 
@@ -61,17 +64,32 @@ export default function Recomendacoes() {
 
   const handleSelectOffer = async (offer: Offer) => {
     try {
-      if (simData?.id) {
-        const docRef = doc(db, 'simulations', simData.id);
-        await setDoc(docRef, {
-          topOffer: offer.name,
-          topOfferTabela: offer.tabela,
-          topOfferContrato: offer.valorContrato,
-          topOfferTroco: offer.valorTroco,
-          topOfferTaxa: offer.novaTaxaPortabilidade,
-          topOfferPrazo: offer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))
-        }, { merge: true });
-      }
+      const simulationId = simData?.id || savedSimulationId.current || crypto.randomUUID();
+      const docRef = doc(db, 'simulations', simulationId);
+      
+      // Comprehensive save to ensure it appears correctly in Dashboard
+      await setDoc(docRef, {
+        userId: simData?.userId || profile?.uid,
+        userName: simData?.userName || profile?.name,
+        userAvatar: simData?.userAvatar || profile?.photoUrl || profile?.avatarUrl || null,
+        promotoraId: simData?.promotoraId || profile?.promotoraId || profile?.uid,
+        corretorId: profile?.role === 'corretor' || profile?.role === 'vendedor' ? profile?.uid : null,
+        createdBy: profile?.createdBy || null,
+        createdAt: simData?.createdAt || new Date().toISOString(),
+        simData: simData,
+        offers: allCalculatedOffers.slice(0, 10).map(o => ({
+          ...o,
+          rules: [] // Remove rules to save space
+        })),
+        recommendedBanks: allCalculatedOffers.slice(0, 3).map(o => o.name),
+        topOffer: offer.name,
+        topOfferTabela: offer.tabela,
+        topOfferContrato: offer.valorContrato,
+        topOfferTroco: offer.valorTroco,
+        topOfferTaxa: offer.novaTaxaPortabilidade,
+        topOfferPrazo: offer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))
+      }, { merge: true });
+
     } catch (err) {
       console.error('Error updating selected offer in simulations:', err);
     }
@@ -105,24 +123,23 @@ export default function Recomendacoes() {
     
     setIsAISummarizing(true);
     try {
+      const ai = getAI();
+      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
       const topOffers = offers.slice(0, 3);
       const offersText = topOffers.map((o, i) => 
         `Oferta ${i+1}: Banco ${o.name}, Tabela ${o.tabela}, Troco de ${formatCurrency(o.valorTroco)}, Taxa de ${o.novaTaxaPortabilidade?.toFixed(2)}%`
       ).join('\n');
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Crie uma mensagem profissional e persuasiva para WhatsApp enviando os resultados de uma simulação de portabilidade de crédito consignado para um cliente.
+      const response = await model.generateContent(`Crie uma mensagem profissional e persuasiva para WhatsApp enviando os resultados de uma simulação de portabilidade de crédito consignado para um cliente.
         Dados da simulação:
         Parcela atual: ${formatCurrency(simData?.valorParcela || 0)}
         
         Principais Ofertas encontradas:
         ${offersText}
         
-        A mensagem deve ser amigável, destacar o valor do troco e convidar o cliente para escolher a melhor opção. Use emojis e negrito para destacar valores.`,
-      });
+        A mensagem deve ser amigável, destacar o valor do troco e convidar o cliente para escolher a melhor opção. Use emojis e negrito para destacar valores.`);
 
-      const message = response.text;
+      const message = response.response.text();
       const encodedMessage = encodeURIComponent(message);
       window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
     } catch (error) {
@@ -252,7 +269,10 @@ export default function Recomendacoes() {
         console.log(`[${bank.name}] ${tabela ? `- Tabela ${tabela}: ` : ''}${reason}`);
       };
 
-      // 0. Allowed Banks Filter
+      // 0. Active Filter
+      if (bank.isActive === false) return;
+
+      // 0.1 Allowed Banks Filter
       if (profile.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) {
         log(`filtrado por allowedBanks`);
         return;
@@ -274,6 +294,8 @@ export default function Recomendacoes() {
 
       // 1. Espécie Invalidez (04, 32, 92) - CHECK THIS FIRST
       const isInvalidity = ['4', '04', '32', '92'].includes(cleanBeneficio);
+      const isLOAS = ['87', '88'].includes(cleanBeneficio);
+
       if (isInvalidity) {
         if (bank.acceptsInvalidez === false) {
           log(`filtrado: Não aceita espécie Invalidez`);
@@ -312,13 +334,12 @@ export default function Recomendacoes() {
         return;
       }
 
-      /* 
-      // 3. Saldo Mínimo (Removido para permitir validação exclusiva por tabela com soma saldo+troco)
-      if (bank.minBalance && !bank.sumSaldoTroco && saldoDevedor < bank.minBalance) {
+      // 3. Saldo Mínimo
+      const bSumSaldoTrocoGlobal = !!(bank.sumBalanceAndTroco || bank.sumSaldoTroco);
+      if (!bSumSaldoTrocoGlobal && bank.minBalance && saldoDevedor < bank.minBalance) {
         log(`filtrado por minBalance (${saldoDevedor} < ${bank.minBalance})`);
         return;
       }
-      */
 
       // 4. Idade Geral
       // Se for invalidez, a regra de idade já foi validada acima (ou o banco não tem regra específica)
@@ -335,10 +356,19 @@ export default function Recomendacoes() {
           log(`filtered by general maxAge (Invalidez fallback): ${idade} > ${bank.maxAge}`);
           return;
         }
+        if (ageLimit > 0 && idade > ageLimit) {
+          log(`filtered by specific Invalidez ageLimit: ${idade} > ${ageLimit}`);
+          return;
+        }
+      }
+
+      // 4.1 60 Mais
+      if (idade >= 60 && bank.accepts60Mais === false) {
+        log(`filtered: Não aceita 60+`);
+        return;
       }
 
       // 5. LOAS (87, 88)
-      const isLOAS = ['87', '88'].includes(cleanBeneficio);
       if (isLOAS) {
         if (!bank.acceptsLOAS) {
           log(`filtered by acceptsLOAS`);
@@ -396,6 +426,12 @@ export default function Recomendacoes() {
       // If eligible, calculate for each table
       if (bank.tabelas && bank.tabelas.length > 0) {
         bank.tabelas.forEach((tabela: any) => {
+          const parseRate = (val: any) => {
+            if (val === undefined || val === null || val === '') return 0;
+            if (typeof val === 'number') return val;
+            return parseFloat(String(val).replace(',', '.')) || 0;
+          };
+
           const coef = tabela.coeficiente;
           
           // Skip if coefficient is not valid for division
@@ -408,27 +444,22 @@ export default function Recomendacoes() {
           const valorTroco = valorContrato - saldoDevedor;
           
           // REFINEMENT: Ticket Mínimo / Saldo Mínimo Check
-          // PRIORIDADE MÁXIMA: Valida Saldo+Troco primeiro, ignorando saldoDevedor puro se somar
-          // O campo real no Banco é 'sumBalanceAndTroco' (conforme RuleContext.tsx)
-          const isC6 = bank.name.toUpperCase().includes('C6');
-          const bSumSaldoTroco = isC6 || !!(bank.sumBalanceAndTroco || bank.sumSaldoTroco);
-          const valorAValidar = bSumSaldoTroco ? (saldoDevedor + valorTroco) : saldoDevedor;
-          const limiteMinimo = bank.minBalance || 0;
+          const bSumSaldoTroco = bSumSaldoTrocoGlobal || !!tabela.somaSaldoTroco;
 
-          // LOG PARA DEPURAÇÃO
-          if (isC6) {
-            console.log(`[C6_DEBUG] Saldo: ${saldoDevedor} | Troco: ${valorTroco} | AValidar: ${valorAValidar} | Min: ${limiteMinimo}`);
-          }
-
-          if (limiteMinimo > 0 && valorAValidar < limiteMinimo) {
-            log(`filtered by minBalance (${bSumSaldoTroco ? 'Saldo+Troco' : 'Saldo'} ${valorAValidar.toFixed(2)} < ${limiteMinimo.toFixed(2)})`, tabela.nome);
+          // Se a opção de somar estiver ativa, validamos o Saldo+Troco contra o Saldo Mínimo do Banco
+          if (bSumSaldoTroco && bank.minBalance && (saldoDevedor + valorTroco) < bank.minBalance) {
+            log(`filtered by minBalance (Balance + Troco): ${(saldoDevedor + valorTroco).toFixed(2)} < ${bank.minBalance}`, tabela.nome);
             return;
           }
 
-          // Ticket Mínimo (Específico da tabela, se configurado)
-          const minTicketValue = (tabela.useMinTicket === true) ? (tabela.minTicket || bank.minTroco || 0) : 0;
-          if (tabela.useMinTicket === true && minTicketValue > 0 && valorAValidar < minTicketValue) {
-            log(`filtered by minTicket (${bSumSaldoTroco ? 'Saldo+Troco' : 'Saldo'}): ${valorAValidar.toFixed(2)} < ${minTicketValue.toFixed(2)}`, tabela.nome);
+          const valorAValidar = bSumSaldoTroco ? (saldoDevedor + valorTroco) : saldoDevedor;
+          
+          const bankMinTroco = parseRate(bank.minTroco);
+          const tableMinTicket = (tabela.useMinTicket === true) ? parseRate(tabela.minTicket) : 0;
+          const effectiveMinTicket = tableMinTicket > 0 ? tableMinTicket : bankMinTroco;
+
+          if (effectiveMinTicket > 0 && valorAValidar < effectiveMinTicket) {
+            log(`filtered by minTicket (${bSumSaldoTroco ? 'Saldo+Troco' : 'Saldo'}): ${valorAValidar.toFixed(2)} < ${effectiveMinTicket.toFixed(2)}`, tabela.nome);
             return;
           }
 
@@ -438,13 +469,30 @@ export default function Recomendacoes() {
             return;
           }
 
-          // Cálculo das Taxas (Restaurando o motor de taxas)
-          const taxaTabelaValida = (tabela.taxaTabela !== undefined && tabela.taxaTabela !== null && tabela.taxaTabela > 0) ? tabela.taxaTabela : (bank.refinRate || 0);
-          const bankAdjustment = bank.ajusteTaxa || 0;
+          const tTabela = parseRate(tabela.taxaTabela);
+          const taxaTabelaValida = tTabela > 0 ? tTabela : parseRate(bank.refinRate);
+          const bankAdjustment = parseRate(bank.ajusteTaxa);
           
-          const taxaParaCalculo = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0)
-            ? tabela.taxaDiferencial
-            : (originalRate + bankAdjustment);
+          const tDiferencial = parseRate(tabela.taxaDiferencial);
+          const bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
+          const bankPortRate = parseRate(bank.portabilityRate);
+          
+          // PRIORIDADE ROBUSTA: 
+          // Coletamos todas as taxas alvo configuradas e usamos a MENOR (mais agressiva)
+          // Isso resolve o problema onde tabelas antigas ficaram com 1.85 enquanto o banco baixou para 1.52.
+          const candidates = [tDiferencial, bankNovaTaxaRef, bankPortRate].filter(v => v > 0);
+          let taxaParaCalculo = candidates.length > 0 ? Math.min(...candidates) : 0;
+          
+          if (taxaParaCalculo <= 0) {
+            taxaParaCalculo = originalRate + bankAdjustment;
+          }
+          
+          // Debugging
+          if (bank.name.toLowerCase().includes('digio') || bank.name.toLowerCase().includes('dibio')) {
+             console.log(`[DEBUG RATES ROBUSTO] Banco: ${bank.name}, Tabela: ${tabela.nome}`);
+             console.log(`[DEBUG RATES ROBUSTO]   Candidates (tDif, bRef, bPort):`, [tDiferencial, bankNovaTaxaRef, bankPortRate]);
+             console.log(`[DEBUG RATES ROBUSTO]   taxaParaCalculo Final: ${taxaParaCalculo}`);
+          }
 
           // Regra: Taxa Mínima Port (portabilityRate)
           if (bank.portabilityRate && bank.portabilityRate > 0 && taxaParaCalculo < bank.portabilityRate) {
@@ -463,7 +511,8 @@ export default function Recomendacoes() {
           const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));
           const taxaPonderadaFinal = Math.round((taxaPonderadaBase + ajusteTabela) * 100) / 100;
           
-          if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
+          const bUseTaxaPonderada = Boolean(tabela.useTaxaPonderada);
+          if (bUseTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
             log(`filtered by weighted rate: ${taxaTabelaValida.toFixed(2)} > ${taxaPonderadaFinal.toFixed(2)}`, tabela.nome);
             return;
           }
@@ -495,7 +544,8 @@ export default function Recomendacoes() {
               convenio: bank.convenio || 'INSS',
               subConvenio: bank.subConvenio,
               tabelasCount: bank.tabelas.length,
-              prazoRefinPort: tabela.prazoRefinPort
+              prazoRefinPort: tabela.prazoRefinPort,
+              ajusteTaxaPonderada: ajusteTabela
             });
         });
       } else {
@@ -637,18 +687,38 @@ export default function Recomendacoes() {
     });
 
     const uniqueBankOffers = Object.values(bestOfferPerBank).sort((a, b) => {
-      // Default sorting for Principais Ofertas is by highest troco
+      // PRIORIDADE MESTRE: Primeiro respeitamos o ranking dos bancos (1, 2, 3...)
+      // Bancos com prioridade 0 ou indefinida vão para o final (999)
+      const bankIdA = a.id.split('-')[0];
+      const bankIdB = b.id.split('-')[0];
+      
+      const pA = promotoraPriorities[bankIdA] ?? a.priority ?? 999;
+      const pB = promotoraPriorities[bankIdB] ?? b.priority ?? 999;
+      
+      const finalPA = (pA === 0 || pA === undefined) ? 999 : pA;
+      const finalPB = (pB === 0 || pB === undefined) ? 999 : pB;
+      
+      if (finalPA !== finalPB) {
+        return finalPA - finalPB;
+      }
+
+      // Critério secundário: sortBy escolhido pelo usuário
+      if (sortBy === 'valor_troco') return b.valorTroco - a.valorTroco;
+      if (sortBy === 'valor_contrato') return b.valorContrato - a.valorContrato;
+      if (sortBy === 'menor_troco') return a.valorTroco - b.valorTroco;
       return b.valorTroco - a.valorTroco;
     });
 
-    // Take top 3 unique banks
-    setOffers(uniqueBankOffers.slice(0, 3));
-  }, [allCalculatedOffers, sortBy, selectedBankFilter]);
+    // We keep all unique bank offers
+    setOffers(uniqueBankOffers);
+  }, [allCalculatedOffers, sortBy, selectedBankFilter, promotoraPriorities]);
 
   const currentOffers = showAllOffers 
-    ? allCalculatedOffers
-        .filter(o => selectedBankFilter === 'all' || o.name === selectedBankFilter)
-    : offers;
+    ? offers
+    : offers.slice(0, 3);
+  
+  const allCalculatedOffersCount = Array.from(new Set(allCalculatedOffers.map(o => o.name))).length;
+  
   const maxValorTroco = currentOffers.length > 0 ? Math.max(...currentOffers.map(b => b.valorTroco)) : 0;
   const minValorTroco = currentOffers.length > 0 ? Math.min(...currentOffers.map(b => b.valorTroco)) : 0;
   const maxValorContrato = currentOffers.length > 0 ? Math.max(...currentOffers.map(b => b.valorTroco + b.saldoDevedor)) : 0;
@@ -656,6 +726,21 @@ export default function Recomendacoes() {
   const uniqueBanks = Array.from(new Set(allCalculatedOffers.map(o => o.name))).sort();
 
   const sortedBanks = [...currentOffers].sort((a, b) => {
+    // PRIORIDADE MESTRE: Primeiro respeitamos o ranking dos bancos
+    const bankIdA = a.id.split('-')[0];
+    const bankIdB = b.id.split('-')[0];
+    
+    const pA = promotoraPriorities[bankIdA] ?? a.priority ?? 999;
+    const pB = promotoraPriorities[bankIdB] ?? b.priority ?? 999;
+    
+    const finalPA = (pA === 0 || pA === undefined) ? 999 : pA;
+    const finalPB = (pB === 0 || pB === undefined) ? 999 : pB;
+    
+    if (finalPA !== finalPB) {
+      return finalPA - finalPB;
+    }
+
+    // Critério secundário: Filtro selecionado
     if (sortBy === 'valor_troco') {
       return b.valorTroco - a.valorTroco;
     } else if (sortBy === 'valor_contrato') {
@@ -884,7 +969,7 @@ export default function Recomendacoes() {
               onClick={() => setShowAllOffers(true)}
               className={`flex-1 py-1.5 text-[10px] font-black rounded-md transition-all duration-300 uppercase tracking-tight ${showAllOffers ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
             >
-              Todas Ofertas ({allCalculatedOffers.length})
+              Todas Ofertas ({allCalculatedOffersCount})
             </button>
           </div>
         </div>
@@ -1118,7 +1203,8 @@ export default function Recomendacoes() {
                             <p className="text-xs font-medium truncate">
                               Taxa Ponderada Prev.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.taxaPonderada.toFixed(2)}%</span>
                               <span className="text-[9px] ml-1 block opacity-70">
-                                ({currentOffer.originalRateCalculated.toFixed(2)}% + {currentOffer.novaTaxaPortabilidade.toFixed(2)}%)/2 {currentOffer.ajusteTaxaPonderada !== 0 && (
+                                ({currentOffer.originalRateCalculated.toFixed(2)}% + {currentOffer.novaTaxaPortabilidade.toFixed(2)}%)/2 
+                                {currentOffer.ajusteTaxaPonderada !== undefined && currentOffer.ajusteTaxaPonderada !== 0 && (
                                   currentOffer.ajusteTaxaPonderada > 0 
                                     ? `+ ${currentOffer.ajusteTaxaPonderada.toFixed(2).replace('.', ',')}` 
                                     : `- ${Math.abs(currentOffer.ajusteTaxaPonderada).toFixed(2).replace('.', ',')}`
@@ -1169,52 +1255,16 @@ export default function Recomendacoes() {
                       >
                         <Download className="w-4 h-4" />
                       </button>
-                      
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const docRef = doc(db, 'simulations', simData?.id || crypto.randomUUID());
-                            await setDoc(docRef, {
-                              userId: simData?.userId || profile?.uid,
-                              userName: simData?.userName || profile?.name,
-                              userAvatar: simData?.userAvatar || profile?.photoUrl || profile?.avatarUrl || null,
-                              promotoraId: simData?.promotoraId || profile?.promotoraId || profile?.uid,
-                              corretorId: profile?.role === 'corretor' || profile?.role === 'vendedor' ? profile?.uid : null,
-                              createdBy: profile?.createdBy || null,
-                              createdAt: new Date().toISOString(),
-                              simData: simData,
-                              offers: allCalculatedOffers.slice(0, 10).map(offer => ({
-                                ...offer,
-                                rules: [] // Remove rules to save space
-                              })),
-                              recommendedBanks: allCalculatedOffers.slice(0, 3).map(o => o.name),
-                              topOffer: currentOffer.name,
-                              topOfferTabela: currentOffer.tabela,
-                              topOfferContrato: currentOffer.valorContrato,
-                              topOfferTroco: currentOffer.valorTroco,
-                              topOfferTaxa: currentOffer.novaTaxaPortabilidade,
-                              topOfferPrazo: currentOffer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))
-                            }, { merge: true });
-                            alert('Simulação salva com sucesso no Dashboard!');
-                          } catch (err) {
-                            console.error('Erro ao salvar simulação', err);
-                            alert('Erro ao salvar a simulação.');
-                          }
-                        }}
-                        className={`flex items-center justify-center gap-1.5 rounded-lg p-1.5 text-xs font-bold transition-all duration-300 bg-primary/10 text-primary hover:bg-primary/20`}
-                        title="Salvar no Dashboard"
-                      >
-                        <FileText className="w-4 h-4" />
-                      </button>
                     </div>
                   </div>
                 </div>
 
                 <button
                   onClick={() => handleSelectOffer(currentOffer)}
-                  className="w-full bg-primary hover:bg-primary/90 text-white text-sm font-black uppercase tracking-tight py-3 rounded-lg transition-all shadow-sm mt-2"
+                  className="w-full bg-primary hover:bg-primary/90 text-white text-sm font-black uppercase tracking-tight py-3 rounded-lg transition-all shadow-sm mt-2 flex items-center justify-center gap-2"
                 >
-                  Selecionar
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>Selecionar e Salvar</span>
                 </button>
 
                 {currentOffer.rules && currentOffer.rules.length > 0 && (

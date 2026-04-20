@@ -12,7 +12,10 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { motion, AnimatePresence } from 'motion/react';
 import { safeStringify } from '@/lib/utils';
 
-const ai = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
+const getAI = () => {
+  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+  return new GoogleGenerativeAI(apiKey);
+};
 
 export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const { profile } = useAuth();
@@ -197,6 +200,7 @@ export default function NovaSimulacao({ isEmbedded = false }: { isEmbedded?: boo
     
     setIsAILoading(true);
     try {
+      const ai = getAI();
       const model = ai.getGenerativeModel({
         model: "gemini-1.5-flash",
         generationConfig: {

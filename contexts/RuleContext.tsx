@@ -54,6 +54,7 @@ export interface BankRule {
   isActive?: boolean;
   subConvenio?: string;
   requireTrocoMaiorQue5PorcentoEndividamento?: boolean;
+  excludedBenefits?: string[];
 }
 
 export interface PromotoraPriorities {

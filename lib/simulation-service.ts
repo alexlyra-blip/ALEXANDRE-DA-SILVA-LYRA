@@ -104,6 +104,9 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
   };
 
   banks.forEach(bank => {
+    // Check if bank is active
+    if (bank.isActive === false) return;
+
     // Convenio Filter
     const bankConvenio = bank.convenio || 'INSS';
     if (bankConvenio !== convenio) {
@@ -124,7 +127,8 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
     }
 
     // Saldo Mínimo
-    if (bank.minBalance && saldoDevedor < bank.minBalance) {
+    const bSumSaldoTrocoGlobal = !!(bank.sumBalanceAndTroco || bank.sumSaldoTroco);
+    if (!bSumSaldoTrocoGlobal && bank.minBalance && saldoDevedor < bank.minBalance) {
         console.log(`[DEBUG] Filtrando banco ${bank.name}: Saldo ${saldoDevedor} < Mínimo ${bank.minBalance}`);
         return;
     }
@@ -145,23 +149,74 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
       }
     }
 
-    // LOAS
+    // 1. Idade e Espécie Invalidez
+    const isInvalidity = ['4', '04', '32', '92'].includes(cleanBeneficio);
+    if (isInvalidity) {
+      if (bank.acceptsInvalidez === false) {
+          console.log(`[DEBUG] Filtrando banco ${bank.name}: Não aceita Invalidez`);
+          return;
+      }
+      
+      const isOver60AndAccepted = bank.acceptsOver60Invalidez && idade >= 60;
+      if (!isOver60AndAccepted) {
+        const invAgeLimit = bank.invalidezAgeYears || 0;
+        if (invAgeLimit > 0 && idade < invAgeLimit) {
+            console.log(`[DEBUG] Filtrando banco ${bank.name}: Idade ${idade} < Mínima Invalidez ${invAgeLimit}`);
+            return;
+        }
+      }
+    }
+
+    // 2. LOAS (87, 88)
     const isLOAS = ['87', '88'].includes(cleanBeneficio);
     if (isLOAS) {
       if (!bank.acceptsLOAS) {
         console.log(`[DEBUG] Filtrando banco ${bank.name}: Não aceita LOAS`);
         return;
       }
-      if (isAnalfabeto && !bank.acceptsIlliterate) {
-        console.log(`[DEBUG] Filtrando banco ${bank.name}: Não aceita Analfabeto (LOAS)`);
+    }
+
+    // Idade Geral (maxAge deve ser respeitado sempre)
+    if (bank.maxAge > 0 && idade > bank.maxAge) {
+      console.log(`[DEBUG] Filtrando banco ${bank.name}: Idade ${idade} > Máxima ${bank.maxAge}`);
+      return;
+    }
+    
+    if (!isInvalidity && bank.minAge > 0 && idade < bank.minAge) {
+      console.log(`[DEBUG] Filtrando banco ${bank.name}: Idade ${idade} < Mínima ${bank.minAge}`);
+      return;
+    }
+
+    // Tempo de Benefício (Exclusivo para Invalidez conforme solicitado)
+    if (isInvalidity) {
+      const minYears = bank.minBenefitTimeYears || 0;
+      const minMonths = bank.minBenefitTimeMonths || 0;
+      const totalRequiredMonths = (minYears * 12) + minMonths;
+      if (totalRequiredMonths > 0 && benefitTimeMonths < totalRequiredMonths) {
+        console.log(`[DEBUG] Filtrando banco ${bank.name}: Tempo benefício ${benefitTimeMonths} < Requerido ${totalRequiredMonths}`);
         return;
       }
+    }
+
+    // 60 Mais
+    if (idade >= 60 && bank.accepts60Mais === false) {
+      console.log(`[DEBUG] Filtrando banco ${bank.name}: Não aceita 60+`);
+      return;
     }
 
     // Analfabeto (Geral)
     if (isAnalfabeto && !bank.acceptsIlliterate) {
         console.log(`[DEBUG] Filtrando banco ${bank.name}: Não aceita Analfabeto (Geral)`);
         return;
+    }
+
+    // Excluded Benefits
+    if (bank.excludedBenefits && bank.excludedBenefits.length > 0) {
+      const isExcluded = bank.excludedBenefits.some((benefit: string) => benefit.trim().replace(/^0+/, '') === cleanBeneficio);
+      if (isExcluded) {
+        console.log(`[DEBUG] Filtrando banco ${bank.name}: Benefício ${cleanBeneficio} está na lista de exclusão.`);
+        return;
+      }
     }
 
     // Banco Atual
@@ -188,18 +243,35 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
     // Calculate for each table
     if (bank.tabelas && bank.tabelas.length > 0) {
       bank.tabelas.forEach((tabela: any) => {
+        const parseRate = (val: any) => {
+          if (val === undefined || val === null || val === '') return 0;
+          if (typeof val === 'number') return val;
+          return parseFloat(String(val).replace(',', '.')) || 0;
+        };
+
         const coef = tabela.coeficiente;
         if (!coef || coef <= 0) return;
 
         const valorContrato = valorParcela / coef;
         const valorTroco = valorContrato - saldoDevedor;
         
-        // Ajuste: Se tabela.somaSaldoTroco estiver marcado, valida o saldo mínimo usando (saldoDevedor + valorTroco)
-        const valorParaValidarMinTicket = (tabela.somaSaldoTroco === true) ? (saldoDevedor + valorTroco) : saldoDevedor;
-        const minTicketValue = (tabela.useMinTicket === true) ? (tabela.minTicket || bank.minTroco || 0) : 0;
+        // Ticket Mínimo / Saldo Mínimo Check
+        const bSumSaldoTroco = bSumSaldoTrocoGlobal || !!tabela.somaSaldoTroco;
         
-        if (tabela.useMinTicket === true && minTicketValue > 0 && valorParaValidarMinTicket < minTicketValue) {
-            console.log(`[DEBUG] Filtrando banco ${bank.name} - Tabela ${tabela.nome}: valorParaValidarMinTicket (${valorParaValidarMinTicket}) < minTicketValue (${minTicketValue})`);
+        // Se a opção de somar estiver ativa, validamos o Saldo+Troco contra o Saldo Mínimo do Banco
+        if (bSumSaldoTroco && bank.minBalance && (saldoDevedor + valorTroco) < bank.minBalance) {
+            console.log(`[DEBUG] Filtrando banco ${bank.name} - Tabela ${tabela.nome}: Saldo+Troco (${(saldoDevedor + valorTroco).toFixed(2)}) < Saldo Mínimo (${bank.minBalance})`);
+            return;
+        }
+
+        const valorAValidar = bSumSaldoTroco ? (saldoDevedor + valorTroco) : saldoDevedor;
+        
+        const bankMinTroco = parseRate(bank.minTroco);
+        const tableMinTicket = (tabela.useMinTicket === true) ? parseRate(tabela.minTicket) : 0;
+        const effectiveMinTicket = tableMinTicket > 0 ? tableMinTicket : bankMinTroco;
+        
+        if (effectiveMinTicket > 0 && valorAValidar < effectiveMinTicket) {
+            console.log(`[DEBUG] Filtrando banco ${bank.name} - Tabela ${tabela.nome}: valorAValidar (${valorAValidar}) < effectiveMinTicket (${effectiveMinTicket})`);
             return;
         }
 
@@ -211,18 +283,22 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
         }
 
         const originalRate = taxaJurosMensal ? taxaJurosMensal * 100 : 0;
-        const taxaTabelaValida = (tabela.taxaTabela !== undefined && tabela.taxaTabela !== null && tabela.taxaTabela > 0) ? tabela.taxaTabela : (bank.refinRate || 0);
-        const taxaDiferencial = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0) ? tabela.taxaDiferencial : taxaTabelaValida;
+        const tTabela = parseRate(tabela.taxaTabela);
+        const taxaTabelaValida = tTabela > 0 ? tTabela : parseRate(bank.refinRate);
+        const bankAdjustment = parseRate(bank.ajusteTaxa);
         
-        const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || 1.85);
-        const bankAdjustment = bank.ajusteTaxa || 0;
+        const tDiferencial = parseRate(tabela.taxaDiferencial);
+        const bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
+        const bankPortRate = parseRate(bank.portabilityRate);
         
-        // New Rate calculation: Original Rate + Bank Adjustment
-        const novaTaxaPortabilidadeAvaliada = (tabela.taxaDiferencial !== undefined && tabela.taxaDiferencial !== null && tabela.taxaDiferencial > 0)
-            ? tabela.taxaDiferencial
-            : (originalRate + bankAdjustment);
-
-        const taxaParaCalculo = novaTaxaPortabilidadeAvaliada;
+        // PRIORIDADE ROBUSTA: 
+        // Coletamos todas as taxas configuradas e usamos a MENOR (mais agressiva)
+        const candidates = [tDiferencial, bankNovaTaxaRef, bankPortRate].filter(v => v > 0);
+        let taxaParaCalculo = candidates.length > 0 ? Math.min(...candidates) : 0;
+        
+        if (taxaParaCalculo <= 0) {
+          taxaParaCalculo = originalRate + bankAdjustment;
+        }
 
         // Regra Nova: Taxa Mínima Port (portabilityRate)
         if (bank.portabilityRate && bank.portabilityRate > 0 && taxaParaCalculo < bank.portabilityRate) {
@@ -248,15 +324,12 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
         // Resultado final estritamente com 2 casas
         const taxaPonderadaFinal = Math.round((taxaPonderadaBase + ajusteTabela) * 100) / 100;
 
-        console.log(`[DEBUG] Banco ${bank.name} - Tabela: ${tabela.nome}`);
-        console.log(`[DEBUG]   ORIGINAL (${orig}) + PORT (${port}) = ${orig + port} / 2 = ${taxaPonderadaBase}`);
-        console.log(`[DEBUG]   BASE (${taxaPonderadaBase}) + AJUSTE (${ajusteTabela}) = FINAL (${taxaPonderadaFinal})`);
-
         // Regra de Elegibilidade:
         // Para uma tabela ser ofertada, a Taxa Base da Tabela (taxaTabelaValida) tem que ser MENOR OU IGUAL que a Taxa Ponderada Final
         // Se Taxa Base > Taxa Ponderada Final, a tabela fica indisponível.
-        if (tabela.useTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
-            console.log(`[DEBUG]   -> filtered by weighted rate: ${taxaTabelaValida} > ${taxaPonderadaFinal}`);
+        const bUseTaxaPonderada = Boolean(tabela.useTaxaPonderada);
+        if (bUseTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
+            console.log(`[DEBUG]   -> filtered by weighted rate: ${taxaTabelaValida} > ${taxaPonderadaFinal} (Tabela: ${tabela.nome}, Ponderada: ${taxaPonderadaFinal})`);
             return;
         }
         

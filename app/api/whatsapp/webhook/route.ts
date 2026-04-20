@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { runSimulation, SimulationInput } from '@/lib/simulation-service';
 
-const ai = new GoogleGenerativeAI(
-  process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '' 
-);
+export const dynamic = 'force-dynamic';
+
+const getAI = () => {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+  return new GoogleGenerativeAI(apiKey);
+};
 
 // Tokens de configuração
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'simulador_token_123';
@@ -90,7 +93,7 @@ export async function POST(request: Request) {
       }
 
       // 1. Usar a IA para extrair dados ou gerar resposta
-      const model = ai.getGenerativeModel({
+      const model = getAI().getGenerativeModel({
         model: "gemini-1.5-flash",
         generationConfig: {
           responseMimeType: "application/json",
@@ -127,7 +130,7 @@ export async function POST(request: Request) {
         }
       } else {
         // 3. Gerar resposta conversacional pedindo o que falta
-        const chatModel = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const chatModel = getAI().getGenerativeModel({ model: "gemini-1.5-flash" });
         const chatPrompt = `Você é um assistente de crédito. O cliente disse: "${text}". 
         Os dados extraídos foram: ${JSON.stringify(extraction.data)}. 
         Os campos que faltam são: ${extraction.missingFields?.join(', ') || 'todos'}.

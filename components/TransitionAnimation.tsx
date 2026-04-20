@@ -89,7 +89,7 @@ export default function TransitionAnimation({ onComplete, availableBanks }: { on
 
   // Progress and step logic
   useEffect(() => {
-    const duration = 2500; // Reduced from 4.5s to 2.5s for faster perceived performance
+    const duration = 3000; // Increased to at least 3 seconds as requested
     const intervalTime = 25;
     const totalSteps = duration / intervalTime;
     const increment = 100 / totalSteps;

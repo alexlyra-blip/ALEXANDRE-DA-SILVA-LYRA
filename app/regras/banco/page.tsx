@@ -56,6 +56,8 @@ export default function RegrasBanco() {
   const [sumBalanceAndTroco, setSumBalanceAndTroco] = useState(false);
   const [nonAcceptedBanks, setNonAcceptedBanks] = useState<string[]>([]);
   const [nonAcceptedBankInput, setNonAcceptedBankInput] = useState('');
+  const [excludedBenefits, setExcludedBenefits] = useState<string[]>([]);
+  const [excludedBenefitInput, setExcludedBenefitInput] = useState('');
   const [specificInstallmentRules, setSpecificInstallmentRules] = useState<{bank: string, installments: string}[]>([]);
   const [specificBankInput, setSpecificBankInput] = useState('');
   const [specificInstallmentsInput, setSpecificInstallmentsInput] = useState('');
@@ -165,6 +167,20 @@ export default function RegrasBanco() {
 
   const handleRemoveNonAcceptedBank = (bankToRemove: string) => {
     setNonAcceptedBanks(nonAcceptedBanks.filter(b => b !== bankToRemove));
+  };
+
+  const handleAddExcludedBenefit = (e: React.KeyboardEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement> | React.MouseEvent<HTMLButtonElement>) => {
+    if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;
+    e.preventDefault();
+    const value = excludedBenefitInput.trim();
+    if (value && !excludedBenefits.includes(value)) {
+      setExcludedBenefits([...excludedBenefits, value]);
+    }
+    setExcludedBenefitInput('');
+  };
+
+  const handleRemoveExcludedBenefit = (benefitToRemove: string) => {
+    setExcludedBenefits(excludedBenefits.filter(b => b !== benefitToRemove));
   };
 
   const handleAddSpecificRule = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -281,6 +297,7 @@ export default function RegrasBanco() {
         refinRate: parseNumeric(refinRate) || 0,
         sumBalanceAndTroco,
         nonAcceptedBanks: nonAcceptedBanks,
+        excludedBenefits: excludedBenefits,
         specificInstallmentRules: specificInstallmentRules.map(r => ({ bank: r.bank, installments: parseInt(r.installments) })),
         acceptsIlliterate,
         acceptsLOAS,
@@ -335,6 +352,8 @@ export default function RegrasBanco() {
         setSumBalanceAndTroco(false);
         setNonAcceptedBanks([]);
         setNonAcceptedBankInput('');
+        setExcludedBenefits([]);
+        setExcludedBenefitInput('');
         setSpecificInstallmentRules([]);
         setSpecificBankInput('');
         setSpecificInstallmentsInput('');
@@ -376,6 +395,8 @@ export default function RegrasBanco() {
     setSumBalanceAndTroco(bank.sumBalanceAndTroco || false);
     setNonAcceptedBanks(bank.nonAcceptedBanks || []);
     setNonAcceptedBankInput('');
+    setExcludedBenefits(bank.excludedBenefits || []);
+    setExcludedBenefitInput('');
     setSpecificInstallmentRules(bank.specificInstallmentRules?.map(r => ({ bank: r.bank, installments: r.installments?.toString() || '0' })) || []);
     setSpecificBankInput('');
     setSpecificInstallmentsInput('');
@@ -706,6 +727,19 @@ export default function RegrasBanco() {
                   </div>
                 )}
 
+                {bank.excludedBenefits && bank.excludedBenefits.length > 0 && (
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Bloqueio p/ Benefícios:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {bank.excludedBenefits.map(b => (
+                        <span key={b} className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                          {b}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {bank.specificInstallmentRules && bank.specificInstallmentRules.length > 0 && (
                   <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Porta com regras específicas:</p>
@@ -794,7 +828,7 @@ export default function RegrasBanco() {
                         onChange={e => updateBank(bank.id, { sumBalanceAndTroco: e.target.checked })}
                         className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" 
                       />
-                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Somar Saldo Mínimo + Troco Mínimo</span>
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Somar Saldo Mínimo + Troco</span>
                     </label>
                   </div>
                 )}
@@ -1147,7 +1181,7 @@ export default function RegrasBanco() {
                         onChange={e => setSumBalanceAndTroco(e.target.checked)}
                         className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary" 
                       />
-                      <span className="text-[10px] font-medium text-slate-700 dark:text-slate-300">Somar Saldo Mínimo + Troco Mínimo na validação</span>
+                      <span className="text-[10px] font-medium text-slate-700 dark:text-slate-300">Somar Saldo Mínimo + Troco na validação</span>
                     </label>
                   </div>
                 </div>
@@ -1183,6 +1217,36 @@ export default function RegrasBanco() {
                       className="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-4 py-1.5 rounded-lg text-xs font-medium transition-colors"
                     >
                       Adicionar
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-medium text-slate-500">Códigos de Benefício que NÃO atende</label>
+                  <div className="flex flex-wrap gap-1.5 mb-1.5">
+                    {excludedBenefits.map(benefit => (
+                      <span key={benefit} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[10px] font-medium border border-red-200 dark:border-red-800">
+                        {benefit}
+                        <button type="button" onClick={() => handleRemoveExcludedBenefit(benefit)} className="hover:text-red-900 dark:hover:text-red-200">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <input 
+                      type="text" 
+                      value={excludedBenefitInput} 
+                      onChange={e => setExcludedBenefitInput(e.target.value)} 
+                      onKeyDown={handleAddExcludedBenefit}
+                      className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" 
+                      placeholder="Ex: 32 (Aperte Enter)" 
+                    />
+                    <button 
+                      type="button" 
+                      onClick={handleAddExcludedBenefit}
+                      className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      Selo
                     </button>
                   </div>
                 </div>
@@ -1385,7 +1449,7 @@ export default function RegrasBanco() {
                             <label className="text-[8px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 truncate">Nova Taxa (%)</label>
                             <button 
                               type="button"
-                              onClick={() => handleTabelaChange(index, 'taxaDiferencial', portabilityRate)}
+                              onClick={() => handleTabelaChange(index, 'taxaDiferencial', novaTaxaReferencia)}
                               className="ml-auto text-[6px] font-black bg-emerald-500/10 text-emerald-600 px-1 rounded border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-0.5"
                               title="Importar taxa de portabilidade do banco"
                             >
