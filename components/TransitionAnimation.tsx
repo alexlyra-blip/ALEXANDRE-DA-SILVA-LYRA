@@ -213,14 +213,15 @@ export default function TransitionAnimation({ onComplete, availableBanks }: { on
                   animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', rotateY: 0 }}
                   exit={{ opacity: 0, scale: 0.8, filter: 'blur(10px)', rotateY: -90 }}
                   transition={{ duration: 0.8, ease: [0.23, 1, 0.32, 1] }}
-                  className="relative w-full h-full flex items-center justify-center"
+                  className="absolute inset-0 flex items-center justify-center p-2"
                 >
-                  <div className="relative w-full h-full">
+                  <div className="relative w-full h-full rounded-full overflow-hidden">
                     <Image 
                       src={banks[currentBankIdx].logo} 
                       alt={banks[currentBankIdx].name} 
                       fill 
                       className="object-cover" 
+                      sizes="200px"
                       referrerPolicy="no-referrer"
                     />
                   </div>

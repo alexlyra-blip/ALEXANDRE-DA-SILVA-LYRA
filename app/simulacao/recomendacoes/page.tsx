@@ -32,8 +32,11 @@ interface Offer {
   valorTroco: number;
   saldoDevedor: number;
   novaTaxaPortabilidade?: number;
+  novaTaxaPortTarget?: number;
   taxaPonderada?: number;
   taxaBase?: number;
+  ajusteTaxaPonderada?: number;
+  useTaxaPonderada?: boolean;
   originalRateCalculated?: number;
   priority?: number;
   rules?: string[][];
@@ -58,7 +61,7 @@ export default function Recomendacoes() {
   const [filterReasons, setFilterReasons] = useState<{bankName: string, reason: string, tabela?: string}[]>([]);
   const [showFilterLog, setShowFilterLog] = useState(false);
   const [isAISummarizing, setIsAISummarizing] = useState(false);
-  const { banks, generalRules, promotoraPriorities, isLoaded } = useRules();
+  const { banks, generalRules, promotoraPriorities, promotoraInstallments, isLoaded } = useRules();
   const { profile } = useAuth();
   const savedSimulationId = useRef<string | null>(null);
 
@@ -164,27 +167,25 @@ export default function Recomendacoes() {
   }, [isSimulatorOpen]); // Re-check when simulator closes/opens
 
   // 2. Calculate offers when data or rules change
-  const lastCalculatedOffersRef = useRef<string>('');
   const lastSimulationTimeRef = useRef<number>(0);
+  const calculationsCount = useRef<number>(0);
 
   useEffect(() => {
-    if (!isLoaded || !profile || !simData || !banks.length) return;
-
-    // Rate limiting: Don't run simulation more than once per 500ms
-    const nowTime = Date.now();
-    if (nowTime - lastSimulationTimeRef.current < 500) {
+    // We only wait for isLoaded and simData. Profile is optional for basic calculation but good to have.
+    if (!isLoaded || !simData || !banks.length) {
       return;
     }
-    lastSimulationTimeRef.current = nowTime;
 
-    console.log("--- CALCULATING OFFERS ---");
-    console.log("Total banks in rules:", banks.length);
-    console.log("Simulation Data:", simData);
+    calculationsCount.current++;
+    console.log(`[SIMULATION #${calculationsCount.current}] CALCULATING OFFERS -`, new Date().toLocaleTimeString());
+    console.log("Banks version (last updated):", new Date(Math.max(...banks.map(b => (b as any).updatedAt || 0))).toLocaleTimeString());
+    console.log("Rules being used:", banks.map(b => ({ name: b.name, id: b.id, updatedAt: (b as any).updatedAt })));
     
     if (!profile) {
-      console.log("Profile not loaded");
-      return;
+      console.log("Profile not yet loaded, using fallback roles");
     }
+    
+    console.log("Simulation Data:", simData);
 
     const {
       id: simulationId,
@@ -270,6 +271,9 @@ export default function Recomendacoes() {
         console.log(`[${bank.name}] ${tabela ? `- Tabela ${tabela}: ` : ''}${reason}`);
       };
 
+      // 0. General Cliente 60+ status
+      const effectiveIs60Mais = isCliente60Mais != null ? isCliente60Mais : (idade >= 60);
+
       // 0. Active Filter
       if (bank.isActive === false) return;
 
@@ -306,7 +310,7 @@ export default function Recomendacoes() {
         const ageLimit = bank.invalidezAgeYears || 0;
         const requiredMonths = (bank.minBenefitTimeYears || 0) * 12 + (bank.minBenefitTimeMonths || 0);
         
-        const isOver60AndAccepted = bank.acceptsOver60Invalidez && idade >= 60;
+        const isOver60AndAccepted = bank.acceptsOver60Invalidez && effectiveIs60Mais;
 
         if (!isOver60AndAccepted) {
           // Se o banco marcou "Aceita > 60" mas não configurou idade mínima alternativa, e o cliente tem < 60, bloqueia.
@@ -364,7 +368,6 @@ export default function Recomendacoes() {
       }
 
       // 4.1 60 Mais
-      const effectiveIs60Mais = isCliente60Mais != null ? isCliente60Mais : (idade >= 60);
       if (effectiveIs60Mais && bank.accepts60Mais === false) {
         log(`filtered: Não aceita 60+`);
         return;
@@ -397,15 +400,21 @@ export default function Recomendacoes() {
       // 7. Quantidade de parcelas pagas
       let requiredInstallments = 0;
       
-      // Check specific rule first
+      // Check specific rule first (from Bank Dest configuration)
       const specificRule = bank.specificInstallmentRules?.find((r: any) => checkBankMatch(r.bank, bancoAtual));
       if (specificRule) {
         requiredInstallments = specificRule.installments;
       } else {
-        // Check general rule
-        const generalRule = generalRules.find((r: any) => checkBankMatch(r.banco, bancoAtual));
-        if (generalRule) {
-          requiredInstallments = generalRule.parcelasAceitas;
+        // Check promotora-specific installment rule for this origin bank
+        const pInstallment = promotoraInstallments[bancoAtual];
+        if (pInstallment !== undefined && pInstallment > 0) {
+          requiredInstallments = pInstallment;
+        } else {
+          // Check global system general rule
+          const generalRule = generalRules.find((r: any) => checkBankMatch(r.banco, bancoAtual));
+          if (generalRule) {
+            requiredInstallments = generalRule.parcelasAceitas;
+          }
         }
       }
 
@@ -479,48 +488,64 @@ export default function Recomendacoes() {
           const bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
           const bankPortRate = parseRate(bank.portabilityRate);
           
-          // PRIORIDADE ROBUSTA: 
-          // Coletamos todas as taxas alvo configuradas e usamos a MENOR (mais agressiva)
-          // Isso resolve o problema onde tabelas antigas ficaram com 1.85 enquanto o banco baixou para 1.52.
-          const candidates = [tDiferencial, bankNovaTaxaRef, bankPortRate].filter(v => v > 0);
-          let taxaParaCalculo = candidates.length > 0 ? Math.min(...candidates) : 0;
+          // --- CORREÇÃO CÁLCULO TAXA PONDERADA ---
+          // 1. Calcular a "NOVA TAXA PORT." (Target) sem considerar o piso da Taxa Mínima ainda
+          const targetCandidates = [tDiferencial, bankNovaTaxaRef].filter(v => v > 0);
+          let novaTaxaPortTarget = targetCandidates.length > 0 ? Math.min(...targetCandidates) : (originalRate + bankAdjustment);
           
-          if (taxaParaCalculo <= 0) {
-            taxaParaCalculo = originalRate + bankAdjustment;
-          }
-          
-          // Debugging
-          if (bank.name.toLowerCase().includes('digio') || bank.name.toLowerCase().includes('dibio')) {
-             console.log(`[DEBUG RATES ROBUSTO] Banco: ${bank.name}, Tabela: ${tabela.nome}`);
-             console.log(`[DEBUG RATES ROBUSTO]   Candidates (tDif, bRef, bPort):`, [tDiferencial, bankNovaTaxaRef, bankPortRate]);
-             console.log(`[DEBUG RATES ROBUSTO]   taxaParaCalculo Final: ${taxaParaCalculo}`);
-          }
-
-          // Regra: Taxa Mínima Port (portabilityRate)
-          if (bank.portabilityRate && bank.portabilityRate > 0 && taxaParaCalculo < bank.portabilityRate) {
-            log(`filtered by min portability rate: ${taxaParaCalculo.toFixed(2)} < ${bank.portabilityRate.toFixed(2)}`, tabela.nome);
+          // 2. Validação da Taxa Mínima do Banco (Piso)
+          // Regra: Se a "Nova Taxa Port. (Target)" for menor que a "Taxa Mínima" do banco, o banco não fica disponível.
+          let taxaParaCalculo = novaTaxaPortTarget;
+          if (bankPortRate > 0 && novaTaxaPortTarget < bankPortRate) {
+            log(`FILTRADO POR TAXA MÍNIMA: Nova Taxa Port. (${novaTaxaPortTarget.toFixed(2)}%) < Taxa Mínima do Banco (${bankPortRate.toFixed(2)}%)`, tabela.nome);
             return;
           }
-
-          // Regra de Cálculo Solicitada:
-          // 1. Taxa Ponderada = ((Taxa Original [originalRate] + Nova Taxa Portabilidade [taxaParaCalculo]) / 2) com 2 casas decimais
-          // 2. Resultado = Taxa Ponderada + Ajuste Tabela
           
+          // 3. Calcular a TAXA PONDERADA para o Filtro da Mesa
+          // Regra Correta: (TAXA ATUAL + NOVA TAXA PORT [sem o piso]) / 2 + AJUSTE
           const orig = Number(originalRate.toFixed(2));
-          const port = Number(taxaParaCalculo.toFixed(2));
+          const portTarget = Number(novaTaxaPortTarget.toFixed(2));
           
-          const taxaPonderadaBase = Math.round(((orig + port) / 2) * 100) / 100;
+          const taxaPonderadaBase = Math.round(((orig + portTarget) / 2) * 100) / 100;
           const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));
           const taxaPonderadaFinal = Math.round((taxaPonderadaBase + ajusteTabela) * 100) / 100;
           
           const bUseTaxaPonderada = Boolean(tabela.useTaxaPonderada);
-          if (bUseTaxaPonderada === true && taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
-            log(`filtered by weighted rate: ${taxaTabelaValida.toFixed(2)} > ${taxaPonderadaFinal.toFixed(2)}`, tabela.nome);
-            return;
+          
+          // PRIORIDADE ROBUSTA DEBUG
+          if (bank.name.toLowerCase().includes('digio') || bank.name.toLowerCase().includes('dibio') || bank.name.toLowerCase().includes('c6')) {
+             console.log(`[DEBUG RATES] Banco: ${bank.name}, Tabela: ${tabela.nome}`);
+             console.log(`   Taxa Atual (Orig): ${orig}%`);
+             console.log(`   Nova Taxa Port (Target): ${portTarget}%`);
+             console.log(`   Taxa Mínima (Piso): ${bankPortRate}%`);
+             console.log(`   Taxa p/ Cálculo Final: ${taxaParaCalculo}%`);
+             console.log(`   Taxa Ponderada (Base): ${taxaPonderadaBase}%`);
+             console.log(`   Ajuste Ponderada: ${ajusteTabela}%`);
+             console.log(`   Taxa Ponderada Final: ${taxaPonderadaFinal}%`);
+          }
+
+          // CRITICAL FILTER: As tabelas só devem ser ofertadas se a taxa base da tabela for menor ou igual a 'Taxa Ponderada'
+          // weighted rate is the maximum allowed table rate in this mode.
+          if (bUseTaxaPonderada === true) {
+            if (taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
+              log(`FILTRADO POR TAXA PONDERADA: Taxa Tabela (${taxaTabelaValida.toFixed(2)}%) > Taxa Ponderada (${taxaPonderadaFinal.toFixed(2)}%)`, tabela.nome);
+              return;
+            }
           }
           
+          // Final portability rate to be used in installments calculation
+          const finalNovaTaxaPort = taxaParaCalculo;
+
           const taxaPonderada = taxaPonderadaFinal;
           const rules: string[][] = [];
+
+          // POPULAR REGRAS/SELOS VISUAIS
+          if (bank.acceptsLOAS) rules.push(['Aceita LOAS']);
+          if (bank.acceptsIlliterate) rules.push(['Aceita Analfabeto']);
+          if (bank.acceptsInvalidez !== false) rules.push(['Aceita Invalidez']);
+          if (bank.accepts60Mais) rules.push(['Aceita 60+']);
+          if (bank.sumBalanceAndTroco || bank.sumSaldoTroco) rules.push(['Soma Saldo+Troco']);
+          if (tabela.useTaxaPonderada) rules.push(['Taxa Ponderada Mesa']);
 
           // Regra final de elegibilidade básica
           if (valorTroco <= 0) {
@@ -538,6 +563,7 @@ export default function Recomendacoes() {
               valorTroco,
               saldoDevedor,
               novaTaxaPortabilidade: taxaParaCalculo,
+              novaTaxaPortTarget: portTarget,
               taxaPonderada,
               originalRateCalculated: orig,
               taxaBase: taxaTabelaValida,
@@ -547,7 +573,8 @@ export default function Recomendacoes() {
               subConvenio: bank.subConvenio,
               tabelasCount: bank.tabelas.length,
               prazoRefinPort: tabela.prazoRefinPort,
-              ajusteTaxaPonderada: ajusteTabela
+              ajusteTaxaPonderada: ajusteTabela,
+              useTaxaPonderada: bUseTaxaPonderada
             });
         });
       } else {
@@ -581,6 +608,17 @@ export default function Recomendacoes() {
     
     // Check if offers actually changed before updating state
     if (JSON.stringify(calculatedOffers) !== JSON.stringify(allCalculatedOffers)) {
+        console.log(`[SIMULATION #${calculationsCount.current}] UPDATING OFFERS STATE - Found ${calculatedOffers.length} offers`);
+        if (calculatedOffers.length > 0) {
+          console.table(calculatedOffers.slice(0, 5).map(o => ({
+            Banco: o.name,
+            Tabela: o.tabela,
+            Troco: o.valorTroco.toFixed(2),
+            Coef: (o.valorParcela / o.valorContrato).toFixed(6),
+            TaxaPort: o.novaTaxaPortabilidade,
+            TaxaPond: o.taxaPonderada
+          })));
+        }
         setAllCalculatedOffers(calculatedOffers);
     }
     
@@ -1191,6 +1229,16 @@ export default function Recomendacoes() {
                             Saldo Dev.: <span className="text-slate-900 dark:text-white font-bold">{formatCurrency(currentOffer.saldoDevedor)}</span>
                           </p>
                         </div>
+                        {currentOffer.taxaBase !== undefined && (
+                          <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                            <Percent className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <p className="text-xs font-medium truncate">
+                              Taxa do Refin: <span className="text-slate-900 dark:text-white font-bold">
+                                {currentOffer.taxaBase.toFixed(2)}%
+                              </span>
+                            </p>
+                          </div>
+                        )}
                         {currentOffer.novaTaxaPortabilidade !== undefined && (
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                             <Percent className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -1199,28 +1247,21 @@ export default function Recomendacoes() {
                             </p>
                           </div>
                         )}
-                        {currentOffer.novaTaxaPortabilidade !== undefined && currentOffer.originalRateCalculated !== undefined && (
-                          <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                            <Calculator className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <p className="text-xs font-medium truncate">
-                              Taxa Ponderada Prev.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.taxaPonderada.toFixed(2)}%</span>
-                              <span className="text-[9px] ml-1 block opacity-70">
-                                ({currentOffer.originalRateCalculated.toFixed(2)}% + {currentOffer.novaTaxaPortabilidade.toFixed(2)}%)/2 
-                                {currentOffer.ajusteTaxaPonderada !== undefined && currentOffer.ajusteTaxaPonderada !== 0 && (
-                                  currentOffer.ajusteTaxaPonderada > 0 
-                                    ? `+ ${currentOffer.ajusteTaxaPonderada.toFixed(2).replace('.', ',')}` 
-                                    : `- ${Math.abs(currentOffer.ajusteTaxaPonderada).toFixed(2).replace('.', ',')}`
-                                )}
-                              </span>
-                            </p>
-                          </div>
-                        )}
-                        {currentOffer.taxaBase !== undefined && (
-                          <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                            <Percent className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <p className="text-xs font-medium truncate">
-                              Taxa do Refin: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.taxaBase.toFixed(2)}%</span>
-                            </p>
+                        {profile?.role === 'admin' && currentOffer.useTaxaPonderada && currentOffer.novaTaxaPortabilidade !== undefined && currentOffer.originalRateCalculated !== undefined && (
+                          <div className="flex flex-col gap-1 col-span-2 mt-1 p-2 bg-primary/5 rounded-lg border border-primary/10">
+                            <div className="flex items-center gap-1.5 text-primary">
+                              <Calculator className="w-3.5 h-3.5 shrink-0" />
+                              <p className="text-[10px] font-bold uppercase">Cálculo Taxa Ponderada (Mesa)</p>
+                            </div>
+                             <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium tracking-tight">
+                               ({currentOffer.originalRateCalculated.toFixed(2)}% + {currentOffer.novaTaxaPortTarget?.toFixed(2) || currentOffer.novaTaxaPortabilidade.toFixed(2)}%)/2 
+                               {currentOffer.ajusteTaxaPonderada !== undefined && currentOffer.ajusteTaxaPonderada !== 0 && (
+                                 currentOffer.ajusteTaxaPonderada > 0 
+                                   ? ` + ${currentOffer.ajusteTaxaPonderada.toFixed(2).replace('.', ',')}` 
+                                   : ` - ${Math.abs(currentOffer.ajusteTaxaPonderada).toFixed(2).replace('.', ',')}`
+                               )}
+                               <span className="font-bold text-primary ml-1">= {currentOffer.taxaPonderada.toFixed(2)}%</span>
+                             </p>
                           </div>
                         )}
                       </motion.div>

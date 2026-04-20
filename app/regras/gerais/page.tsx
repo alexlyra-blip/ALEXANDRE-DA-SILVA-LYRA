@@ -10,7 +10,14 @@ import Image from 'next/image';
 export default function RegrasGeraisPage() {
   const { profile } = useAuth();
   const router = useRouter();
-  const { generalRules, addGeneralRule, updateGeneralRule, banks } = useRules();
+  const { 
+    generalRules, 
+    banks, 
+    promotoraPriorities, 
+    promotoraInstallments, 
+    updatePromotoraPriority, 
+    updatePromotoraInstallment 
+  } = useRules();
 
   const allOriginBanks = Array.from(new Set([
     "121 - AGIBANK", "250 - BCV", "025 - BANCO ALFA", "233 - BANCO CIFRA", "001 - BANCO DO BRASIL",
@@ -51,20 +58,7 @@ export default function RegrasGeraisPage() {
     if (!priorityBankSelection || !priorityValue) return;
     setIsSaving(true);
     try {
-      const selectedBankName = banks.find(b => b.id === priorityBankSelection)?.name || priorityBankSelection;
-      const existingRule = generalRules.find(r => r.banco === selectedBankName);
-      
-      if (existingRule) {
-        await updateGeneralRule(existingRule.id, {
-          priority: parseInt(priorityValue) || 0
-        });
-      } else {
-        await addGeneralRule({
-          banco: selectedBankName,
-          parcelasAceitas: 0,
-          priority: parseInt(priorityValue) || 0
-        });
-      }
+      await updatePromotoraPriority(priorityBankSelection, parseInt(priorityValue) || 0);
       setPriorityBankSelection('');
       setPriorityValue('');
     } catch (e) {
@@ -78,20 +72,7 @@ export default function RegrasGeraisPage() {
     if (!installmentsBankSelection || !installmentsValue) return;
     setIsSaving(true);
     try {
-      const selectedBankName = installmentsBankSelection;
-      const existingRule = generalRules.find(r => r.banco === selectedBankName);
-      
-      if (existingRule) {
-        await updateGeneralRule(existingRule.id, {
-          parcelasAceitas: parseInt(installmentsValue) || 0
-        });
-      } else {
-        await addGeneralRule({
-          banco: selectedBankName,
-          parcelasAceitas: parseInt(installmentsValue) || 0,
-          priority: 0
-        });
-      }
+      await updatePromotoraInstallment(installmentsBankSelection, parseInt(installmentsValue) || 0);
       setInstallmentsBankSelection('');
       setInstallmentsValue('');
     } catch (e) {
@@ -101,20 +82,25 @@ export default function RegrasGeraisPage() {
     }
   };
 
-  const getBankAvatar = (bancoName: string) => {
+  const getBankInfo = (bankId: string) => {
+    return banks.find(b => b.id === bankId);
+  };
+
+  const getBankAvatarByName = (bancoName: string) => {
     const bank = banks.find(b => b.name === bancoName);
     return bank?.logoUrl || null;
   };
 
-  const getBankConvenio = (bancoName: string) => {
-    const bank = banks.find(b => b.name === bancoName);
-    return bank?.convenio || 'N/A';
-  };
-
   if (!profile) return null;
 
-  const rulesWithPriority = generalRules.filter(r => r.priority !== undefined && r.priority > 0).sort((a, b) => (a.priority || 0) - (b.priority || 0));
-  const rulesWithInstallments = generalRules.filter(r => r.parcelasAceitas && r.parcelasAceitas > 0);
+  // Render Priorities List
+  const priorityEntries = Object.entries(promotoraPriorities)
+    .filter(([_, val]) => val > 0)
+    .sort((a, b) => a[1] - b[1]);
+
+  // Render Installments List
+  const installmentEntries = Object.entries(promotoraInstallments)
+    .filter(([_, val]) => val > 0);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -174,37 +160,40 @@ export default function RegrasGeraisPage() {
               </div>
 
               <div className="space-y-2 mt-4">
-                {rulesWithPriority.length === 0 ? (
+                {priorityEntries.length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-4">Nenhuma prioridade configurada.</p>
                 ) : (
-                  rulesWithPriority.map(rule => (
-                    <div key={rule.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                      <div className="flex items-center gap-3">
-                        <div className="size-8 rounded-full overflow-hidden bg-white shrink-0 relative border border-slate-200">
-                          {getBankAvatar(rule.banco) ? (
-                            <Image src={getBankAvatar(rule.banco)!} alt={rule.banco} fill className="object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            <Landmark className="w-4 h-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-400" />
-                          )}
+                  priorityEntries.map(([bankId, prio]) => {
+                    const bank = getBankInfo(bankId);
+                    return (
+                      <div key={bankId} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center gap-3">
+                          <div className="size-8 rounded-full overflow-hidden bg-white shrink-0 relative border border-slate-200">
+                            {bank?.logoUrl ? (
+                              <Image src={bank.logoUrl} alt={bank.name} fill className="object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <Landmark className="w-4 h-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-400" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold leading-tight">{bank?.name || 'Banco Removido'}</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{bank?.convenio || 'N/A'}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold leading-tight">{rule.banco}</p>
-                          <p className="text-[10px] text-slate-500 font-medium">{getBankConvenio(rule.banco)}</p>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 px-2 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
+                            Prio: {prio}
+                          </span>
+                          <button 
+                            onClick={() => updatePromotoraPriority(bankId, 0)}
+                            className="text-slate-400 hover:text-red-500 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 px-2 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
-                          Prio: {rule.priority}
-                        </span>
-                        <button 
-                          onClick={() => updateGeneralRule(rule.id, { priority: 0 })}
-                          className="text-slate-400 hover:text-red-500 transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -251,15 +240,15 @@ export default function RegrasGeraisPage() {
               </div>
 
               <div className="flex flex-wrap gap-2 mt-4 text-xs font-bold">
-                {rulesWithInstallments.length === 0 ? (
+                {installmentEntries.length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-4 w-full">Nenhuma regra de parcelas configurada.</p>
                 ) : (
-                  rulesWithInstallments.map(rule => (
-                    <span key={rule.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400">
-                      {rule.banco}: {rule.parcelasAceitas} parcelas
+                  installmentEntries.map(([bankName, inst]) => (
+                    <span key={bankName} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400">
+                      {bankName}: {inst} parcelas
                       <button 
                         type="button" 
-                        onClick={() => updateGeneralRule(rule.id, { parcelasAceitas: 0 })} 
+                        onClick={() => updatePromotoraInstallment(bankName, 0)} 
                         className="ml-1 hover:text-red-500 transition-colors"
                       >
                         <X className="w-3 h-3" />

@@ -395,12 +395,14 @@ export const getUsersWithFilters = async (
 // Write methods
 export const saveBankRule = async (rule: any) => {
   const { id, ...data } = rule;
+  const now = Date.now();
+  const dataWithTimestamp = { ...data, updatedAt: now };
   
   // Try Supabase
   try {
     const { error } = await supabase
       .from('bank_rules')
-      .upsert({ id: id || undefined, ...data });
+      .upsert({ id: id || undefined, ...dataWithTimestamp });
     if (error) throw error;
     console.log("DataService: Saved bank rule to Supabase");
   } catch (e: any) {
@@ -411,9 +413,9 @@ export const saveBankRule = async (rule: any) => {
 
   // Also save to Firestore for now (dual-write)
   if (id) {
-    await updateDoc(doc(db, 'bankRules', id), data);
+    await updateDoc(doc(db, 'bankRules', id), dataWithTimestamp);
   } else {
-    await addDoc(collection(db, 'bankRules'), data);
+    await addDoc(collection(db, 'bankRules'), dataWithTimestamp);
   }
 };
 

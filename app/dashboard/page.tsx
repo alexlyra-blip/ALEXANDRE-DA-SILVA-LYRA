@@ -247,7 +247,7 @@ export default function Dashboard() {
         userCounts[sim.userId].count += 1;
       }
     });
-    const topUsers = Object.values(userCounts).sort((a, b) => b.count - a.count).slice(0, 5);
+    const topUsers = Object.values(userCounts).sort((a, b) => b.count - a.count).slice(0, 10);
 
     // Convênio colors mapping
     const CONVENIO_COLORS: Record<string, string> = {
@@ -739,45 +739,47 @@ export default function Dashboard() {
 
           {/* Sidebar Section */}
           <div className="space-y-8">
-            {/* Top Users */}
-            <div className="professional-card p-6 dark:bg-slate-800">
-              <h3 className="font-black text-lg mb-6 flex items-center gap-2">
-                <Users className="w-5 h-5 text-secondary" />
-                Top 5 Corretores
-              </h3>
-              <div className="space-y-4">
-                {stats.topUsers.length > 0 ? (
-                  stats.topUsers.map((user, idx) => (
-                    <div key={idx} className="flex items-center justify-between group">
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <PromotoraAvatar logoUrl={user.avatar} name={user.name} className="size-10 border-2 border-white dark:border-slate-800 shadow-sm" />
-                          <div className={`absolute -top-1 -left-1 size-5 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-sm ${
-                            idx === 0 ? 'bg-amber-400' : idx === 1 ? 'bg-slate-400' : idx === 2 ? 'bg-amber-700' : 'bg-slate-200 text-slate-600'
-                          }`}>
-                            {idx + 1}
+            {/* Top Users - Hidden for corretores/vendedores */}
+            {profile.role !== 'corretor' && profile.role !== 'vendedor' && (
+              <div className="professional-card p-6 dark:bg-slate-800">
+                <h3 className="font-black text-lg mb-6 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-secondary" />
+                  Top Corretores
+                </h3>
+                <div className="space-y-4">
+                  {stats.topUsers.length > 0 ? (
+                    stats.topUsers.map((user, idx) => (
+                      <div key={idx} className="flex items-center justify-between group">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <PromotoraAvatar logoUrl={user.avatar} name={user.name} className="size-10 border-2 border-white dark:border-slate-800 shadow-sm" />
+                            <div className={`absolute -top-1 -left-1 size-5 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-sm ${
+                              idx === 0 ? 'bg-amber-400' : idx === 1 ? 'bg-slate-400' : idx === 2 ? 'bg-amber-700' : 'bg-slate-200 text-slate-600'
+                            }`}>
+                              {idx + 1}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{user.name}</p>
+                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">{user.count} simulações</p>
                           </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{user.name}</p>
-                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">{user.count} simulações</p>
+                        <div className="h-1 w-12 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-primary" 
+                            style={{ width: `${(user.count / (stats.topUsers[0]?.count || 1)) * 100}%` }} 
+                          />
                         </div>
                       </div>
-                      <div className="h-1 w-12 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-primary" 
-                          style={{ width: `${(user.count / (stats.topUsers[0]?.count || 1)) * 100}%` }} 
-                        />
-                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-slate-400 text-sm italic">
+                      Nenhum corretor ativo no período.
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-slate-400 text-sm italic">
-                    Nenhum corretor ativo no período.
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Donut Chart - Mix por Convênio */}
             <div className="professional-card p-6 dark:bg-slate-800">

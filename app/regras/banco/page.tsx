@@ -685,10 +685,19 @@ export default function RegrasBanco() {
                       )}
                     </div>
                   </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 px-4 py-3 flex gap-4 text-[11px] font-medium text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                <div className="bg-slate-50 dark:bg-slate-900/50 px-4 py-3 flex flex-wrap gap-4 text-[11px] font-medium text-slate-500 border-b border-slate-100 dark:border-slate-800">
                   <span className="flex items-center gap-1">
                     <User className="w-3 h-3" /> {bank.minAge}-{bank.maxAge} anos
                   </span>
+                  {bank.accepts60Mais ? (
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-500" /> 60+
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-red-500">
+                      <X className="w-3 h-3" /> Não aceita 60+
+                    </span>
+                  )}
                   {bank.acceptsLOAS ? (
                     <span className="flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3 text-emerald-500" /> LOAS

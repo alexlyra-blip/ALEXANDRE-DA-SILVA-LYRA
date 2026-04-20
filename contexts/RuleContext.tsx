@@ -61,6 +61,10 @@ export interface PromotoraPriorities {
   [bankId: string]: number;
 }
 
+export interface PromotoraInstallments {
+  [bankId: string]: number;
+}
+
 export interface GeneralRule {
   id: string;
   banco: string;
@@ -72,6 +76,7 @@ interface RuleContextType {
   banks: BankRule[];
   generalRules: GeneralRule[];
   promotoraPriorities: PromotoraPriorities;
+  promotoraInstallments: PromotoraInstallments;
   isLoaded: boolean;
   addBank: (bank: Omit<BankRule, 'id'>) => Promise<void>;
   updateBank: (id: string, bank: Partial<BankRule>) => Promise<void>;
@@ -80,6 +85,7 @@ interface RuleContextType {
   deleteBank: (id: string) => Promise<void>;
   deleteGeneralRule: (id: string) => Promise<void>;
   updatePromotoraPriority: (bankId: string, priority: number) => Promise<void>;
+  updatePromotoraInstallment: (bankId: string, installments: number) => Promise<void>;
 }
 
 const RuleContext = createContext<RuleContextType | undefined>(undefined);
@@ -91,6 +97,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
   const [banks, setBanks] = useState<BankRule[]>([]);
   const [generalRules, setGeneralRules] = useState<GeneralRule[]>([]);
   const [promotoraPriorities, setPromotoraPriorities] = useState<PromotoraPriorities>({});
+  const [promotoraInstallments, setPromotoraInstallments] = useState<PromotoraInstallments>({});
   const [isLoaded, setIsLoaded] = useState(false);
   const { user, profile, setQuotaExceeded } = useAuth();
 
@@ -99,6 +106,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
       setBanks([]);
       setGeneralRules([]);
       setPromotoraPriorities({});
+      setPromotoraInstallments({});
       setIsLoaded(false);
     };
 
@@ -106,10 +114,6 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
       resetRules();
       return;
     }
-
-    const profileUid = profile?.uid;
-    const profileRole = profile?.role;
-    const profileCreatedBy = profile?.createdBy;
 
     const fetchRules = async () => {
       // Clear cache to force fresh fetch
@@ -121,26 +125,18 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
         const banksQuery = query(collection(db, 'bankRules'));
         const unsubscribeBanks = onSnapshot(banksQuery, (snapshot) => {
           const banksData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BankRule));
-          console.log("RuleContext: Received banks from Firestore:", banksData.length);
           
-          // Aggressive deduplication by Name, Convenio and Sub-Convenio
-          // This prevents duplicate cards if the database has multiple entries for the same bank
-          const uniqueBanks: BankRule[] = [];
-          const seenKeys = new Set<string>();
-          
-          // Sort by ID to ensure consistent selection if duplicates exist
-          const sortedBanks = [...banksData].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
-          
-          sortedBanks.forEach(bank => {
+          // Aggressive deduplication
+          const seenKeys = new Map<string, BankRule>();
+          banksData.forEach(bank => {
             const key = `${bank.name}-${bank.convenio}-${bank.subConvenio || ''}`.toUpperCase();
-            if (!seenKeys.has(key)) {
-              uniqueBanks.push(bank);
-              seenKeys.add(key);
-            } else {
-              console.warn(`RuleContext: Duplicate bank filtered: ${key} (ID: ${bank.id})`);
+            const existing = seenKeys.get(key);
+            if (!existing || ((bank as any).updatedAt || 0) > ((existing as any).updatedAt || 0) || (!(bank as any).updatedAt && !(existing as any).updatedAt && bank.id.localeCompare(existing.id) > 0)) {
+              seenKeys.set(key, bank);
             }
           });
 
+          const uniqueBanks = Array.from(seenKeys.values());
           setBanks(uniqueBanks);
           safeLocalStorageSet('rules_banks', JSON.stringify({
             data: uniqueBanks,
@@ -166,9 +162,24 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
           console.error("RuleContext: Error fetching general rules:", error);
         });
 
+        // FETCH SCOPED SETTINGS
+        const promotoraId = profile?.role === 'admin' ? 'admin' : (profile?.role === 'promotora' ? profile?.uid : profile?.createdBy);
+        let unsubscribeSettings = () => {};
+        
+        if (promotoraId) {
+          unsubscribeSettings = onSnapshot(doc(db, 'settings', promotoraId), (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              if (data.bankPriorities) setPromotoraPriorities(data.bankPriorities);
+              if (data.bankInstallments) setPromotoraInstallments(data.bankInstallments);
+            }
+          });
+        }
+
         return () => {
           unsubscribeBanks();
           unsubscribeGeneral();
+          unsubscribeSettings();
         };
       };
 
@@ -198,6 +209,23 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
       setPromotoraPriorities(newPriorities);
     } catch (error) {
       console.error("Error updating promotora priority:", error);
+      throw error;
+    }
+  };
+
+  const updatePromotoraInstallment = async (bankId: string, installments: number) => {
+    if (!profile) return;
+    const promotoraId = profile.role === 'admin' ? 'admin' : (profile.role === 'promotora' ? profile.uid : profile.createdBy);
+    if (!promotoraId) return;
+
+    try {
+      const newInstallments = { ...promotoraInstallments, [bankId]: installments };
+      await setDoc(doc(db, 'settings', promotoraId), {
+        bankInstallments: newInstallments
+      }, { merge: true });
+      setPromotoraInstallments(newInstallments);
+    } catch (error) {
+      console.error("Error updating promotora installment:", error);
       throw error;
     }
   };
@@ -267,6 +295,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
       banks, 
       generalRules, 
       promotoraPriorities,
+      promotoraInstallments,
       isLoaded,
       addBank, 
       updateBank, 
@@ -274,7 +303,8 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
       updateGeneralRule, 
       deleteBank, 
       deleteGeneralRule,
-      updatePromotoraPriority
+      updatePromotoraPriority,
+      updatePromotoraInstallment
     }}>
       {children}
     </RuleContext.Provider>

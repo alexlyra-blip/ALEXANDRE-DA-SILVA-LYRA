@@ -121,13 +121,17 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [isAnalfabeto, setIsAnalfabeto] = useState<boolean | null>(null);
   const [isCliente60Mais, setIsCliente60Mais] = useState<boolean | null>(null);
 
-  const showDataConcessao = convenio === 'INSS' && ['04', '32', '92'].includes(codigoBeneficio) && (parseInt(idade) < 60 || isNaN(parseInt(idade)));
+  const effectiveIs60MaisForUI = isCliente60Mais !== null ? isCliente60Mais : (parseInt(idade) >= 60);
+  const showDataConcessao = convenio === 'INSS' && ['04', '32', '92'].includes(codigoBeneficio) && !effectiveIs60MaisForUI;
   const show60Mais = parseInt(idade) >= 60;
 
   const handleIdadeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (val.length <= 2) {
       setIdade(val);
+      if (parseInt(val) < 60) {
+        setIsCliente60Mais(null);
+      }
     }
   };
 
@@ -237,6 +241,12 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
 
   const handleSimulate = () => {
     if (isInvalidCalculation) return;
+
+    if (parseInt(idade) >= 60 && isCliente60Mais === null) {
+      alert("Por favor, informe se o cliente é 60+.");
+      return;
+    }
+
     const valorParcelaParsed = parseCurrency(valorParcela);
     if (profile?.limiteCredito && valorParcelaParsed > profile.limiteCredito) {
       alert(`Valor da parcela excede o limite de crédito.`);
@@ -348,6 +358,16 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                   <button type="button" onClick={() => setIsAnalfabeto(false)} className={`px-4 py-1.5 rounded-lg text-xs font-bold ${isAnalfabeto === false ? 'bg-primary text-white' : 'text-slate-500'}`}>NÃO</button>
                 </div>
               </div>
+
+              {show60Mais && (
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Cliente 60+?</label>
+                  <div className="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl">
+                    <button type="button" onClick={() => setIsCliente60Mais(true)} className={`px-4 py-1.5 rounded-lg text-xs font-bold ${isCliente60Mais === true ? 'bg-primary text-white' : 'text-slate-500'}`}>SIM</button>
+                    <button type="button" onClick={() => setIsCliente60Mais(false)} className={`px-4 py-1.5 rounded-lg text-xs font-bold ${isCliente60Mais === false ? 'bg-primary text-white' : 'text-slate-500'}`}>NÃO</button>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
