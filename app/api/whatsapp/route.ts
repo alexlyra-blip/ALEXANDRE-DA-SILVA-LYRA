@@ -83,6 +83,19 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     
+    // --- MODO DE INVESTIGAÇÃO PROFUNDA (Logar absolutamente tudo que chega da Meta) ---
+    try {
+      await adminDb.collection('whatsappLogs').add({
+        type: 'RAW_WEBHOOK_RECEIVE',
+        timestamp: new Date(),
+        createdAt: new Date().toISOString(),
+        body: body // Salva o payload inteiro para vermos o que a Meta tentou mandar
+      });
+    } catch (logErr) {
+      console.error("Erro ao salvar log RAW", logErr);
+    }
+    // ---------------------------------------------------------------------------------
+
     // Check if it's a message event from WhatsApp Business API (Cloud API)
     const messageEntry = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     
