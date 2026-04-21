@@ -1,19 +1,15 @@
 import { NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import firebaseConfig from '@/firebase-applet-config.json';
-
-if (!admin.apps.length) {
-  try {
-    admin.initializeApp();
-  } catch {
-    admin.initializeApp({
-      projectId: firebaseConfig.projectId,
-    });
-  }
-}
+import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 
 export async function POST(request: Request) {
   try {
+    const db = getAdminDb();
+    const auth = getAdminAuth();
+    
+    if (!db || !auth) {
+      return NextResponse.json({ error: 'Firebase connection failed' }, { status: 500 });
+    }
+
     const { uid, newPassword, adminUid } = await request.json();
 
     if (!uid || !newPassword || !adminUid) {
@@ -21,7 +17,6 @@ export async function POST(request: Request) {
     }
 
     // Verify the requester is an admin or the creator of the user
-    const db = admin.firestore();
     const adminDoc = await db.collection('users').doc(adminUid).get();
     
     if (!adminDoc.exists) {
@@ -45,7 +40,7 @@ export async function POST(request: Request) {
     }
 
     // Update password in Firebase Auth
-    await admin.auth().updateUser(uid, {
+    await auth.updateUser(uid, {
       password: newPassword,
     });
 

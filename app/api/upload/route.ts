@@ -1,33 +1,19 @@
 import { NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import { getAdminStorage, admin } from '@/lib/firebase-admin';
 import firebaseConfig from '@/firebase-applet-config.json';
 
 console.log('[API Upload] Route file loaded');
-
-// Initialize Firebase Admin if not already initialized
-if (!admin.apps.length) {
-  console.log('[API Upload] Initializing Firebase Admin');
-  try {
-    console.log('[API Upload] Firebase Admin with config:', {
-      projectId: firebaseConfig.projectId,
-      storageBucket: firebaseConfig.storageBucket
-    });
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-      projectId: firebaseConfig.projectId,
-      storageBucket: firebaseConfig.storageBucket
-    });
-    console.log('[API Upload] Firebase Admin initialized successfully');
-  } catch (error) {
-    console.error('[API Upload] Error initializing Firebase Admin:', error);
-  }
-}
 
 export async function POST(request: Request) {
   const requestId = Math.random().toString(36).substring(7);
   console.log(`[API Upload ${requestId}] Received upload request`);
   
   try {
+    const storage = getAdminStorage();
+    if (!storage) {
+      return NextResponse.json({ error: 'Firebase Storage connection failed' }, { status: 500 });
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const path = formData.get('path') as string;
@@ -73,7 +59,7 @@ export async function POST(request: Request) {
     for (const bucketName of bucketNames) {
       try {
         console.log(`[API Upload ${requestId}] Attempting upload to bucket: ${bucketName || 'default'}`);
-        const bucket = bucketName ? admin.storage().bucket(bucketName) : admin.storage().bucket();
+        const bucket = bucketName ? storage.bucket(bucketName) : storage.bucket();
         const blob = bucket.file(uniquePath);
         
         await blob.save(buffer, {
