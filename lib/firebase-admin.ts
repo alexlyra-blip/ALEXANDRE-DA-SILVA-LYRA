@@ -2,6 +2,8 @@ import admin from 'firebase-admin';
 
 let adminApp: admin.app.App | null = null;
 
+let initError: string | null = null;
+
 export function getAdminApp() {
   if (adminApp) return adminApp;
   if (admin.apps.length > 0) {
@@ -23,11 +25,14 @@ export function getAdminApp() {
     // Fallback: Tentativa de inicialização padrão
     adminApp = admin.initializeApp();
     return adminApp;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Falha ao inicializar Firebase Admin:', error);
+    initError = error.message;
     return null;
   }
 }
+
+export const getInitializationError = () => initError;
 
 export const getAdminDb = () => {
   const app = getAdminApp();

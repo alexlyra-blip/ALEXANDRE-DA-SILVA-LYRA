@@ -1,4 +1,4 @@
-import { getAdminDb } from '@/lib/firebase-admin';
+import { getAdminDb, getInitializationError } from '@/lib/firebase-admin';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,12 @@ export async function GET() {
   try {
     const adminDb = getAdminDb();
     if (!adminDb) {
-      return NextResponse.json({ success: false, error: 'Database not initialized' }, { status: 500 });
+      const initErr = getInitializationError();
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Database not initialized',
+        detail: initErr || 'Desconhecido'
+      }, { status: 500 });
     }
 
     const snapshot = await adminDb.collection('whatsappLogs')

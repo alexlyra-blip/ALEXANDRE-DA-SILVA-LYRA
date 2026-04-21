@@ -239,9 +239,9 @@ export function calculateOffers(
 
         const rules: string[][] = [];
         if (bank.acceptsLOAS) rules.push(['Aceita LOAS']);
-        if (bank.acceptsIlliterate) rules.push(['Aceita Analfabeto']);
-        if (bank.acceptsInvalidez !== false) rules.push(['Aceita Invalidez']);
-        if (bank.accepts60Mais) rules.push(['Aceita 60+']);
+        if (bank.acceptsIlliterate && params.isAnalfabeto) rules.push(['Aceita Analfabeto']);
+        if (bank.acceptsInvalidez !== false && isInvalidity) rules.push(['Aceita Invalidez']);
+        if (bank.accepts60Mais && (idade >= 60 || params.isCliente60Mais)) rules.push(['Aceita 60+']);
         if (bSumSaldoTroco) rules.push(['Soma Saldo+Troco']);
         if (bUseTaxaPonderada) rules.push(['Taxa Ponderada Mesa']);
 

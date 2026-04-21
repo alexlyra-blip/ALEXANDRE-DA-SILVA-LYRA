@@ -563,10 +563,10 @@ export default function Recomendacoes() {
           const rules: string[][] = [];
 
           // POPULAR REGRAS/SELOS VISUAIS
-          if (bank.acceptsLOAS) rules.push(['Aceita LOAS']);
-          if (bank.acceptsIlliterate) rules.push(['Aceita Analfabeto']);
-          if (bank.acceptsInvalidez !== false) rules.push(['Aceita Invalidez']);
-          if (bank.accepts60Mais) rules.push(['Aceita 60+']);
+          if (bank.acceptsLOAS) rules.push(['Aceita LOAS']); // Manteve o LOAS porque o usuário não pediu para mudar, mas podemos filtrar também
+          if (bank.acceptsIlliterate && simData.isAnalfabeto) rules.push(['Aceita Analfabeto']);
+          if (bank.acceptsInvalidez !== false && isInvalidity) rules.push(['Aceita Invalidez']);
+          if (bank.accepts60Mais && (simData.idade >= 60 || simData.isCliente60Mais)) rules.push(['Aceita 60+']);
           if (bank.sumBalanceAndTroco || bank.sumSaldoTroco) rules.push(['Soma Saldo+Troco']);
           if (tabela.useTaxaPonderada) rules.push(['Taxa Ponderada Mesa']);
 
