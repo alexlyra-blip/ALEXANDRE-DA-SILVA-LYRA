@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft, Landmark, Gavel, Map, Medal } from 'lucide-react';
+import { ArrowLeft, Landmark, Gavel, Map, Medal, Briefcase } from 'lucide-react';
 
 export default function RegrasConvenio() {
   return (
@@ -166,6 +166,43 @@ export default function RegrasConvenio() {
                   type="text"
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
                   placeholder="0,50"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* CLT PRIVADO Card */}
+          <div className="bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+            <div className="p-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                  <Briefcase className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">CLT PRIVADO</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-normal">Setor Privado</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" className="sr-only peer" defaultChecked />
+                <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </div>
+            <div className="p-4 grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Comissão Base %</label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Taxa Adm.</label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                  placeholder="0,00"
                 />
               </div>
             </div>

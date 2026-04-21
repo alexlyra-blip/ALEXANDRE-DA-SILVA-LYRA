@@ -41,7 +41,7 @@ export default function RegrasBanco() {
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
   const [maxRateFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [convenioFilter, setConvenioFilter] = useState<'TODOS' | 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS'>('TODOS');
+  const [convenioFilter, setConvenioFilter] = useState<'TODOS' | 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO'>('TODOS');
 
   // Form states for Bank Rules
   const [bankName, setBankName] = useState('');
@@ -75,7 +75,7 @@ export default function RegrasBanco() {
   const [ajusteTaxa, setAjusteTaxa] = useState('0');
   const [novaTaxaReferencia, setNovaTaxaReferencia] = useState('1.85');
   const [priority, setPriority] = useState('');
-  const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS'>('INSS');
+  const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO'>('INSS');
   const [subConvenio, setSubConvenio] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [tabelas, setTabelas] = useState([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '' }]);
@@ -575,6 +575,16 @@ export default function RegrasBanco() {
             >
               FORÇAS ARMADAS
             </button>
+            <button
+              onClick={() => setConvenioFilter('CLT PRIVADO')}
+              className={`flex-1 min-w-[80px] py-3 rounded-lg font-bold text-[10px] transition-all ${
+                convenioFilter === 'CLT PRIVADO'
+                  ? 'bg-white dark:bg-slate-800 text-primary shadow-sm'
+                  : 'text-slate-500 hover:bg-white/50 dark:hover:bg-slate-800/50'
+              }`}
+            >
+              CLT PRIVADO
+            </button>
           </div>
         </div>
 
@@ -947,6 +957,17 @@ export default function RegrasBanco() {
                         }`}
                       >
                         FORÇAS ARMADAS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConvenio('CLT PRIVADO')}
+                        className={`flex-1 min-w-[80px] py-1 rounded-md font-bold text-[9px] transition-all ${
+                          convenio === 'CLT PRIVADO'
+                            ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
+                            : 'text-slate-500 hover:bg-white/50 dark:hover:bg-slate-700/50'
+                        }`}
+                      >
+                        CLT PRIVADO
                       </button>
                     </div>
                   </div>
@@ -1323,40 +1344,39 @@ export default function RegrasBanco() {
 
                 <label className="flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <input type="checkbox" checked={acceptsInvalidez} onChange={e => setAcceptsInvalidez(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
-                  <span className="text-xs font-medium">Aceita Espécie Invalidez (04, 32, 92)</span>
+                  <span className="text-xs font-medium">Aceita Espécie Invalidez</span>
                 </label>
 
                 {acceptsInvalidez && (
                   <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-lg space-y-2 bg-slate-50 dark:bg-slate-800/20">
-                    <p className="text-xs font-medium">Regra de idade para Benefício Invalidez</p>
+                    <p className="text-xs font-bold text-primary">Regras de Invalidez</p>
                     <div className="grid grid-cols-2 gap-3 items-end">
                       <div className="space-y-1">
-                        <label className="text-[10px] text-slate-500">Idade Mínima (Anos)</label>
-                        <input type="number" value={invalidezAgeYears} onChange={e => setInvalidezAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 60" />
+                        <label className="text-[10px] text-slate-500 font-bold">Idade Mínima Cliente (Anos)</label>
+                        <input type="number" value={invalidezAgeYears} onChange={e => setInvalidezAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 18 (0 = bloqueia < 60)" />
+                        <p className="text-[8px] text-slate-400 italic">Se 0, o banco só aceita se 60+ e o campo ao lado estiver marcado.</p>
                       </div>
                       <div className="space-y-1 h-[34px] flex items-center">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={acceptsOver60Invalidez} onChange={e => setAcceptsOver60Invalidez(e.target.checked)} className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary" />
-                          <span className="text-[10px] font-medium text-slate-700 dark:text-slate-300">Aceita clientes acima de 60 Anos</span>
+                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Aceita cliente acima de 60 Anos</span>
                         </label>
                       </div>
                     </div>
                     
-                    {(!invalidezAgeYears || parseInt(invalidezAgeYears) > 0 || acceptsOver60Invalidez) && (
-                      <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-2">
-                        <p className="text-[10px] font-medium mb-2">Tempo mínimo de Benefício</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-slate-500">Anos</label>
-                            <input type="number" value={minBenefitTimeYears} onChange={e => setMinBenefitTimeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 1" />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-slate-500">Meses</label>
-                            <input type="number" value={minBenefitTimeMonths} onChange={e => setMinBenefitTimeMonths(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 6" />
-                          </div>
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-2">
+                      <p className="text-[10px] font-bold mb-2 uppercase text-slate-400">Tempo mínimo de Benefício</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-slate-500">Anos</label>
+                          <input type="number" value={minBenefitTimeYears} onChange={e => setMinBenefitTimeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 1" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-slate-500">Meses</label>
+                          <input type="number" value={minBenefitTimeMonths} onChange={e => setMinBenefitTimeMonths(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 6" />
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
               </div>

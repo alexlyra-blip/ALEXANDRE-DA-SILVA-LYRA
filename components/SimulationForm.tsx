@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { HelpCircle, User, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2 } from 'lucide-react';
+import { HelpCircle, User, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
@@ -23,9 +23,13 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const { banks: rulesBanks } = useRules();
   const router = useRouter();
   const [idade, setIdade] = useState('');
-  const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS'>('INSS');
+  const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO'>('INSS');
   const [subConvenio, setSubConvenio] = useState('');
   const [codigoBeneficio, setCodigoBeneficio] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchTermBank, setSearchTermBank] = useState('');
+  const [isDropdownOpenBank, setIsDropdownOpenBank] = useState(false);
   
   const allBanks = Array.from(new Set([
     "121 - AGIBANK", "250 - BCV", "025 - BANCO ALFA", "233 - BANCO CIFRA", "001 - BANCO DO BRASIL",
@@ -49,20 +53,51 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const beneficios = {
     INSS: [
       { value: "01", label: "01 - Pensão por morte do trabalhador rural" },
+      { value: "02", label: "02 - Pensão por morte por acidente do trabalho do trabalhador rural" },
+      { value: "03", label: "03 - Pensão por morte do empregador rural" },
       { value: "04", label: "04 - Aposentadoria por invalidez do trabalhador rural" },
+      { value: "05", label: "05 - Aposentadoria por invalidez, por acidente do trabalhador rural" },
       { value: "06", label: "06 - Aposentadoria por idade do trabalhador rural" },
-      { value: "07", label: "07 - Aposentadoria por idade do empregador rural" },
+      { value: "07", label: "07 - Aposentadoria por idade por idade do trabalhador rural" },
       { value: "08", label: "08 - Aposentadoria por tempo de serviço do trabalhador rural" },
-      { value: "21", label: "21 - Pensão por morte previdenciária" },
-      { value: "32", label: "32 - Aposentadoria por invalidez previdenciária" },
+      { value: "11", label: "11 - Renda Mensal Vitalícia por invalidez do trabalhador rural" },
+      { value: "12", label: "12 - Renda Mensal Vitalícia por idade do trabalhador rural" },
+      { value: "21", label: "21 - Pensão por morte previdenciária (LOPS)" },
+      { value: "22", label: "22 - Pensão por morte estatutária" },
+      { value: "23", label: "23 - Pensão por morte de ex-combatente" },
+      { value: "26", label: "26 - Pensão especial" },
+      { value: "27", label: "27 - Pensão por morte de servidor público federal com dupla aposentadoria" },
+      { value: "28", label: "28 - Pensão por morte, do Regime Geral" },
+      { value: "29", label: "29 - Pensão por morte de ex-combatente marítimo" },
+      { value: "30", label: "30 - Renda Mensal Vitalícia por invalidez" },
+      { value: "32", label: "32 - Aposentadoria por invalidez previdenciária (LOPS)" },
+      { value: "33", label: "33 - Aposentadoria por invalidez de aeronauta" },
+      { value: "34", label: "34 - Aposentadoria por invalidez de ex-combatente marítimo" },
+      { value: "37", label: "37 - Aposentadoria de extranumerário da União" },
+      { value: "38", label: "38 - Aposentadoria da extinta CAPIN" },
+      { value: "40", label: "40 - Renda Mensal Vitalícia por idade" },
       { value: "41", label: "41 - Aposentadoria por idade" },
       { value: "42", label: "42 - Aposentadoria por tempo de contribuição previdenciária" },
+      { value: "43", label: "43 - Aposentadoria por tempo de contribuição de ex-combatente" },
+      { value: "44", label: "44 - Aposentadoria por tempo de contribuição de aeronauta" },
+      { value: "45", label: "45 - Aposentadoria por tempo de contribuição de jornalista profissional" },
       { value: "46", label: "46 - Aposentadoria por tempo de contribuição especial" },
+      { value: "49", label: "49 - Aposentadoria por tempo de contribuição ordinária" },
+      { value: "54", label: "54 - Pensão especial vitalícia" },
+      { value: "56", label: "56 - Pensão mensal vitalícia por síndrome de talidomida" },
       { value: "57", label: "57 - Aposentadoria por tempo de contribuição de professor" },
+      { value: "58", label: "58 - Aposentadoria excepcional do anistiado" },
+      { value: "59", label: "59 - Pensão por morte excepcional do anistiado" },
+      { value: "60", label: "60 - Pensão especial mensal vitalícia" },
+      { value: "72", label: "72 - Aposentadoria por tempo de contribuição de ex-combatente marítimo" },
+      { value: "78", label: "78 - Aposentadoria por idade por idade de ex-combatente marítimo" },
+      { value: "81", label: "81 - Aposentadoria por idade por idade compulsória" },
       { value: "87", label: "87 - Amparo social à pessoa com deficiência (BPC/LOAS)" },
       { value: "88", label: "88 - Amparo social ao idoso (BPC/LOAS)" },
+      { value: "89", label: "89 - Pensão especial aos dependentes de vítimas fatais por contaminação na hemodiálise" },
       { value: "92", label: "92 - Aposentadoria por invalidez por acidente do trabalho" },
       { value: "93", label: "93 - Pensão por morte por acidente do trabalho" },
+      { value: "96", label: "96 - Pensão especial para pessoas atingidas por Hanseníase" },
     ],
     SIAPE: [
       { value: "S1", label: "S1 - Ativo/Aposentado" },
@@ -101,14 +136,18 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       { value: "01", label: "01 - Exército" },
       { value: "02", label: "02 - Aeronáutica" },
       { value: "03", label: "03 - Marinha" },
+    ],
+    'CLT PRIVADO': [
+      { value: "CP", label: "CP - CLT PRIVADO" },
     ]
   };
 
   const handleConvenioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setConvenio(e.target.value as 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS');
+    setConvenio(e.target.value as 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO');
     setCodigoBeneficio('');
+    setSearchTerm('');
     setSubConvenio('');
-    if (e.target.value === 'SIAPE' || e.target.value === 'GOVERNO' || e.target.value === 'FORÇAS ARMADAS') {
+    if (['SIAPE', 'GOVERNO', 'FORÇAS ARMADAS', 'CLT PRIVADO'].includes(e.target.value)) {
       setDataConcessao('');
     }
   };
@@ -122,7 +161,8 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [isCliente60Mais, setIsCliente60Mais] = useState<boolean | null>(null);
 
   const effectiveIs60MaisForUI = isCliente60Mais !== null ? isCliente60Mais : (parseInt(idade) >= 60);
-  const showDataConcessao = convenio === 'INSS' && ['04', '32', '92'].includes(codigoBeneficio) && !effectiveIs60MaisForUI;
+  const isInvalidityBenefit = ['04', '05', '11', '30', '32', '33', '34', '92'].includes(codigoBeneficio);
+  const showDataConcessao = convenio === 'INSS' && isInvalidityBenefit && parseInt(idade) < 60;
   const show60Mais = parseInt(idade) >= 60;
 
   const handleIdadeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -219,7 +259,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       if (data.idade) setIdade(data.idade.toString());
       if (data.convenio) {
         const conv = data.convenio.toUpperCase();
-        if (['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS'].includes(conv)) setConvenio(conv as any);
+        if (['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS', 'CLT PRIVADO'].includes(conv)) setConvenio(conv as any);
       }
       if (data.codigoBeneficio) setCodigoBeneficio(data.codigoBeneficio);
       if (data.bancoAtual) {
@@ -281,7 +321,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
 
   return (
     <div className={`flex w-full ${isEmbedded ? 'h-full' : 'min-h-screen'} bg-background text-foreground`}>
-      <div className={`flex flex-col w-full ${isEmbedded ? '' : 'md:w-[450px]'} shrink-0 border-r border-slate-200 dark:border-slate-800 bg-background relative`}>
+      <div className={`flex flex-col w-full ${isEmbedded ? '' : 'md:w-[520px]'} shrink-0 border-r border-slate-200 dark:border-slate-800 bg-background relative`}>
         {isSimulating && <TransitionAnimation onComplete={onAnimationComplete} availableBanks={rulesBanks} />}
         
         {!isEmbedded && (
@@ -316,8 +356,8 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Convênio</label>
                 <div className="bg-slate-100 dark:bg-slate-900/50 p-1 rounded-2xl flex flex-wrap gap-1">
-                  {(['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS'] as const).map(lib => (
-                    <button key={lib} type="button" onClick={() => handleConvenioChange({ target: { value: lib } } as any)} className={`flex-1 px-2 h-10 rounded-xl text-xs font-bold transition-all ${convenio === lib ? 'bg-primary text-white shadow-sm' : 'text-slate-500'}`}>{lib}</button>
+                  {(['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS', 'CLT PRIVADO'] as const).map(lib => (
+                    <button key={lib} type="button" onClick={() => handleConvenioChange({ target: { value: lib } } as any)} className={`flex-1 px-2 h-10 rounded-xl text-[10px] font-bold transition-all ${convenio === lib ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>{lib}</button>
                   ))}
                 </div>
               </div>
@@ -330,17 +370,77 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">{convenio === 'INSS' ? 'Código do Benefício' : 'Sub-convênio'}</label>
                 <div className="relative">
-                  <select value={codigoBeneficio} onChange={(e) => {
-                    setCodigoBeneficio(e.target.value);
-                    if (convenio !== 'INSS') {
-                      const selected = beneficios[convenio].find(b => b.value === e.target.value);
-                      setSubConvenio(selected ? (selected.label.includes(' - ') ? selected.label.split(' - ')[1] : selected.label) : '');
-                    }
-                  }} className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 p-4 text-base font-medium appearance-none">
-                    <option disabled value="">Selecione...</option>
-                    {beneficios[convenio].map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 pl-12 pr-10 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      placeholder={convenio === 'INSS' ? "Buscar por código ou nome..." : "Selecionar sub-convênio..."}
+                      value={isDropdownOpen ? searchTerm : (beneficios[convenio].find(b => b.value === codigoBeneficio)?.label || '')}
+                      onFocus={() => {
+                        setIsDropdownOpen(true);
+                        setSearchTerm('');
+                      }}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      readOnly={false}
+                    />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+                    <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                  </div>
+
+                  <AnimatePresence>
+                    {isDropdownOpen && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-10" 
+                          onClick={() => setIsDropdownOpen(false)}
+                        />
+                        <motion.div
+                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                          className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-20 max-h-64 overflow-y-auto overflow-x-hidden"
+                        >
+                          <div className="p-2 space-y-1">
+                            {beneficios[convenio]
+                              .filter(b => 
+                                b.label.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                b.value.toLowerCase().includes(searchTerm.toLowerCase())
+                              )
+                              .map((b) => (
+                                <button
+                                  key={b.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setCodigoBeneficio(b.value);
+                                    if (convenio !== 'INSS') {
+                                      setSubConvenio(b.label.includes(' - ') ? b.label.split(' - ')[1] : b.label);
+                                    }
+                                    setIsDropdownOpen(false);
+                                    setSearchTerm('');
+                                  }}
+                                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-left text-base font-medium transition-colors ${
+                                    codigoBeneficio === b.value 
+                                      ? 'bg-primary/10 text-primary font-bold' 
+                                      : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                  }`}
+                                >
+                                  <span className="truncate pr-4">{b.label}</span>
+                                  {codigoBeneficio === b.value && <Check className="w-4 h-4 shrink-0" />}
+                                </button>
+                              ))}
+                            {beneficios[convenio].filter(b => 
+                              b.label.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                              b.value.toLowerCase().includes(searchTerm.toLowerCase())
+                            ).length === 0 && (
+                              <div className="px-4 py-6 text-center text-slate-500 text-xs italic">
+                                Nenhum benefício encontrado para &quot;{searchTerm}&quot;
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 
@@ -382,11 +482,67 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Banco Atual</label>
                 <div className="relative">
-                  <select value={bancoAtual} onChange={(e) => setBancoAtual(e.target.value)} className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 p-4 text-base font-medium appearance-none">
-                    <option disabled value="">Selecione...</option>
-                    {allBanks.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 pl-12 pr-10 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      placeholder="Buscar banco..."
+                      value={isDropdownOpenBank ? searchTermBank : bancoAtual}
+                      onFocus={() => {
+                        setIsDropdownOpenBank(true);
+                        setSearchTermBank('');
+                      }}
+                      onChange={(e) => setSearchTermBank(e.target.value)}
+                    />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+                    <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-transform duration-200 ${isDropdownOpenBank ? 'rotate-180' : ''}`} />
+                  </div>
+
+                  <AnimatePresence>
+                    {isDropdownOpenBank && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-10" 
+                          onClick={() => setIsDropdownOpenBank(false)}
+                        />
+                        <motion.div
+                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                          className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-20 max-h-64 overflow-y-auto overflow-x-hidden"
+                        >
+                          <div className="p-2 space-y-1">
+                            {allBanks
+                              .filter(b => b.toLowerCase().includes(searchTermBank.toLowerCase()))
+                              .map((b) => (
+                                <button
+                                  key={b}
+                                  type="button"
+                                  onClick={() => {
+                                    setBancoAtual(b);
+                                    setIsDropdownOpenBank(false);
+                                    setSearchTermBank('');
+                                  }}
+                                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-left text-base font-medium transition-colors ${
+                                    bancoAtual === b 
+                                      ? 'bg-primary/10 text-primary font-bold' 
+                                      : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                  }`}
+                                >
+                                  <span className="truncate pr-4">{b}</span>
+                                  {bancoAtual === b && <Check className="w-4 h-4 shrink-0" />}
+                                </button>
+                              ))}
+                            {allBanks.filter(b => b.toLowerCase().includes(searchTermBank.toLowerCase())).length === 0 && (
+                              <div className="px-4 py-6 text-center text-slate-500 text-xs italic">
+                                Nenhum banco encontrado para &quot;{searchTermBank}&quot;
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 

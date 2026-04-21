@@ -25,7 +25,7 @@ export interface SpecificInstallmentRule {
 export interface BankRule {
   id: string;
   name: string;
-  convenio: 'INSS' | 'SIAPE';
+  convenio: 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO';
   minAge: number;
   maxAge: number;
   nonAcceptedBanks: string[];
@@ -290,22 +290,30 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const value = React.useMemo(() => ({ 
+    banks, 
+    generalRules, 
+    promotoraPriorities,
+    promotoraInstallments,
+    isLoaded,
+    addBank, 
+    updateBank, 
+    addGeneralRule, 
+    updateGeneralRule, 
+    deleteBank, 
+    deleteGeneralRule,
+    updatePromotoraPriority,
+    updatePromotoraInstallment
+  }), [
+    banks, 
+    generalRules, 
+    promotoraPriorities, 
+    promotoraInstallments, 
+    isLoaded
+  ]);
+
   return (
-    <RuleContext.Provider value={{ 
-      banks, 
-      generalRules, 
-      promotoraPriorities,
-      promotoraInstallments,
-      isLoaded,
-      addBank, 
-      updateBank, 
-      addGeneralRule, 
-      updateGeneralRule, 
-      deleteBank, 
-      deleteGeneralRule,
-      updatePromotoraPriority,
-      updatePromotoraInstallment
-    }}>
+    <RuleContext.Provider value={value}>
       {children}
     </RuleContext.Provider>
   );

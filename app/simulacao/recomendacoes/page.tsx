@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard, ShieldCheck, CheckCircle2, History, DollarSign, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useEffect, useRef } from 'react';
@@ -196,6 +196,7 @@ export default function Recomendacoes() {
       valorParcela,
       saldoDevedor,
       parcelasPagas,
+      prazoTotal,
       parcelasRestantes,
       isCliente60Mais
     } = simData;
@@ -297,37 +298,48 @@ export default function Recomendacoes() {
         return;
       }
 
-      // 1. Espécie Invalidez (04, 32, 92) - CHECK THIS FIRST
-      const isInvalidity = ['4', '04', '32', '92'].includes(cleanBeneficio);
+      // 1. Espécie Invalidez (04, 05, 11, 30, 32, 33, 34, 92) - CHECK THIS FIRST
+      const isInvalidity = ['4', '04', '5', '05', '11', '30', '32', '33', '34', '92'].includes(cleanBeneficio);
       const isLOAS = ['87', '88'].includes(cleanBeneficio);
 
       if (isInvalidity) {
+        // 1. Rule: Aceita Espécie Invalidez field must be checked
         if (bank.acceptsInvalidez === false) {
-          log(`filtrado: Não aceita espécie Invalidez`);
+          log(`filtrado: Banco não aceita espécie Invalidez`);
           return;
         }
 
-        const ageLimit = bank.invalidezAgeYears || 0;
-        const requiredMonths = (bank.minBenefitTimeYears || 0) * 12 + (bank.minBenefitTimeMonths || 0);
+        // 2. Rule: If client REAL AGE is 60+
+        const isActuallyOver60 = idade >= 60;
         
-        const isOver60AndAccepted = bank.acceptsOver60Invalidez && effectiveIs60Mais;
-
-        if (!isOver60AndAccepted) {
-          // Se o banco marcou "Aceita > 60" mas não configurou idade mínima alternativa, e o cliente tem < 60, bloqueia.
-          if (bank.acceptsOver60Invalidez && ageLimit === 0) {
-            log(`filtrado: Exige idade >= 60 para Invalidez`);
+        if (isActuallyOver60) {
+          // Check specific Invalidez 60+ field
+          if (!bank.acceptsOver60Invalidez) {
+            log(`filtrado: Banco não aceita espécie Invalidez para clientes acima de 60 anos (Regra Específica Invalidez)`);
+            return;
+          }
+          // LIBERATED: If actually 60+ and acceptsOver60Invalidez is true, we DON'T validate benefit time.
+          log(`Liberado: Cliente 60+ com Invalidez aceita (sem validar tempo de benefício)`);
+        } else {
+          // 3. Rule: If client is < 60
+          const minAgeDisability = bank.invalidezAgeYears || 0;
+          
+          // "se estiver como 0 e o cliente estiver menos de 60 anos não será liberado"
+          if (minAgeDisability === 0) {
+            log(`filtrado: Banco não configurou Idade Mínima para Invalidez < 60 (Idade Mínima = 0)`);
             return;
           }
 
-          // Valida idade mínima específica
-          if (ageLimit > 0 && idade < ageLimit) {
-            log(`filtrado por idade mínima invalidez: ${idade} < ${ageLimit}`);
+          // Validate Minimum client age for disability
+          if (idade < minAgeDisability) {
+            log(`filtrado por idade mínima invalidez: ${idade} < ${minAgeDisability}`);
             return;
           }
           
-          // Valida tempo de benefício
+          // Validate Minimum time with benefit (concession date)
+          const requiredMonths = (bank.minBenefitTimeYears || 0) * 12 + (bank.minBenefitTimeMonths || 0);
           if (requiredMonths > 0 && benefitTimeMonths < requiredMonths) {
-            log(`filtrado por tempo de benefício: ${benefitTimeMonths} < ${requiredMonths} meses`);
+            log(`filtrado por tempo mínimo de benefício: ${benefitTimeMonths} < ${requiredMonths} meses`);
             return;
           }
         }
@@ -391,44 +403,55 @@ export default function Recomendacoes() {
         return;
       }
 
+      const targetGeneralRule = generalRules.find((r: any) => checkBankMatch(r.banco, bank.name));
+
       // 6. Banco Atual (Não portam)
+      // Se o banco escolhido na simulação estiver na lista de bancos que NÃO PORTA, ele não será ofertado.
       if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) {
-        log(`filtered by nonAcceptedBanks: ${bancoAtual}`);
+        log(`filtered by nonAcceptedBanks: ${bancoAtual} is in the exclusion list for ${bank.name}`);
+        localFilterReasons[bank.id] = `O banco ${bank.name} não realiza portabilidade do ${bancoAtual}.`;
         return;
       }
 
-      // 7. Quantidade de parcelas pagas
+      // 7. Bancos que porta com regras específicas (Quantidade de Parcelas)
       let requiredInstallments = 0;
+      let hasSpecificRule = false;
       
-      // Check specific rule first (from Bank Dest configuration)
+      const effectiveParcelasPagas = parcelasPagas !== undefined ? parcelasPagas : (parseInt(prazoTotal || 0) - parseInt(parcelasRestantes || 0));
+
+      // Verifica se o banco de origem consta no campo "Bancos que porta com regras específicas"
       const specificRule = bank.specificInstallmentRules?.find((r: any) => checkBankMatch(r.bank, bancoAtual));
+      
       if (specificRule) {
-        requiredInstallments = specificRule.installments;
+        // Se houver regra específica, ela é SOBERANA e ÚNICA para este par de bancos.
+        requiredInstallments = parseInt(specificRule.installments) || 0;
+        hasSpecificRule = true;
+        log(`Specific rule found for ${bank.name} -> ${bancoAtual}: requires ${requiredInstallments} installments.`);
       } else {
-        // Check promotora-specific installment rule for this origin bank
+        // Se NÃO estiver na lista específica, segue a hierarquia normal de regras de parcelas
+        
+        // 1. Regra da Promotora/Broker para este banco de origem
         const pInstallment = promotoraInstallments[bancoAtual];
         if (pInstallment !== undefined && pInstallment > 0) {
           requiredInstallments = pInstallment;
         } else {
-          // Check global system general rule
+          // 2. Regra Geral do sistema para este banco de origem
           const generalRule = generalRules.find((r: any) => checkBankMatch(r.banco, bancoAtual));
           if (generalRule) {
             requiredInstallments = generalRule.parcelasAceitas;
           }
         }
+        
+        // 3. Consolida com o limite mínimo padrão do Banco de Destino (o mais restritivo prevalece)
+        const bankGeneralLimit = bank.minPaidInstallments || targetGeneralRule?.parcelasAceitas || 0;
+        
+        requiredInstallments = Math.max(requiredInstallments, bankGeneralLimit);
       }
 
-      if (requiredInstallments > 0 && parcelasPagas < requiredInstallments) {
-        log(`filtered by requiredInstallments: ${parcelasPagas} < ${requiredInstallments}`);
-        return;
-      }
-
-      // 7.1 Mínimo de parcelas pagas do Banco de Destino
-      const targetGeneralRule = generalRules.find((r: any) => checkBankMatch(r.banco, bank.name));
-      const effectiveMinPaidInstallments = bank.minPaidInstallments || 0;
-
-      if (effectiveMinPaidInstallments > 0 && parcelasPagas < effectiveMinPaidInstallments) {
-        log(`filtered by minPaidInstallments (Bank limits): ${parcelasPagas} < ${effectiveMinPaidInstallments}`);
+      // FILTRO FINAL DE PARCELAS: A quantidade de parcelas deve ser IGUAL ou MAIOR a quantidade informada.
+      if (requiredInstallments > 0 && effectiveParcelasPagas < requiredInstallments) {
+        log(`filtered by installments: current ${effectiveParcelasPagas} < required ${requiredInstallments} (${hasSpecificRule ? 'Specific Rule' : 'General Hierarchy'})`);
+        localFilterReasons[bank.id] = `O banco ${bank.name} exige no mínimo ${requiredInstallments} parcelas pagas para portar ${bancoAtual}.`;
         return;
       }
 
@@ -586,10 +609,7 @@ export default function Recomendacoes() {
       }
     });
 
-    setFilterReasons(localFilterReasons);
-    // Removed /api/log to prevent network congestion
-
-    // Sort by priority (ascending, lower is better) then by valorTroco (descending)
+    // Sort calculated offers before comparison and state update
     calculatedOffers.sort((a, b) => {
       const bankIdA = a.id.split('-')[0];
       const bankIdB = b.id.split('-')[0];
@@ -605,21 +625,21 @@ export default function Recomendacoes() {
       }
       return b.valorTroco - a.valorTroco;
     });
-    
+
     // Check if offers actually changed before updating state
-    if (JSON.stringify(calculatedOffers) !== JSON.stringify(allCalculatedOffers)) {
+    const currentOffersStr = JSON.stringify(calculatedOffers);
+    const prevOffersStr = JSON.stringify(allCalculatedOffers);
+
+    if (currentOffersStr !== prevOffersStr) {
         console.log(`[SIMULATION #${calculationsCount.current}] UPDATING OFFERS STATE - Found ${calculatedOffers.length} offers`);
-        if (calculatedOffers.length > 0) {
-          console.table(calculatedOffers.slice(0, 5).map(o => ({
-            Banco: o.name,
-            Tabela: o.tabela,
-            Troco: o.valorTroco.toFixed(2),
-            Coef: (o.valorParcela / o.valorContrato).toFixed(6),
-            TaxaPort: o.novaTaxaPortabilidade,
-            TaxaPond: o.taxaPonderada
-          })));
-        }
         setAllCalculatedOffers(calculatedOffers);
+    }
+    
+    // Guard filter reasons update
+    const currentReasonsStr = JSON.stringify(localFilterReasons);
+    const prevReasonsStr = JSON.stringify(filterReasons);
+    if (currentReasonsStr !== prevReasonsStr) {
+      setFilterReasons(localFilterReasons);
     }
     
     // Save simulation to Firestore if it hasn't been saved yet
@@ -629,13 +649,13 @@ export default function Recomendacoes() {
       const topOffer = calculatedOffers[0];
       const simulationRecord = {
         ...simData,
-        userId: profile.uid,
-        userName: profile.name,
-        userAvatar: profile.avatarUrl || profile.photoUrl || null,
-        userRole: profile.role,
-        corretorId: (profile.role === 'corretor' || profile.role === 'vendedor') ? profile.uid : null,
-        createdBy: profile.createdBy || null,
-        promotoraId: profile.role === 'promotora' ? profile.uid : (profile.promotoraId || profile.createdBy || 'admin'),
+        userId: profile?.uid,
+        userName: profile?.name,
+        userAvatar: profile?.avatarUrl || profile?.photoUrl || null,
+        userRole: profile?.role,
+        corretorId: (profile?.role === 'corretor' || profile?.role === 'vendedor') ? profile?.uid : null,
+        createdBy: profile?.createdBy || null,
+        promotoraId: profile?.role === 'promotora' ? profile?.uid : (profile?.promotoraId || profile?.createdBy || 'admin'),
         recommendedBanks: calculatedOffers.slice(0, 3).map(o => o.name),
         topOffer: topOffer?.name || null,
         topOfferTabela: topOffer?.tabela || null,
@@ -648,8 +668,8 @@ export default function Recomendacoes() {
       console.log("Saving simulation record:", {
         id: simulationId,
         userId: simulationRecord.userId,
-        authUid: profile.uid,
-        match: simulationRecord.userId === profile.uid
+        authUid: profile?.uid,
+        match: simulationRecord.userId === profile?.uid
       });
 
       const docRef = doc(db, 'simulations', simulationId);
@@ -678,7 +698,7 @@ export default function Recomendacoes() {
       });
     }
 
-  }, [banks, generalRules, isLoaded, profile, promotoraPriorities, simData]);
+  }, [banks, generalRules, isLoaded, profile, promotoraPriorities, promotoraInstallments, simData]);
 
   // Update 'Principais Ofertas' (offers) whenever allCalculatedOffers or sortBy changes
   useEffect(() => {
@@ -879,25 +899,27 @@ export default function Recomendacoes() {
     }));
   };
 
+  const parcelasPagas = simData?.parcelasPagas;
+
   return (
-    <div className={`flex w-full min-h-screen bg-background text-foreground ${showAllOffers ? 'overflow-hidden' : ''}`}>
+    <div className="flex w-full min-h-screen bg-background text-foreground">
       {/* Desktop Simulator Sidebar with Animation */}
       <motion.div 
         initial={false}
         animate={{ 
-          width: isSimulatorOpen ? 450 : 0,
+          width: isSimulatorOpen ? 520 : 0,
           opacity: isSimulatorOpen ? 1 : 0,
-          x: isSimulatorOpen ? 0 : -450
+          x: isSimulatorOpen ? 0 : -520
         }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className="hidden md:flex flex-col shrink-0 border-r border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark relative overflow-y-auto"
+        className="hidden md:flex flex-col shrink-0 border-r border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark sticky top-0 h-screen overflow-y-auto"
       >
-        <div className="w-[450px]">
+        <div className="w-[520px]">
           <SimulationForm isEmbedded={true} />
         </div>
       </motion.div>
 
-      <div className={`flex flex-col flex-1 min-w-0 bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display ${showAllOffers ? 'pb-20 h-screen overflow-y-auto' : 'pb-6'} pt-2`}>
+      <div className={`flex flex-col flex-1 min-w-0 bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display pb-20 pt-2`}>
         <div className="w-full max-w-5xl mx-auto">
           <QuotaAlert />
           {/* Top Header */}
@@ -920,6 +942,50 @@ export default function Recomendacoes() {
             
             <div className="w-8 md:hidden" /> {/* Spacer for mobile centering */}
           </div>
+
+          {/* Summary Section */}
+          {simData && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mx-4 mt-4 bg-white dark:bg-surface-dark rounded-2xl p-4 border border-slate-200 dark:border-white/10 shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-white/5 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                    <History className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-bold uppercase tracking-tight">Resumo da Simulação</h3>
+                </div>
+                <div className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-[10px] font-black uppercase">
+                  Validação Ativa
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                <div className="space-y-1 sm:col-span-2">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Banco Atual</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{simData.bancoAtual}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Parcela</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(simData.valorParcela)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Convênio/Idade</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">{simData.convenio} • {simData.idade} anos</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Parcelas Pagas</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-bold text-primary">
+                      {parcelasPagas !== undefined ? parcelasPagas : (simData ? (parseInt(simData.prazoTotal || 0) - parseInt(simData.parcelasRestantes || 0)) : 0)} 
+                    </p>
+                    <span className="text-[10px] text-slate-400 font-medium">de {simData.prazoTotal}x</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* Filters Section */}
           <div className="flex items-center gap-2 px-4 py-1.5 bg-white/90 dark:bg-black/90 backdrop-blur-sm border-b border-slate-100 dark:border-white/10 sticky top-[60px] z-30 mx-4 mt-1 rounded-xl shadow-sm">
@@ -1072,19 +1138,29 @@ export default function Recomendacoes() {
             let badgeBg = '';
             let isMelhorTroco = false;
             let isMaiorContrato = false;
+            let badgeIcon = null;
             
             if (!showAllOffers) {
               // In Principais Ofertas, badges reflect the current filter and rank
-              const filterLabel = sortBy === 'menor_troco' ? 'MELHOR OFERTA' : sortBy === 'valor_troco' ? 'MELHOR TROCO' : 'MAIOR CONTRATO';
-              const filterColor = sortBy === 'menor_troco' ? 'text-emerald-600 dark:text-emerald-400' : sortBy === 'valor_troco' ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400';
-              const filterBg = sortBy === 'menor_troco' ? 'bg-emerald-500/10 dark:bg-emerald-500/20' : sortBy === 'valor_troco' ? 'bg-amber-500/10 dark:bg-amber-500/20' : 'bg-blue-500/10 dark:bg-blue-500/20';
-
+              // 1st, 2nd, 3rd highlighted
+              
               if (index === 0) {
-                badge = filterLabel;
-                badgeColor = filterColor;
-                badgeBg = filterBg;
+                badge = 'MELHOR OFERTA';
+                badgeColor = 'text-emerald-700 dark:text-emerald-300';
+                badgeBg = 'bg-emerald-400/20 dark:bg-emerald-500/30';
+                badgeIcon = <Star className="w-3 h-3 fill-emerald-500" />;
+              } else if (index === 1) {
+                badge = '2ª MELHOR OFERTA';
+                badgeColor = 'text-blue-700 dark:text-blue-300';
+                badgeBg = 'bg-blue-400/20 dark:bg-blue-500/30';
+                badgeIcon = <Star className="w-3 h-3 fill-blue-500" />;
+              } else if (index === 2) {
+                badge = '3ª MELHOR OFERTA';
+                badgeColor = 'text-amber-700 dark:text-amber-300';
+                badgeBg = 'bg-amber-400/20 dark:bg-amber-500/30';
+                badgeIcon = <Star className="w-3 h-3 fill-amber-500" />;
               } else {
-                badge = `${index + 1}ª ${filterLabel}`;
+                badge = `${index + 1}ª OFERTA`;
                 badgeColor = 'text-slate-500 dark:text-slate-400';
                 badgeBg = 'bg-slate-500/10 dark:bg-slate-500/20';
               }
@@ -1097,10 +1173,12 @@ export default function Recomendacoes() {
                 badge = 'MELHOR OFERTA';
                 badgeColor = 'text-emerald-600 dark:text-emerald-400';
                 badgeBg = 'bg-emerald-500/10 dark:bg-emerald-500/20';
+                badgeIcon = <Star className="w-2.5 h-2.5 fill-emerald-500" />;
               } else if (currentOffer.valorTroco === maxValorTroco && sortedBanks.length > 1) {
                 badge = 'MELHOR TROCO';
                 badgeColor = 'text-amber-600 dark:text-amber-400';
                 badgeBg = 'bg-amber-500/10 dark:bg-amber-500/20';
+                badgeIcon = <Sparkles className="w-2.5 h-2.5 fill-amber-500" />;
                 isMelhorTroco = true;
               } else if (currentOffer.valorTroco + currentOffer.saldoDevedor === maxValorContrato && sortedBanks.length > 1) {
                 badge = 'MAIOR CONTRATO';
@@ -1110,18 +1188,33 @@ export default function Recomendacoes() {
               }
             }
 
+            const isTop1 = index === 0 && !showAllOffers;
+            const isTop2 = index === 1 && !showAllOffers;
+            const isTop3 = index === 2 && !showAllOffers;
+
             return (
               <motion.div 
                 key={bank.id} 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.5) }}
-                className={`group flex flex-col gap-1.5 rounded-xl bg-white dark:bg-surface-dark ${showAllOffers ? 'p-3' : 'p-2.5'} shadow-sm hover:shadow-md border border-slate-200 dark:border-white/10 hover:border-primary/30 transition-all relative overflow-hidden`}
+                className={`group flex flex-col gap-1.5 rounded-2xl bg-white dark:bg-surface-dark ${showAllOffers ? 'p-3' : 'p-3'} shadow-sm hover:shadow-xl border-2 transition-all relative overflow-hidden ${
+                  isTop1 ? 'border-primary/30 ring-4 ring-primary/5 shadow-md shadow-primary/10' : 
+                  isTop2 ? 'border-blue-500/20 shadow-md' :
+                  'border-slate-200 dark:border-white/10'
+                } hover:border-primary/50`}
               >
+                {/* Background effects for top offers */}
+                {isTop1 && <div className="absolute -top-12 -right-12 w-32 h-32 bg-primary/10 blur-3xl pointer-events-none" />}
+                {isTop2 && <div className="absolute -top-12 -right-12 w-32 h-32 bg-blue-500/10 blur-3xl pointer-events-none" />}
+                {isTop3 && <div className="absolute -top-12 -right-12 w-32 h-32 bg-amber-500/10 blur-3xl pointer-events-none" />}
+                
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                
                 {badge && (
                   <div className="absolute top-0 right-0 z-10">
-                    <div className={`${badgeBg} ${badgeColor} px-2 py-0.5 rounded-bl-lg text-[9px] font-bold uppercase tracking-wider shadow-sm`}>
+                    <div className={`${badgeBg} ${badgeColor} px-3 py-1 rounded-bl-xl text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5 backdrop-blur-md border-l border-b border-white/20`}>
+                      {badgeIcon}
                       {badge}
                     </div>
                   </div>
@@ -1268,19 +1361,24 @@ export default function Recomendacoes() {
                     </AnimatePresence>
                   </div>
                   <div className="flex flex-col items-end gap-0 mt-0.5 shrink-0">
-                    <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider">VALOR TROCO</p>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-black tracking-widest">VALOR TROCO</p>
+                    </div>
                     <AnimatePresence mode="wait" initial={false}>
                       <motion.p 
                         key={currentOffer.valorTroco}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className={`text-xl sm:text-2xl font-black tracking-tight ${isMelhorTroco || (index === 0 && !showAllOffers) ? 'text-primary' : 'text-slate-900 dark:text-white'} whitespace-nowrap`}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1.1 }}
+                        transition={{ 
+                          type: "spring",
+                          stiffness: 400,
+                          damping: 25
+                        }}
+                        className={`text-2xl sm:text-3xl font-black tracking-tighter ${isTop1 || isMelhorTroco ? 'text-primary' : 'text-slate-900 dark:text-white'} whitespace-nowrap drop-shadow-sm`}
                       >
                         {formatCurrency(currentOffer.valorTroco)}
                       </motion.p>
-
                     </AnimatePresence>
                     
                     <div className="flex items-center gap-1.5 mt-1">
@@ -1302,27 +1400,49 @@ export default function Recomendacoes() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleSelectOffer(currentOffer)}
-                  className="w-full bg-primary hover:bg-primary/90 text-white text-sm font-black uppercase tracking-tight py-3 rounded-lg transition-all shadow-sm mt-2 flex items-center justify-center gap-2"
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  <span>Selecionar e Salvar</span>
-                </button>
-
-                {currentOffer.rules && currentOffer.rules.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/50">
-                    {currentOffer.rules.map((ruleGroup, i) => (
-                      <div key={i} className="flex gap-1">
-                        {ruleGroup.map((rule, j) => (
-                          <span key={j} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[9px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm whitespace-nowrap">
-                            {rule}
-                          </span>
+                {/* Validation Seals & Rules Container */}
+                <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-white/5">
+                  <div className="flex flex-wrap gap-1">
+                    <div className="flex items-center gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-emerald-500/20">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Convênio OK</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-emerald-500/20">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Idade OK</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-blue-500/20">
+                      <History className="w-3.5 h-3.5" />
+                      <span>{parcelasPagas !== undefined ? parcelasPagas : (simData ? (parseInt(simData.prazoTotal || 0) - parseInt(simData.parcelasRestantes || 0)) : 0)} Parc. Pagas</span>
+                    </div>
+                    {currentOffer.minTicket && (
+                      <div className="flex items-center gap-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-purple-500/20">
+                        <DollarSign className="w-3.5 h-3.5" />
+                        <span>Saldo OK</span>
+                      </div>
+                    )}
+                    
+                    {/* Specific dynamic rules */}
+                    {currentOffer.rules && currentOffer.rules.length > 0 && currentOffer.rules.map((ruleGroup: string[], iIdx: number) => (
+                      <div key={iIdx} className="flex gap-1">
+                        {ruleGroup.map((rule, jIdx) => (
+                          <div key={jIdx} className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-slate-200 dark:border-slate-700">
+                            <Sparkles className="w-3.5 h-3.5 text-primary opacity-50" />
+                            <span>{rule}</span>
+                          </div>
                         ))}
                       </div>
                     ))}
                   </div>
-                )}
+                </div>
+
+                <button
+                  onClick={() => handleSelectOffer(currentOffer)}
+                  className={`w-full text-white text-sm font-black uppercase tracking-tight py-3.5 rounded-xl transition-all shadow-lg active:scale-[0.98] mt-2 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 shadow-primary/20 hover:shadow-primary/30`}
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>{isTop1 ? 'Escolher Melhor Oferta' : 'Selecionar e Salvar'}</span>
+                </button>
               </motion.div>
             );
           })
