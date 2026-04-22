@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateEmail, updatePassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/firebase';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { getUserProfile } from '@/lib/data-service';
 
 export type UserRole = 'admin' | 'promotora' | 'vendedor' | 'corretor';
@@ -40,6 +40,7 @@ interface AuthContextType {
   updatePassword: (password: string) => Promise<void>;
   blockedError: string | null;
   setBlockedError: (error: string | null) => void;
+  inactivityTimeLeft: number;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,7 +52,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isPending, setIsPending] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [blockedError, setBlockedError] = useState<string | null>(null);
+  const [inactivityTimeLeft, setInactivityTimeLeft] = useState(30 * 60);
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Reset timer on page navigation
+  useEffect(() => {
+    if (user) {
+      setInactivityTimeLeft(30 * 60);
+    }
+  }, [pathname, user]);
 
   useEffect(() => {
     console.log("AuthContext: Initializing onAuthStateChanged");
@@ -198,19 +208,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Inactivity Timeout (15 minutes)
+  // Inactivity Timeout (30 minutes)
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setInactivityTimeLeft(30 * 60);
+      return;
+    }
 
-    let inactivityTimer: NodeJS.Timeout;
+    let inactivityInterval: NodeJS.Timeout;
+    const TIMEOUT_SECONDS = 30 * 60;
 
     const resetTimer = () => {
-      clearTimeout(inactivityTimer);
-      inactivityTimer = setTimeout(async () => {
-        console.log("AuthContext: User inactive for 15 minutes. Logging out.");
-        await logout();
-      }, 15 * 60 * 1000); // 15 minutes
+      setInactivityTimeLeft(TIMEOUT_SECONDS);
     };
+
+    inactivityInterval = setInterval(async () => {
+      setInactivityTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(inactivityInterval);
+          console.log("AuthContext: User inactive for 30 minutes. Logging out.");
+          logout();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
     // Events to track activity
     const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
@@ -228,7 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     resetTimer();
 
     return () => {
-      clearTimeout(inactivityTimer);
+      clearInterval(inactivityInterval);
       events.forEach(event => {
         window.removeEventListener(event, handleActivity);
       });
@@ -326,7 +348,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updateEmail: updateEmailFunc,
       updatePassword: updatePasswordFunc,
       blockedError,
-      setBlockedError
+      setBlockedError,
+      inactivityTimeLeft
     }}>
       {children}
     </AuthContext.Provider>

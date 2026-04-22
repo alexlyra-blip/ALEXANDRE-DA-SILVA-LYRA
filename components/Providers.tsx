@@ -8,7 +8,7 @@ import { doc, getDocFromServer, onSnapshot } from 'firebase/firestore';
 import { RuleProvider } from '@/contexts/RuleContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/contexts/ToastContext';
-import { ThemeProvider } from '@/contexts/ThemeContext';
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 
 interface BrandingContextType {
   primaryColor: string;
@@ -39,6 +39,28 @@ function ConnectionTester() {
     }
     testConnection();
   }, []);
+
+  return null;
+}
+
+function LoginThemeReset() {
+  const { user } = useAuth();
+  const { setTheme } = useTheme();
+  
+  useEffect(() => {
+    if (user) {
+      // Prioritize light mode upon login session start
+      const prioritized = sessionStorage.getItem('login_theme_prioritized');
+      if (!prioritized) {
+        console.log("LoginThemeReset: Prioritizing light mode for new session");
+        setTheme('light');
+        sessionStorage.setItem('login_theme_prioritized', 'true');
+      }
+    } else {
+      // Clear flag when user is null (logout)
+      sessionStorage.removeItem('login_theme_prioritized');
+    }
+  }, [user, setTheme]);
 
   return null;
 }
@@ -191,6 +213,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <RuleProvider>
             <BrandingWrapper>
               <ConnectionTester />
+              <LoginThemeReset />
               {children}
             </BrandingWrapper>
           </RuleProvider>

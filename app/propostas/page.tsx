@@ -42,6 +42,9 @@ export default function PropostasPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [proposalToDelete, setProposalToDelete] = useState<any | null>(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 100;
+
   useEffect(() => {
     if (profile) {
       fetchProposals();
@@ -181,11 +184,11 @@ export default function PropostasPage() {
     return filtered.sort((a, b) => {
       const getSortTier = (p: any) => {
         if (p.portabilityStatus === 'AG. AVERBAÇÃO PORT') return 1;
-        const statusUpper = p.status?.toUpperCase() || '';
-        if (statusUpper === 'PAGO' || statusUpper === 'PAGA' || p.portabilityStatus === 'PORTABILIDADE FINALIZADA' || ['CANCELADO', 'CANCELADA', 'RECUSADO', 'DEVOLVIDO'].includes(statusUpper)) {
-          return 3;
-        }
-        return 2;
+        const statusUpper = (p.status || '').toUpperCase();
+        if (statusUpper === 'PENDENTE' || statusUpper === 'ANDAMENTO') return 2;
+        if (statusUpper === 'REPROVADO' || statusUpper === 'REPROVADA' || ['CANCELADO', 'CANCELADA', 'RECUSADO', 'DEVOLVIDO'].includes(statusUpper)) return 3;
+        if (statusUpper === 'PAGO' || statusUpper === 'PAGA' || p.portabilityStatus === 'PORTABILIDADE FINALIZADA') return 4;
+        return 5;
       };
 
       const tierA = getSortTier(a);
@@ -195,11 +198,41 @@ export default function PropostasPage() {
         return tierA - tierB;
       }
 
+      // Within Tier 3 (Reprovados), sort by rejection date (newest first)
+      if (tierA === 3) {
+        const dateA = a.rejectionDate ? new Date(a.rejectionDate).getTime() : 0;
+        const dateB = b.rejectionDate ? new Date(b.rejectionDate).getTime() : 0;
+        if (dateA !== dateB) return dateB - dateA;
+      }
+
+      // Within Tier 4 (Pagos), sort by payment date (newest first)
+      if (tierA === 4) {
+        const dateA = a.paymentDate ? new Date(a.paymentDate).getTime() : 0;
+        const dateB = b.paymentDate ? new Date(b.paymentDate).getTime() : 0;
+        if (dateA !== dateB) return dateB - dateA;
+      }
+
+      // Default backup: remaining days for active, or proposal date for others
       const daysA = calculateRemainingDays(a.expectedReturnDate, a.cipSentDate) ?? 999;
       const daysB = calculateRemainingDays(b.expectedReturnDate, b.cipSentDate) ?? 999;
-      return daysA - daysB;
+      
+      if (daysA !== daysB) return daysA - daysB;
+      
+      const dateA = a.proposalDate ? new Date(a.proposalDate).getTime() : 0;
+      const dateB = b.proposalDate ? new Date(b.proposalDate).getTime() : 0;
+      return dateB - dateA;
     });
   }, [proposals, searchTerm, statusFilter, dateFilter, customStartDate, customEndDate, bankFilter, corretorFilter, loanTypeFilter]);
+
+  const totalPages = Math.ceil(filteredProposals.length / itemsPerPage);
+  const paginatedProposals = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredProposals.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredProposals, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, dateFilter, bankFilter, corretorFilter, loanTypeFilter]);
 
   const exportToPDF = () => {
     const doc = new jsPDF('landscape');
@@ -279,7 +312,7 @@ export default function PropostasPage() {
       <Sidebar />
       
       <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-0">
-        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-10">
+        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-30 shadow-sm">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
@@ -300,170 +333,176 @@ export default function PropostasPage() {
         </header>
 
         <main className="p-4 max-w-7xl mx-auto w-full space-y-6">
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total</p>
-              <p className="text-2xl font-black text-slate-900">{stats.total}</p>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-1">Pendentes</p>
-              <p className="text-2xl font-black text-slate-900">{stats.pending}</p>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1">Andamento</p>
-              <p className="text-2xl font-black text-slate-900">{stats.inProgress}</p>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1">Pago</p>
-              <p className="text-2xl font-black text-slate-900">{stats.paid}</p>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-1">Reprovados</p>
-              <p className="text-2xl font-black text-slate-900">{stats.rejected}</p>
-            </div>
-          </div>
-
-          {/* Quick Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-            <div className="flex gap-2 overflow-x-auto pb-2 w-full sm:w-auto">
-              <button
-                onClick={() => setStatusFilter(null)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                  statusFilter === null 
-                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' 
-                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
-                }`}
-              >
-                TODAS
-              </button>
-              {['PENDENTE', 'ANDAMENTO', 'PAGO', 'REPROVADO'].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status === statusFilter ? null : status)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                    statusFilter === status
-                      ? 'bg-primary text-white'
-                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
-                  }`}
-                >
-                  {status}
-                </button>
-              ))}
-            </div>
-            
-            <button
-              onClick={exportToPDF}
-              className="px-4 py-2 bg-secondary hover:bg-secondary/90 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-secondary/20 whitespace-nowrap"
-            >
-              <Download className="w-4 h-4" />
-              Exportar PDF
-            </button>
-            <Link
-              href="/propostas/dashboard"
-              className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-primary/20 whitespace-nowrap"
-            >
-              <TrendingUp className="w-4 h-4" />
-              Ver Dashboard
-            </Link>
-          </div>
-
-          {/* Date and Advanced Filters */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Período:</span>
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value as any)}
-                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
-                >
-                  <option value="all">Todo o período</option>
-                  <option value="today">Hoje</option>
-                  <option value="week">Últimos 7 dias</option>
-                  <option value="15days">Últimos 15 dias</option>
-                  <option value="custom">Personalizado</option>
-                </select>
+          {/* Stats Grid - Only show on first page */}
+          {currentPage === 1 && (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-md">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total</p>
+                  <p className="text-2xl font-black text-slate-900">{stats.total}</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-md">
+                  <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-1">Pendentes</p>
+                  <p className="text-2xl font-black text-slate-900">{stats.pending}</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-md">
+                  <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1">Andamento</p>
+                  <p className="text-2xl font-black text-slate-900">{stats.inProgress}</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-md">
+                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1">Pago</p>
+                  <p className="text-2xl font-black text-slate-900">{stats.paid}</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-md">
+                  <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-1">Reprovados</p>
+                  <p className="text-2xl font-black text-slate-900">{stats.rejected}</p>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Banco:</span>
-                <select
-                  value={bankFilter}
-                  onChange={(e) => setBankFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
-                >
-                  <option value="all">Todos os Bancos</option>
-                  {filterOptions.banks.map(bank => (
-                    <option key={bank} value={bank}>{bank}</option>
+              {/* Quick Filters */}
+              <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                <div className="flex gap-2 overflow-x-auto pb-2 w-full sm:w-auto scrollbar-hide">
+                  <button
+                    onClick={() => setStatusFilter(null)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                      statusFilter === null 
+                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' 
+                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:border-primary'
+                    }`}
+                  >
+                    TODAS
+                  </button>
+                  {['PENDENTE', 'ANDAMENTO', 'PAGO', 'REPROVADO'].map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setStatusFilter(status === statusFilter ? null : status)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                        statusFilter === status
+                          ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:border-primary'
+                      }`}
+                    >
+                      {status}
+                    </button>
                   ))}
-                </select>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={exportToPDF}
+                    className="px-4 py-2 bg-secondary hover:bg-secondary/90 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-secondary/20 whitespace-nowrap"
+                  >
+                    <Download className="w-4 h-4" />
+                    Exportar PDF
+                  </button>
+                  <Link
+                    href="/propostas/dashboard"
+                    className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-primary/20 whitespace-nowrap"
+                  >
+                    <TrendingUp className="w-4 h-4" />
+                    Dashboard
+                  </Link>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Corretor:</span>
-                <select
-                  value={corretorFilter}
-                  onChange={(e) => setCorretorFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
-                >
-                  <option value="all">Todos os Corretores</option>
-                  {filterOptions.corretors.map(corretor => (
-                    <option key={corretor} value={corretor}>{corretor}</option>
-                  ))}
-                </select>
+              {/* Date and Advanced Filters */}
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Período:</span>
+                    <select
+                      value={dateFilter}
+                      onChange={(e) => setDateFilter(e.target.value as any)}
+                      className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
+                    >
+                      <option value="all">Todo o período</option>
+                      <option value="today">Hoje</option>
+                      <option value="week">Últimos 7 dias</option>
+                      <option value="15days">Últimos 15 dias</option>
+                      <option value="custom">Personalizado</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Banco:</span>
+                    <select
+                      value={bankFilter}
+                      onChange={(e) => setBankFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
+                    >
+                      <option value="all">Todos os Bancos</option>
+                      {filterOptions.banks.map(bank => (
+                        <option key={bank} value={bank}>{bank}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Corretor:</span>
+                    <select
+                      value={corretorFilter}
+                      onChange={(e) => setCorretorFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
+                    >
+                      <option value="all">Todos os Corretores</option>
+                      {filterOptions.corretors.map(corretor => (
+                        <option key={corretor} value={corretor}>{corretor}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tipo:</span>
+                    <select
+                      value={loanTypeFilter}
+                      onChange={(e) => setLoanTypeFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
+                    >
+                      <option value="all">Todos os Tipos</option>
+                      {filterOptions.loanTypes.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {dateFilter === 'custom' && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 animate-in fade-in duration-300">
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:border-primary"
+                    />
+                    <span className="text-slate-400 text-xs font-bold">até</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:border-primary"
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tipo:</span>
-                <select
-                  value={loanTypeFilter}
-                  onChange={(e) => setLoanTypeFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-primary"
-                >
-                  <option value="all">Todos os Tipos</option>
-                  {filterOptions.loanTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
+              {/* Highlight Window: Saldos do Dia */}
+              <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-2xl p-4 flex items-center justify-between transition-all hover:bg-primary/10 cursor-default">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">Saldos do Dia</h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Propostas com retorno previsto para hoje</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-black text-primary">{stats.returningToday}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Retornos</p>
+                </div>
               </div>
-            </div>
-
-            {dateFilter === 'custom' && (
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:border-primary"
-                />
-                <span className="text-slate-400 text-xs font-bold">até</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:border-primary"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Highlight Window: Saldos do Dia */}
-          <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-2xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">Saldos do Dia</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Propostas com retorno previsto para hoje</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-black text-primary">{stats.returningToday}</p>
-              <p className="text-[10px] font-bold text-slate-400 uppercase">Retornos</p>
-            </div>
-          </div>
+            </>
+          )}
 
           {/* Search and List */}
           <div className="space-y-4">
@@ -479,8 +518,8 @@ export default function PropostasPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-              {filteredProposals.length > 0 ? (
-                filteredProposals.map((proposal) => (
+              {paginatedProposals.length > 0 ? (
+                paginatedProposals.map((proposal) => (
                   <Link 
                     key={proposal.id}
                     href={`/propostas/${proposal.id}`}
@@ -601,6 +640,73 @@ export default function PropostasPage() {
                 </div>
               )}
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 pb-10 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex flex-col">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Página {currentPage} de {totalPages}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-medium italic">
+                    Exibindo {paginatedProposals.length} de {filteredProposals.length} propostas
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setCurrentPage(prev => Math.max(prev - 1, 1));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    disabled={currentPage === 1}
+                    className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:border-primary transition-all shadow-sm"
+                  >
+                    <ChevronRight className="w-5 h-5 rotate-180" />
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {[...Array(totalPages)].map((_, i) => {
+                      const pageNum = i + 1;
+                      if (
+                        pageNum === 1 || 
+                        pageNum === totalPages || 
+                        (pageNum >= currentPage - 2 && pageNum <= currentPage + 2)
+                      ) {
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => {
+                              setCurrentPage(pageNum);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className={`w-9 h-9 rounded-xl text-xs font-black transition-all ${
+                              currentPage === pageNum 
+                                ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-110' 
+                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:border-primary hover:text-primary'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      }
+                      if (pageNum === currentPage - 3 || pageNum === currentPage + 3) {
+                        return <span key={pageNum} className="text-slate-400 px-1">...</span>;
+                      }
+                      return null;
+                    })}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCurrentPage(prev => Math.min(prev + 1, totalPages));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    disabled={currentPage === totalPages}
+                    className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:border-primary transition-all shadow-sm"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </main>
 

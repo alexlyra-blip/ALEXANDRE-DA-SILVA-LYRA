@@ -3,15 +3,21 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { LayoutDashboard, Landmark, FileText, Users, Banknote, LogOut, Settings, Sun, Moon, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Landmark, FileText, Users, Banknote, LogOut, Settings, Sun, Moon, ClipboardList, Clock } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PromotoraAvatar } from './PromotoraAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export default function Sidebar() {
-  const { profile, logout } = useAuth();
+  const { profile, logout, inactivityTimeLeft } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
   
   const menuItems = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -53,6 +59,10 @@ export default function Sidebar() {
           <div className="overflow-hidden">
             <p className="font-black text-sm truncate leading-tight">{profile?.name || 'Usuário'}</p>
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mt-1">{profile?.role || 'Corretor'}</p>
+            <div className="flex items-center gap-1.5 text-white/40 mt-1 font-mono text-[11px]">
+              <Clock className="w-3.5 h-3.5" />
+              <span className="font-bold">{formatTime(inactivityTimeLeft)}</span>
+            </div>
           </div>
         </div>
         
