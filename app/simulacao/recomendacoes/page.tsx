@@ -512,24 +512,21 @@ export default function Recomendacoes() {
           const bankPortRate = parseRate(bank.portabilityRate);
           
           // --- CORREÇÃO CÁLCULO TAXA PONDERADA ---
-          // 1. Calcular a "NOVA TAXA PORT." (Target) sem considerar o piso da Taxa Mínima ainda
-          const targetCandidates = [tDiferencial, bankNovaTaxaRef].filter(v => v > 0);
-          let novaTaxaPortTarget = targetCandidates.length > 0 ? Math.min(...targetCandidates) : (originalRate + bankAdjustment);
+          // 1. Calcular a "NOVA TAXA PORT."
+          const novaTaxaPort = Number((originalRate + bankAdjustment).toFixed(2));
           
           // 2. Validação da Taxa Mínima do Banco (Piso)
-          // Regra: Se a "Nova Taxa Port. (Target)" for menor que a "Taxa Mínima" do banco, o banco não fica disponível.
-          let taxaParaCalculo = novaTaxaPortTarget;
-          if (bankPortRate > 0 && novaTaxaPortTarget < bankPortRate) {
-            log(`FILTRADO POR TAXA MÍNIMA: Nova Taxa Port. (${novaTaxaPortTarget.toFixed(2)}%) < Taxa Mínima do Banco (${bankPortRate.toFixed(2)}%)`, tabela.nome);
+          // Regra: Se a "Nova Taxa Port." for menor que a "Taxa Mínima" do banco, o banco não fica disponível.
+          if (bankPortRate > 0 && novaTaxaPort < bankPortRate) {
+            log(`FILTRADO POR TAXA MÍNIMA: Nova Taxa Port. (${novaTaxaPort.toFixed(2)}%) < Taxa Mínima do Banco (${bankPortRate.toFixed(2)}%)`, tabela.nome);
             return;
           }
           
           // 3. Calcular a TAXA PONDERADA para o Filtro da Mesa
-          // Regra Correta: (TAXA ATUAL + NOVA TAXA PORT [sem o piso]) / 2 + AJUSTE
+          // Regra Correta: (TAXA ATUAL + NOVA TAXA PORT) / 2 + AJUSTE
           const orig = Number(originalRate.toFixed(2));
-          const portTarget = Number(novaTaxaPortTarget.toFixed(2));
           
-          const taxaPonderadaBase = Math.round(((orig + portTarget) / 2) * 100) / 100;
+          const taxaPonderadaBase = Math.round(((orig + novaTaxaPort) / 2) * 100) / 100;
           const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));
           const taxaPonderadaFinal = Math.round((taxaPonderadaBase + ajusteTabela) * 100) / 100;
           
@@ -539,9 +536,8 @@ export default function Recomendacoes() {
           if (bank.name.toLowerCase().includes('digio') || bank.name.toLowerCase().includes('dibio') || bank.name.toLowerCase().includes('c6')) {
              console.log(`[DEBUG RATES] Banco: ${bank.name}, Tabela: ${tabela.nome}`);
              console.log(`   Taxa Atual (Orig): ${orig}%`);
-             console.log(`   Nova Taxa Port (Target): ${portTarget}%`);
+             console.log(`   Nova Taxa Port: ${novaTaxaPort}%`);
              console.log(`   Taxa Mínima (Piso): ${bankPortRate}%`);
-             console.log(`   Taxa p/ Cálculo Final: ${taxaParaCalculo}%`);
              console.log(`   Taxa Ponderada (Base): ${taxaPonderadaBase}%`);
              console.log(`   Ajuste Ponderada: ${ajusteTabela}%`);
              console.log(`   Taxa Ponderada Final: ${taxaPonderadaFinal}%`);
@@ -557,7 +553,7 @@ export default function Recomendacoes() {
           }
           
           // Final portability rate to be used in installments calculation
-          const finalNovaTaxaPort = taxaParaCalculo;
+          const finalNovaTaxaPort = novaTaxaPort;
 
           const taxaPonderada = taxaPonderadaFinal;
           const rules: string[][] = [];
@@ -585,8 +581,8 @@ export default function Recomendacoes() {
               valorContrato,
               valorTroco,
               saldoDevedor,
-              novaTaxaPortabilidade: taxaParaCalculo,
-              novaTaxaPortTarget: portTarget,
+              novaTaxaPortabilidade: novaTaxaPort,
+              novaTaxaPortTarget: novaTaxaPort,
               taxaPonderada,
               originalRateCalculated: orig,
               taxaBase: taxaTabelaValida,
@@ -1336,7 +1332,7 @@ export default function Recomendacoes() {
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                             <Percent className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <p className="text-xs font-medium truncate">
-                              Taxa da Port.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.novaTaxaPortabilidade.toFixed(2)}%</span>
+                              Nova Taxa Port.: <span className="text-slate-900 dark:text-white font-bold">{currentOffer.novaTaxaPortabilidade.toFixed(2)}%</span>
                             </p>
                           </div>
                         )}
