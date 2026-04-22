@@ -526,3 +526,25 @@ export const saveProposal = async (proposal: any) => {
 export const deleteProposal = async (id: string) => {
   await deleteDoc(doc(db, 'proposals', id));
 };
+
+export const getBankLogos = async (): Promise<Record<string, string>> => {
+  try {
+    const snapshot = await getDocs(collection(db, 'bank_logos'));
+    const logos: Record<string, string> = {};
+    snapshot.forEach(doc => {
+      logos[doc.id] = doc.data().logoUrl;
+    });
+    return logos;
+  } catch (e) {
+    console.error("Error fetching bank logos:", e);
+    return {};
+  }
+};
+
+export const saveBankLogo = async (bankName: string, logoUrl: string) => {
+  try {
+    await setDoc(doc(db, 'bank_logos', bankName), { logoUrl, updatedAt: serverTimestamp() });
+  } catch (e) {
+    handleFirestoreError(e, OperationType.WRITE, 'bank_logos/' + bankName);
+  }
+};

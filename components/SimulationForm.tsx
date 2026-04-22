@@ -11,7 +11,10 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { motion, AnimatePresence } from 'motion/react';
 import { safeStringify } from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ImageIcon, Upload, Trash2 } from 'lucide-react';
+import { getBankLogos, saveBankLogo } from '@/lib/data-service';
+import { useEffect } from 'react';
+import Image from 'next/image';
 
 const getAI = () => {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
@@ -30,6 +33,42 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTermBank, setSearchTermBank] = useState('');
   const [isDropdownOpenBank, setIsDropdownOpenBank] = useState(false);
+  const [bankLogos, setBankLogos] = useState<Record<string, string>>({});
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
+  useEffect(() => {
+    getBankLogos().then(setBankLogos);
+  }, []);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>, bankName: string) => {
+    const file = e.target.files?.[0];
+    if (!file || !bankName) return;
+
+    setIsUploadingLogo(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', `bank_logos/${bankName.replace(/[^a-zA-Z0-9]/g, '_')}`);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.imageUrl) {
+        await saveBankLogo(bankName, data.imageUrl);
+        setBankLogos(prev => ({ ...prev, [bankName]: data.imageUrl }));
+      } else {
+        alert(data.error || 'Erro ao carregar imagem');
+      }
+    } catch (err) {
+      console.error('Error uploading bank logo:', err);
+      alert('Erro ao carregar imagem');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
   
   const allBanks = Array.from(new Set([
     "121 - AGIBANK", "250 - BCV", "025 - BANCO ALFA", "233 - BANCO CIFRA", "001 - BANCO DO BRASIL",
@@ -495,8 +534,32 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                       onChange={(e) => setSearchTermBank(e.target.value)}
                     />
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+                    {bancoAtual && bankLogos[bancoAtual] && (
+                      <div className="absolute left-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg overflow-hidden border border-slate-100 bg-white">
+                        <Image 
+                          src={bankLogos[bancoAtual]} 
+                          alt={bancoAtual} 
+                          fill 
+                          className="object-contain p-1"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                    )}
                     <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-transform duration-200 ${isDropdownOpenBank ? 'rotate-180' : ''}`} />
                   </div>
+
+                  {profile?.role === 'admin' && bancoAtual && (
+                    <div className="mt-2 flex items-center gap-2">
+                       <label className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-all text-xs font-semibold">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{isUploadingLogo ? 'Enviando...' : 'Carregar Logo'}</span>
+                          <input type="file" className="hidden" accept="image/*" onChange={(e) => handleLogoUpload(e, bancoAtual)} disabled={isUploadingLogo} />
+                       </label>
+                       {bankLogos[bancoAtual] && (
+                         <div className="text-[10px] text-slate-500 italic">Logo salva para {bancoAtual}</div>
+                       )}
+                    </div>
+                  )}
 
                   <AnimatePresence>
                     {isDropdownOpenBank && (
@@ -529,7 +592,18 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                                       : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                                   }`}
                                 >
-                                  <span className="truncate pr-4">{b}</span>
+                                  <div className="flex items-center gap-3 truncate pr-4">
+                                    {bankLogos[b] ? (
+                                      <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-slate-100 bg-white relative">
+                                        <Image src={bankLogos[b]} alt={b} fill className="object-contain p-1" referrerPolicy="no-referrer" />
+                                      </div>
+                                    ) : (
+                                      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                                        <ImageIcon className="w-4 h-4 text-slate-400" />
+                                      </div>
+                                    )}
+                                    <span className="truncate">{b}</span>
+                                  </div>
                                   {bancoAtual === b && <Check className="w-4 h-4 shrink-0" />}
                                 </button>
                               ))}
