@@ -325,19 +325,19 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         {isSimulating && <TransitionAnimation onComplete={onAnimationComplete} availableBanks={rulesBanks} />}
         
         {!isEmbedded && (
-          <header className="sticky top-0 z-50 bg-white dark:bg-black/80 backdrop-blur-md border-b border-primary/10">
+          <header className="sticky top-0 z-50 bg-white dark:bg-white backdrop-blur-md border-b border-primary/10">
             <div className="flex items-center p-4 justify-between w-full">
               <div className="flex items-center gap-3">
-                <Link href="/" className="flex items-center justify-center size-10 rounded-full hover:bg-primary/10 transition-colors text-slate-900 dark:text-slate-100">
+                <Link href="/" className="flex items-center justify-center size-10 rounded-full hover:bg-primary/10 transition-colors text-slate-900 dark:text-slate-900">
                   <ArrowLeft className="w-6 h-6" />
                 </Link>
-                <h2 className="text-xl font-bold">Nova Simulação</h2>
+                <h2 className="text-xl font-bold text-black dark:text-black">Nova Simulação</h2>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setIsAIModalOpen(true)} className="flex items-center justify-center size-10 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
                   <Sparkles className="w-5 h-5" />
                 </button>
-                <button className="flex items-center justify-center size-10 rounded-full hover:bg-primary/10 transition-colors text-slate-900 dark:text-slate-100">
+                <button className="flex items-center justify-center size-10 rounded-full hover:bg-primary/10 transition-colors text-slate-900 dark:text-slate-900">
                   <HelpCircle className="w-6 h-6" />
                 </button>
               </div>
@@ -354,7 +354,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
             </div>
             <div className="space-y-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Convênio</label>
+                <label className="text-sm font-semibold text-slate-600 dark:text-white">Convênio</label>
                 <div className="bg-slate-100 dark:bg-slate-900/50 p-1 rounded-2xl flex flex-wrap gap-1">
                   {(['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS', 'CLT PRIVADO'] as const).map(lib => (
                     <button key={lib} type="button" onClick={() => handleConvenioChange({ target: { value: lib } } as any)} className={`flex-1 px-2 h-10 rounded-xl text-[10px] font-bold transition-all ${convenio === lib ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>{lib}</button>
@@ -363,17 +363,17 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
               </div>
               
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Idade do Cliente</label>
-                <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 p-4 text-base font-medium" type="number" value={idade} onChange={handleIdadeChange} placeholder="Ex: 65" />
+                <label className="text-sm font-semibold text-slate-600 dark:text-white">Idade do Cliente</label>
+                <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium" type="number" value={idade} onChange={handleIdadeChange} placeholder="Ex: 65" />
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">{convenio === 'INSS' ? 'Código do Benefício' : 'Sub-convênio'}</label>
+                <label className="text-sm font-semibold text-slate-600 dark:text-white">{convenio === 'INSS' ? 'Código do Benefício' : 'Sub-convênio'}</label>
                 <div className="relative">
                   <div className="relative">
                     <input
                       type="text"
-                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 pl-12 pr-10 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-10 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       placeholder={convenio === 'INSS' ? "Buscar por código ou nome..." : "Selecionar sub-convênio..."}
                       value={isDropdownOpen ? searchTerm : (beneficios[convenio].find(b => b.value === codigoBeneficio)?.label || '')}
                       onFocus={() => {
@@ -446,13 +446,13 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
 
               {showDataConcessao && (
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Data de Concessão</label>
+                  <label className="text-sm font-semibold text-slate-600 dark:text-white">Data de Concessão</label>
                   <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-slate-800/50 h-14 p-4 text-base font-medium" type="date" value={dataConcessao} onChange={(e) => setDataConcessao(e.target.value)} />
                 </div>
               )}
 
               <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Analfabeto?</label>
+                <label className="text-sm font-semibold text-slate-600 dark:text-white">Analfabeto?</label>
                 <div className="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl">
                   <button type="button" onClick={() => setIsAnalfabeto(true)} className={`px-4 py-1.5 rounded-lg text-xs font-bold ${isAnalfabeto === true ? 'bg-primary text-white' : 'text-slate-500'}`}>SIM</button>
                   <button type="button" onClick={() => setIsAnalfabeto(false)} className={`px-4 py-1.5 rounded-lg text-xs font-bold ${isAnalfabeto === false ? 'bg-primary text-white' : 'text-slate-500'}`}>NÃO</button>
@@ -461,7 +461,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
 
               {show60Mais && (
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Cliente 60+?</label>
+                  <label className="text-sm font-semibold text-slate-600 dark:text-white">Cliente 60+?</label>
                   <div className="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl">
                     <button type="button" onClick={() => setIsCliente60Mais(true)} className={`px-4 py-1.5 rounded-lg text-xs font-bold ${isCliente60Mais === true ? 'bg-primary text-white' : 'text-slate-500'}`}>SIM</button>
                     <button type="button" onClick={() => setIsCliente60Mais(false)} className={`px-4 py-1.5 rounded-lg text-xs font-bold ${isCliente60Mais === false ? 'bg-primary text-white' : 'text-slate-500'}`}>NÃO</button>
@@ -480,12 +480,12 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
             </div>
             <div className="space-y-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Banco Atual</label>
+                <label className="text-sm font-semibold text-slate-600 dark:text-white">Banco Atual</label>
                 <div className="relative">
                   <div className="relative">
                     <input
                       type="text"
-                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 pl-12 pr-10 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-10 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       placeholder="Buscar banco..."
                       value={isDropdownOpenBank ? searchTermBank : bancoAtual}
                       onFocus={() => {
@@ -547,29 +547,29 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Valor da Parcela</label>
+                <label className="text-sm font-semibold text-slate-600 dark:text-white">Valor da Parcela</label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">R$</span>
-                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 pl-12 pr-4 text-base font-medium" type="text" value={valorParcela} onChange={handleValorParcelaChange} placeholder="0,00" />
+                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium" type="text" value={valorParcela} onChange={handleValorParcelaChange} placeholder="0,00" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Prazo Total</label>
-                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 p-4 text-base font-medium" type="number" value={prazoTotal} onChange={(e) => setPrazoTotal(e.target.value)} />
+                  <label className="text-sm font-semibold text-slate-600 dark:text-white">Prazo Total</label>
+                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium" type="number" value={prazoTotal} onChange={(e) => setPrazoTotal(e.target.value)} />
                 </div>
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Parcelas Restantes</label>
-                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 p-4 text-base font-medium" type="number" value={parcelasRestantes} onChange={(e) => setParcelasRestantes(e.target.value)} />
+                  <label className="text-sm font-semibold text-slate-600 dark:text-white">Parcelas Restantes</label>
+                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium" type="number" value={parcelasRestantes} onChange={(e) => setParcelasRestantes(e.target.value)} />
                 </div>
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-slate-400">Saldo Devedor</label>
+                <label className="text-sm font-semibold text-slate-600 dark:text-white">Saldo Devedor</label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">R$</span>
-                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-input h-14 pl-12 pr-4 text-base font-medium" type="text" value={saldoDevedor} onChange={handleSaldoDevedorChange} placeholder="0.000,00" />
+                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium" type="text" value={saldoDevedor} onChange={handleSaldoDevedorChange} placeholder="0.000,00" />
                 </div>
               </div>
 

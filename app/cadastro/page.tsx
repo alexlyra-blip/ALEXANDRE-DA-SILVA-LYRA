@@ -136,7 +136,7 @@ export default function Cadastro() {
                 if (fieldErrors.name) setFieldErrors(prev => ({...prev, name: undefined}));
               }}
               placeholder="Seu nome"
-              className={`w-full bg-white dark:bg-slate-900 border rounded-xl py-4 pl-12 pr-4 text-foreground focus:outline-none focus:ring-2 transition-all ${
+              className={`w-full bg-white dark:bg-white border rounded-xl py-4 pl-12 pr-4 text-foreground focus:outline-none focus:ring-2 transition-all ${
                 fieldErrors.name ? 'border-red-500 focus:ring-red-500/50' : 'border-slate-200 dark:border-slate-800 focus:ring-primary/50'
               }`}
             />
@@ -170,7 +170,7 @@ export default function Cadastro() {
                 }
               }}
               placeholder="seu@email.com"
-              className={`w-full bg-white dark:bg-slate-900 border rounded-xl py-4 pl-12 pr-4 text-foreground focus:outline-none focus:ring-2 transition-all ${
+              className={`w-full bg-white dark:bg-white border rounded-xl py-4 pl-12 pr-4 text-foreground focus:outline-none focus:ring-2 transition-all ${
                 fieldErrors.email ? 'border-red-500 focus:ring-red-500/50' : 'border-slate-200 dark:border-slate-800 focus:ring-primary/50'
               }`}
             />
@@ -199,7 +199,7 @@ export default function Cadastro() {
               }}
               placeholder="(00) 00000-0000"
               maxLength={15}
-              className={`w-full bg-white dark:bg-slate-900 border rounded-xl py-4 pl-12 pr-4 text-foreground focus:outline-none focus:ring-2 transition-all ${
+              className={`w-full bg-white dark:bg-white border rounded-xl py-4 pl-12 pr-4 text-foreground focus:outline-none focus:ring-2 transition-all ${
                 fieldErrors.phone ? 'border-red-500 focus:ring-red-500/50' : 'border-slate-200 dark:border-slate-800 focus:ring-primary/50'
               }`}
             />
@@ -221,7 +221,7 @@ export default function Cadastro() {
                 if (fieldErrors.password) setFieldErrors(prev => ({...prev, password: undefined}));
               }}
               placeholder="••••••••"
-              className={`w-full bg-white dark:bg-slate-900 border rounded-xl py-4 pl-12 pr-12 text-foreground focus:outline-none focus:ring-2 transition-all ${
+              className={`w-full bg-white dark:bg-white border rounded-xl py-4 pl-12 pr-12 text-foreground focus:outline-none focus:ring-2 transition-all ${
                 fieldErrors.password ? 'border-red-500 focus:ring-red-500/50' : 'border-slate-200 dark:border-slate-800 focus:ring-primary/50'
               }`}
             />

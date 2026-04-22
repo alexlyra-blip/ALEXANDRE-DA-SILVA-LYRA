@@ -33,6 +33,28 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
+/* Ensure input fields maintain visibility and color in dark mode as per user request */
+input:not([type="checkbox"]):not([type="radio"]), 
+select, 
+textarea {
+  color: #0f172a !important; /* Force dark text color */
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea {
+  background-color: #ffffff !important; /* Ensure light background in dark mode for dark text visibility */
+  color: #0f172a !important;
+}
+
+input::placeholder {
+  color: #64748b !important;
+}
+
+.dark input::placeholder {
+  color: #64748b !important;
+}
+
 ::selection {
   background-color: var(--primary);
   color: #ffffff;
