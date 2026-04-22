@@ -78,7 +78,7 @@ export default function RegrasBanco() {
   const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO'>('INSS');
   const [subConvenio, setSubConvenio] = useState('');
   const [isActive, setIsActive] = useState(true);
-  const [tabelas, setTabelas] = useState([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '' }]);
+  const [tabelas, setTabelas] = useState([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '' }]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Auto-populate from simulation data
@@ -127,7 +127,7 @@ export default function RegrasBanco() {
   const [generalRulePrioridade, setGeneralRulePrioridade] = useState('');
 
   const addTabela = () => {
-    setTabelas([...tabelas, { nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '' }]);
+    setTabelas([...tabelas, { nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '' }]);
   };
 
   const removeTabela = (index: number) => {
@@ -228,7 +228,9 @@ export default function RegrasBanco() {
     tabelas.forEach((t, idx) => {
       if (!t.nome) newErrors[`tabela_${idx}_nome`] = "Campo obrigatório";
       if (!t.coeficiente || isNaN(parseNumeric(t.coeficiente))) newErrors[`tabela_${idx}_coef`] = "Valor inválido";
-      if (!t.minTicket || isNaN(parseNumeric(t.minTicket))) newErrors[`tabela_${idx}_ticket`] = "Valor inválido";
+      if (t.minTicket && isNaN(parseNumeric(t.minTicket))) newErrors[`tabela_${idx}_ticket`] = "Valor inválido";
+      if (t.minInstallmentValue && isNaN(parseNumeric(t.minInstallmentValue))) newErrors[`tabela_${idx}_min_parcela`] = "Valor inválido";
+      if (t.maxInstallmentValue && isNaN(parseNumeric(t.maxInstallmentValue))) newErrors[`tabela_${idx}_max_parcela`] = "Valor inválido";
       
       const taxaTab = parseNumeric(t.taxaTabela);
       const diferencial = parseNumeric(t.taxaDiferencial) || 0;
@@ -323,7 +325,9 @@ export default function RegrasBanco() {
           ajusteTaxaPonderada: parseNumeric(t.ajusteTaxaPonderada),
           useMinTicket: t.useMinTicket !== false,
           useTaxaPonderada: t.useTaxaPonderada !== false,
-          prazoRefinPort: t.prazoRefinPort ? parseInt(t.prazoRefinPort as any) : undefined
+          prazoRefinPort: t.prazoRefinPort ? parseInt(t.prazoRefinPort as any) : undefined,
+          minInstallmentValue: parseNumeric(t.minInstallmentValue),
+          maxInstallmentValue: parseNumeric(t.maxInstallmentValue)
         }))
       };
 
@@ -426,8 +430,10 @@ export default function RegrasBanco() {
       ajusteTaxaPonderada: t.ajusteTaxaPonderada?.toString() || '',
       useMinTicket: t.useMinTicket !== false,
       useTaxaPonderada: t.useTaxaPonderada !== false,
-      prazoRefinPort: t.prazoRefinPort?.toString() || ''
-    })) : [{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '' }]);
+      prazoRefinPort: t.prazoRefinPort?.toString() || '',
+      minInstallmentValue: t.minInstallmentValue?.toString() || '',
+      maxInstallmentValue: t.maxInstallmentValue?.toString() || ''
+    })) : [{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '' }]);
     setIsBankModalOpen(true);
   };
 
@@ -688,6 +694,15 @@ export default function RegrasBanco() {
                           <button onClick={() => handleEditBank(bank)} className="bg-slate-100 dark:bg-slate-700 hover:bg-primary hover:text-white dark:hover:bg-primary text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-lg transition-all">
                             Editar
                           </button>
+                          {isAdmin && (
+                            <button 
+                              onClick={() => updateBank(bank.id, { isActive: !bank.isActive })}
+                              className={`p-2 transition-colors ${bank.isActive ? 'text-emerald-500 hover:text-red-500' : 'text-red-500 hover:text-emerald-500'}`}
+                              title={bank.isActive ? "Desativar banco" : "Ativar banco"}
+                            >
+                              <Lock className={`w-5 h-5 ${!bank.isActive ? 'fill-current' : ''}`} />
+                            </button>
+                          )}
                           <button onClick={() => handleDeleteBank(bank.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
                             <Trash2 className="w-5 h-5" />
                           </button>
@@ -1454,6 +1469,33 @@ export default function RegrasBanco() {
                           placeholder="0.00000" 
                         />
                         {errors[`tabela_${index}_coef`] && <p className="text-[8px] text-red-500 ml-1 font-bold">{errors[`tabela_${index}_coef`]}</p>}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 sm:col-span-2 md:col-span-12">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500">Parcela Mínima (R$)</label>
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            value={tabela.minInstallmentValue || ''} 
+                            onChange={e => handleTabelaChange(index, 'minInstallmentValue', e.target.value)} 
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-black focus:ring-2 focus:ring-primary/10 outline-none transition-all shadow-sm"
+                            placeholder="0.00"
+                          />
+                          {errors[`tabela_${index}_min_parcela`] && <p className="text-[8px] text-red-500 ml-1 font-bold">{errors[`tabela_${index}_min_parcela`]}</p>}
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500">Parcela Máxima (R$)</label>
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            value={tabela.maxInstallmentValue || ''} 
+                            onChange={e => handleTabelaChange(index, 'maxInstallmentValue', e.target.value)} 
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-black focus:ring-2 focus:ring-primary/10 outline-none transition-all shadow-sm"
+                            placeholder="0.00"
+                          />
+                          {errors[`tabela_${index}_max_parcela`] && <p className="text-[8px] text-red-500 ml-1 font-bold">{errors[`tabela_${index}_max_parcela`]}</p>}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 sm:col-span-2 md:col-span-8">

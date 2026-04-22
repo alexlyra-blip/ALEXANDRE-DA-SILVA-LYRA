@@ -48,6 +48,10 @@ export default function RegrasGeraisPage() {
   const [priorityBankSelection, setPriorityBankSelection] = useState('');
   const [priorityValue, setPriorityValue] = useState('');
   
+  // States Blocked Banks
+  const [blockedBanks, setBlockedBanks] = useState<string[]>([]);
+  const [blockedBankSelection, setBlockedBankSelection] = useState('');
+  
   // States Installments Form
   const [installmentsBankSelection, setInstallmentsBankSelection] = useState('');
   const [installmentsValue, setInstallmentsValue] = useState('');
@@ -118,6 +122,59 @@ export default function RegrasGeraisPage() {
         </div>
       </div>
 
+      {/* BANKS BLOCKING (Promotora) */}
+      <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+          <h2 className="font-bold flex items-center gap-2">
+            <X className="w-5 h-5 text-red-500" />
+            Bancos Bloqueados na Simulação
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">Selecione bancos que não devem ser ofertados.</p>
+        </div>
+        <div className="p-4">
+          <div className="flex gap-2">
+            <select 
+              className="flex-1 min-w-[150px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+              value={blockedBankSelection}
+              onChange={e => setBlockedBankSelection(e.target.value)}
+            >
+              <option value="">Selecione um banco para bloquear...</option>
+              {banks.filter(b => !blockedBanks.includes(b.name)).map(b => (
+                <option key={b.id} value={b.name}>{b.name}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={isSaving || !blockedBankSelection}
+              onClick={() => {
+                if(blockedBankSelection) {
+                  setBlockedBanks([...blockedBanks, blockedBankSelection]);
+                  setBlockedBankSelection('');
+                }
+              }}
+              className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white p-2 rounded-xl transition-all flex items-center justify-center shrink-0"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="flex flex-wrap gap-2 mt-4">
+            {blockedBanks.map(bankName => (
+              <span key={bankName} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-xs font-bold">
+                {bankName}
+                <button 
+                  type="button" 
+                  onClick={() => setBlockedBanks(blockedBanks.filter(b => b !== bankName))} 
+                  className="ml-1 hover:text-red-700 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         
         {/* PRIORITIES SECTION */}

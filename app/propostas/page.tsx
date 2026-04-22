@@ -180,46 +180,29 @@ export default function PropostasPage() {
       return matchesSearch && matchesStatus && matchesBank && matchesCorretor && matchesLoanType && matchesDate;
     });
 
-    // Sort by rules prioritizing 'AG. AVERBAÇÃO PORT', then active by remaining days, then finished statuses
+    // Sort by status group, then by date within status
     return filtered.sort((a, b) => {
-      const getSortTier = (p: any) => {
-        if (p.portabilityStatus === 'AG. AVERBAÇÃO PORT') return 1;
-        const statusUpper = (p.status || '').toUpperCase();
-        if (statusUpper === 'PENDENTE' || statusUpper === 'ANDAMENTO') return 2;
-        if (statusUpper === 'REPROVADO' || statusUpper === 'REPROVADA' || ['CANCELADO', 'CANCELADA', 'RECUSADO', 'DEVOLVIDO'].includes(statusUpper)) return 3;
-        if (statusUpper === 'PAGO' || statusUpper === 'PAGA' || p.portabilityStatus === 'PORTABILIDADE FINALIZADA') return 4;
-        return 5;
+      const statusOrder: Record<string, number> = {
+        'PENDENTE': 1,
+        'ANDAMENTO': 2,
+        'PAGO': 3,
+        'REPROVADO': 4
       };
 
-      const tierA = getSortTier(a);
-      const tierB = getSortTier(b);
+      const statusA = (a.status || '').toUpperCase() as string;
+      const statusB = (b.status || '').toUpperCase() as string;
 
-      if (tierA !== tierB) {
-        return tierA - tierB;
+      const orderA = statusOrder[statusA] || 5;
+      const orderB = statusOrder[statusB] || 5;
+
+      if (orderA !== orderB) {
+        return orderA - orderB;
       }
 
-      // Within Tier 3 (Reprovados), sort by rejection date (newest first)
-      if (tierA === 3) {
-        const dateA = a.rejectionDate ? new Date(a.rejectionDate).getTime() : 0;
-        const dateB = b.rejectionDate ? new Date(b.rejectionDate).getTime() : 0;
-        if (dateA !== dateB) return dateB - dateA;
-      }
-
-      // Within Tier 4 (Pagos), sort by payment date (newest first)
-      if (tierA === 4) {
-        const dateA = a.paymentDate ? new Date(a.paymentDate).getTime() : 0;
-        const dateB = b.paymentDate ? new Date(b.paymentDate).getTime() : 0;
-        if (dateA !== dateB) return dateB - dateA;
-      }
-
-      // Default backup: remaining days for active, or proposal date for others
-      const daysA = calculateRemainingDays(a.expectedReturnDate, a.cipSentDate) ?? 999;
-      const daysB = calculateRemainingDays(b.expectedReturnDate, b.cipSentDate) ?? 999;
-      
-      if (daysA !== daysB) return daysA - daysB;
-      
+      // Within same status, sort by date (newest first)
       const dateA = a.proposalDate ? new Date(a.proposalDate).getTime() : 0;
       const dateB = b.proposalDate ? new Date(b.proposalDate).getTime() : 0;
+      
       return dateB - dateA;
     });
   }, [proposals, searchTerm, statusFilter, dateFilter, customStartDate, customEndDate, bankFilter, corretorFilter, loanTypeFilter]);

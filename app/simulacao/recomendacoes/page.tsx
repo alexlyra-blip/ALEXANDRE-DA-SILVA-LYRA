@@ -15,7 +15,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { safeStringify } from '@/lib/utils';
-import { getBankLogos } from '@/lib/data-service';
 
 const getAI = () => {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
@@ -64,12 +63,7 @@ export default function Recomendacoes() {
   const [isAISummarizing, setIsAISummarizing] = useState(false);
   const { banks, generalRules, promotoraPriorities, promotoraInstallments, isLoaded } = useRules();
   const { profile } = useAuth();
-  const [bankLogos, setBankLogos] = useState<Record<string, string>>({});
   const savedSimulationId = useRef<string | null>(null);
-
-  useEffect(() => {
-    getBankLogos().then(setBankLogos);
-  }, []);
 
   const handleSelectOffer = async (offer: Offer) => {
     try {
@@ -966,20 +960,7 @@ export default function Recomendacoes() {
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
                 <div className="space-y-1 col-span-2 sm:col-span-3">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Banco Atual</p>
-                  <div className="flex items-center gap-2">
-                    {simData.bancoAtual && bankLogos[simData.bancoAtual] && (
-                      <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-slate-100 bg-white relative">
-                        <Image 
-                          src={bankLogos[simData.bancoAtual]} 
-                          alt={simData.bancoAtual} 
-                          fill 
-                          className="object-contain p-1"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
-                    )}
-                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{simData.bancoAtual}</p>
-                  </div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{simData.bancoAtual}</p>
                 </div>
                 <div className="space-y-1 col-span-1">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Parcela</p>
@@ -1439,9 +1420,9 @@ export default function Recomendacoes() {
                     
                     {/* Specific dynamic rules */}
                     {currentOffer.rules && currentOffer.rules.length > 0 && currentOffer.rules.map((ruleGroup: string[], iIdx: number) => (
-                      <div key={iIdx} className="flex gap-1">
+                      <div key={`${currentOffer.id}-${iIdx}`} className="flex gap-1">
                         {ruleGroup.map((rule, jIdx) => (
-                          <div key={jIdx} className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-slate-200 dark:border-slate-700">
+                          <div key={`${iIdx}-${jIdx}-${rule}`} className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-slate-200 dark:border-slate-700">
                             <Sparkles className="w-3.5 h-3.5 text-primary opacity-50" />
                             <span>{rule}</span>
                           </div>
@@ -1481,7 +1462,7 @@ export default function Recomendacoes() {
               ) : (
                 <ul className="space-y-4">
                   {filterReasons.map((log, i) => (
-                    <li key={i} className="border-l-2 border-amber-500 pl-3">
+                    <li key={`${log.bankName}-${log.reason}-${i}`} className="border-l-2 border-amber-500 pl-3">
                       <strong className="text-amber-600 dark:text-amber-400">{log.bankName}</strong>
                       {log.tabela && <span className="ml-2 text-slate-500">- Tabela: {log.tabela}</span>}
                       <p className="text-slate-700 dark:text-slate-300 mt-1 break-words">{log.reason}</p>

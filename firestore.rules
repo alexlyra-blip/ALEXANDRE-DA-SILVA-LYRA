@@ -50,6 +50,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /audit_logs/{id} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+    }
+
     match /banks/{id} {
       allow read: if true;
       allow write: if isAdmin();
