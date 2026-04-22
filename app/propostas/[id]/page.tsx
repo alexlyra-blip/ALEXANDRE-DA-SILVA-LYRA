@@ -47,6 +47,17 @@ const LOAN_TYPES = [
   'CREDITO PESSOAL'
 ];
 
+const SUGGESTED_BANKS = [
+  "AGIBANK", "BCV", "BANCO ALFA", "BANCO CIFRA", "BANCO DO BRASIL",
+  "BANCO DO ESTADO DO SERGIPE", "BANCO ORIGINAL", "BANCO PINE", "BANCO SEGURO",
+  "BANRISUL", "BARIGUI", "BMG", "BRADESCO S.A.", "BRB", "C6 CONSIG",
+  "CCB BRASIL", "CAIXA", "CREFISA", "DAYCOVAL", "DIGIO", "FACTA",
+  "INBURSA", "ITAÚ CONSIGNADO", "ITAÚ BBA", "ITAÚ UNIBANCO", "MERCANTIL",
+  "NU FINANCEIRA S.A.", "NBC BANK", "OLÉ", "PAGBANK", "PAN", "PARANÁ BANCO",
+  "BNP PARIBAS", "PARATI", "PAULISTA", "PICPAY", "QI SOCIEDADE", "SABEMI",
+  "SAFRA", "SANTANDER", "ZEMA"
+].sort();
+
 const formatCpf = (value: string) => {
   const v = value.replace(/\D/g, '').slice(0, 11);
   if (v.length <= 3) return v;
@@ -98,6 +109,8 @@ function ProposalDetailPageContent() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [bankSuggestions, setBankSuggestions] = useState<string[]>([]);
+  const [showBankSuggestions, setShowBankSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCopySuccess, setShowCopySuccess] = useState(false);
   
@@ -817,7 +830,7 @@ function ProposalDetailPageContent() {
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
               <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Dados da Operação</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                <div>
+                <div className="relative">
                   <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Banco Solicitado</label>
                   <input 
                     type="text"
@@ -826,9 +839,56 @@ function ProposalDetailPageContent() {
                       let val = e.target.value.toUpperCase();
                       if (val === 'C6') val = 'C6 CONSIG';
                       setFormData({ ...formData, bank: val });
+                      
+                      if (val.trim()) {
+                        const filtered = SUGGESTED_BANKS.filter(b => 
+                          b.toUpperCase().includes(val)
+                        );
+                        setBankSuggestions(filtered);
+                        setShowBankSuggestions(filtered.length > 0);
+                      } else {
+                        setShowBankSuggestions(false);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (formData.bank.trim()) {
+                        const filtered = SUGGESTED_BANKS.filter(b => 
+                          b.toUpperCase().includes(formData.bank.toUpperCase())
+                        );
+                        setBankSuggestions(filtered);
+                        setShowBankSuggestions(filtered.length > 0);
+                      }
+                    }}
+                    onBlur={() => {
+                      // Small delay to allow clicking a suggestion
+                      setTimeout(() => setShowBankSuggestions(false), 200);
                     }}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                   />
+                  <AnimatePresence>
+                    {showBankSuggestions && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto"
+                      >
+                        {bankSuggestions.map((bank, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setFormData({ ...formData, bank: bank });
+                              setShowBankSuggestions(false);
+                            }}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-b last:border-0 border-slate-100 dark:border-slate-800"
+                          >
+                            {bank}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Tabela</label>
