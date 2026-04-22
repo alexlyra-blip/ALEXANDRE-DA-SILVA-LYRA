@@ -808,7 +808,13 @@ export default function Recomendacoes() {
   });
 
   const formatCurrency = (value: number) => {
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      useGrouping: true
+    }).format(value || 0);
   };
 
   const handleGeneratePDF = (offer: Offer) => {

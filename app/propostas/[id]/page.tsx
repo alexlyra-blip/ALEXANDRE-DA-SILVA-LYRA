@@ -127,14 +127,12 @@ function ProposalDetailPageContent() {
 
   const formatToCurrencyInput = (val: string | number) => {
     if (val === undefined || val === null) return '0,00';
-    let numericValue = val;
-    if (typeof val === 'string') {
-      const parsed = parseFloat(val);
-      numericValue = isNaN(parsed) ? 0 : parsed;
-    }
-    const fixedValue = (numericValue as number).toFixed(2);
-    const [int, dec] = fixedValue.split('.');
-    return `${int},${dec}`;
+    let numericValue = typeof val === 'string' ? (parseFloat(val) || 0) : val;
+    return new Intl.NumberFormat('pt-BR', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2,
+      useGrouping: true
+    }).format(numericValue);
   };
 
   const [inputValues, setInputValues] = useState({
@@ -145,27 +143,66 @@ function ProposalDetailPageContent() {
   });
 
   const handleCurrencyInputChange = (field: string, value: string) => {
-    // Remove non-numeric characters except comma
-    let cleanValue = value.replace(/[^\d,]/g, '');
+    // Remove all non-digits
+    let cleanValue = value.replace(/\D/g, '');
     
-    // Ensure only one comma
-    const commaCount = (cleanValue.match(/,/g) || []).length;
-    if (commaCount > 1) {
-      const parts = cleanValue.split(',');
-      cleanValue = parts[0] + ',' + parts.slice(1).join('');
-    }
+    // Convert to number (cents)
+    const numericVal = parseFloat(cleanValue) / 100 || 0;
+    
+    // Format to "1.234,56"
+    const formatted = new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      useGrouping: true
+    }).format(numericVal);
 
-    // Limit to 2 decimal places
-    if (cleanValue.includes(',')) {
-      const [int, dec] = cleanValue.split(',');
-      cleanValue = `${int},${dec.slice(0, 2)}`;
-    }
-
-    setInputValues(prev => ({ ...prev, [field]: cleanValue }));
+    setInputValues(prev => ({ ...prev, [field]: formatted }));
     
     // Update numeric value in formData
-    const numericVal = parseFloat(cleanValue.replace(',', '.')) || 0;
-    setFormData(prev => ({ ...prev, [field]: numericVal }));
+    setFormData(prev => {
+      const newFormData = { ...prev, [field]: numericVal };
+      
+      // Auto-calculations for Portabilidade/Refinanciamento
+      if (prev.loanType === 'PORTABILIDADE' || prev.loanType === 'REFINANCIAMENTO') {
+        const v = field === 'value' ? numericVal : prev.value;
+        const s = field === 'saldoDevedor' ? numericVal : prev.saldoDevedor;
+        const t = field === 'troco' ? numericVal : prev.troco;
+
+        if (field === 'value') {
+          if (s > 0) {
+            const calculatedTroco = v - s;
+            newFormData.troco = calculatedTroco;
+            setInputValues(input => ({ ...input, troco: formatToCurrencyInput(calculatedTroco) }));
+          } else if (t > 0) {
+            const calculatedSaldo = v - t;
+            newFormData.saldoDevedor = calculatedSaldo;
+            setInputValues(input => ({ ...input, saldoDevedor: formatToCurrencyInput(calculatedSaldo) }));
+          }
+        } else if (field === 'saldoDevedor') {
+          if (v > 0) {
+            const calculatedTroco = v - s;
+            newFormData.troco = calculatedTroco;
+            setInputValues(input => ({ ...input, troco: formatToCurrencyInput(calculatedTroco) }));
+          } else if (t > 0) {
+            const calculatedValue = s + t;
+            newFormData.value = calculatedValue;
+            setInputValues(input => ({ ...input, value: formatToCurrencyInput(calculatedValue) }));
+          }
+        } else if (field === 'troco') {
+          if (v > 0) {
+            const calculatedSaldo = v - t;
+            newFormData.saldoDevedor = calculatedSaldo;
+            setInputValues(input => ({ ...input, saldoDevedor: formatToCurrencyInput(calculatedSaldo) }));
+          } else if (s > 0) {
+            const calculatedValue = s + t;
+            newFormData.value = calculatedValue;
+            setInputValues(input => ({ ...input, value: formatToCurrencyInput(calculatedValue) }));
+          }
+        }
+      }
+      
+      return newFormData;
+    });
   };
 
   useEffect(() => {
@@ -785,7 +822,11 @@ function ProposalDetailPageContent() {
                   <input 
                     type="text"
                     value={formData.bank}
-                    onChange={(e) => setFormData({ ...formData, bank: e.target.value })}
+                    onChange={(e) => {
+                      let val = e.target.value.toUpperCase();
+                      if (val === 'C6') val = 'C6 CONSIG';
+                      setFormData({ ...formData, bank: val });
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                   />
                 </div>

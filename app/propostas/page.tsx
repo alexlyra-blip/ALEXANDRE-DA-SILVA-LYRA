@@ -183,8 +183,8 @@ export default function PropostasPage() {
     // Sort by status group, then by date within status
     return filtered.sort((a, b) => {
       const statusOrder: Record<string, number> = {
-        'PENDENTE': 1,
-        'ANDAMENTO': 2,
+        'ANDAMENTO': 1,
+        'PENDENTE': 2,
         'PAGO': 3,
         'REPROVADO': 4
       };

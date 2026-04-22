@@ -179,7 +179,11 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
     const numericValue = value.replace(/\D/g, '');
     if (!numericValue) return '';
     const numberValue = parseInt(numericValue, 10) / 100;
-    return numberValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return new Intl.NumberFormat('pt-BR', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2,
+      useGrouping: true 
+    }).format(numberValue);
   };
 
   const parseCurrency = (value: string) => {
