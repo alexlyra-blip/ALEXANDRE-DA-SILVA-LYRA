@@ -33,6 +33,13 @@ const STATUS_COLORS: { [key: string]: string } = {
   'REPROVADO': '#ef4444',
 };
 
+const BANK_COLORS: { [key: string]: string } = {
+  'C6 CONSIG': '#868686',
+  'DAYCOVAL': '#1543C5',
+  'BMG': '#E38803',
+  'PAN': '#33CCFF',
+};
+
 export default function DashboardPropostasPage() {
   const { profile } = useAuth();
   const [proposals, setProposals] = useState<any[]>([]);
@@ -110,12 +117,6 @@ export default function DashboardPropostasPage() {
       return acc;
     }, {} as { [key: string]: number });
 
-    // Ensure all banks are present
-    const allBanks = Array.from(new Set(proposals.map(p => p.bank || 'Outros')));
-    allBanks.forEach(bank => {
-      if (!(bank in bankCounts)) bankCounts[bank] = 0;
-    });
-
     const userCounts = filteredProposals.reduce((acc, p) => {
       const name = p.corretor || 'Sem Corretor';
       
@@ -132,10 +133,12 @@ export default function DashboardPropostasPage() {
       color: STATUS_COLORS[name] || '#94a3b8'
     }));
 
-    const bankData = Object.entries(bankCounts).map(([name, value]) => ({
-      name,
-      value,
-    }));
+    const bankData = Object.entries(bankCounts)
+      .map(([name, value]) => ({
+        name,
+        value,
+      }))
+      .filter(item => item.value > 0);
 
     const barData = Object.values(userCounts).map(u => ({
       name: u.name,
@@ -278,10 +281,17 @@ export default function DashboardPropostasPage() {
                           outerRadius={100}
                           paddingAngle={5}
                           dataKey="value"
+                          animationDuration={500}
                         >
-                          {stats.bankData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={`hsl(${(index * 45) % 360}, 70%, 60%)`} />
-                          ))}
+                          {stats.bankData.map((entry, index) => {
+                            const customColor = BANK_COLORS[entry.name.toUpperCase()];
+                            return (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={customColor || `hsl(${(index * 45) % 360}, 70%, 60%)`} 
+                              />
+                            );
+                          })}
                         </Pie>
                         <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'transparent' }} />
                         <Legend iconType="circle" />
