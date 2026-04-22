@@ -961,20 +961,20 @@ export default function Recomendacoes() {
                   Validação Ativa
                 </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                <div className="space-y-1 sm:col-span-2">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
+                <div className="space-y-1 col-span-2 sm:col-span-3">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Banco Atual</p>
                   <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{simData.bancoAtual}</p>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 col-span-1">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Parcela</p>
                   <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(simData.valorParcela)}</p>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 col-span-2 sm:col-span-1">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Convênio/Idade</p>
                   <p className="text-sm font-bold text-slate-900 dark:text-white">{simData.convenio} • {simData.idade} anos</p>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 col-span-1">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Parcelas Pagas</p>
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-bold text-primary">
