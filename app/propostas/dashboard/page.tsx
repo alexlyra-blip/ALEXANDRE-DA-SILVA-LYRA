@@ -83,15 +83,18 @@ export default function DashboardPropostasPage() {
   const [dateRange, setDateRange] = useState<'7d' | '15d' | '30d'>('7d');
 
   const stats = useMemo(() => {
-    const total = proposals.length;
-    const totalValue = proposals.reduce((sum, p) => sum + (p.value || 0), 0);
-    const totalProducao = proposals.reduce((sum, p) => sum + (p.value || 0), 0);
-    const totalPago = proposals.filter(p => p.status === 'PAGO').reduce((sum, p) => sum + (p.value || 0), 0);
-    const totalReprovado = proposals.filter(p => p.status === 'REPROVADO').reduce((sum, p) => sum + (p.value || 0), 0);
+    // Exclude RASCUNHO from dashboard statistics
+    const nonDraftProposals = proposals.filter(p => p.status !== 'RASCUNHO');
+    
+    const total = nonDraftProposals.length;
+    const totalValue = nonDraftProposals.reduce((sum, p) => sum + (p.value || 0), 0);
+    const totalProducao = nonDraftProposals.reduce((sum, p) => sum + (p.value || 0), 0);
+    const totalPago = nonDraftProposals.filter(p => p.status === 'PAGO').reduce((sum, p) => sum + (p.value || 0), 0);
+    const totalReprovado = nonDraftProposals.filter(p => p.status === 'REPROVADO').reduce((sum, p) => sum + (p.value || 0), 0);
     
     // Filter proposals by date range
     const now = new Date();
-    const filteredProposals = proposals.filter(p => {
+    const filteredProposals = nonDraftProposals.filter(p => {
       if (!p.proposalDate) return true;
       const date = parseISO(p.proposalDate);
       const diffTime = Math.abs(now.getTime() - date.getTime());

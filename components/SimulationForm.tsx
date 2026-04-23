@@ -1,9 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { HelpCircle, User, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check } from 'lucide-react';
+import { HelpCircle, User, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,6 +30,10 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTermBank, setSearchTermBank] = useState('');
   const [isDropdownOpenBank, setIsDropdownOpenBank] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [activeIndexBank, setActiveIndexBank] = useState(-1);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownBankRef = useRef<HTMLDivElement>(null);
   
   const allBanks = Array.from(new Set([
     "121 - AGIBANK", "250 - BCV", "025 - BANCO ALFA", "233 - BANCO CIFRA", "001 - BANCO DO BRASIL",
@@ -141,6 +145,86 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       { value: "CP", label: "CP - CLT PRIVADO" },
     ]
   };
+
+  const filteredBeneficios = beneficios[convenio].filter(b => 
+    b.label.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    b.value.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredBanks = allBanks.filter(b => b.toLowerCase().includes(searchTermBank.toLowerCase()));
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isDropdownOpen) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(prev => (prev < filteredBeneficios.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(prev => (prev > 0 ? prev - 1 : prev));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIndex >= 0 && activeIndex < filteredBeneficios.length) {
+        const b = filteredBeneficios[activeIndex];
+        setCodigoBeneficio(b.value);
+        if (convenio !== 'INSS') {
+          setSubConvenio(b.label.includes(' - ') ? b.label.split(' - ')[1] : b.label);
+        }
+        setIsDropdownOpen(false);
+        setSearchTerm('');
+      }
+    } else if (e.key === 'Escape') {
+      setIsDropdownOpen(false);
+    }
+  };
+
+  const handleKeyDownBank = (e: React.KeyboardEvent) => {
+    if (!isDropdownOpenBank) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndexBank(prev => (prev < filteredBanks.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndexBank(prev => (prev > 0 ? prev - 1 : prev));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIndexBank >= 0 && activeIndexBank < filteredBanks.length) {
+        const b = filteredBanks[activeIndexBank];
+        setBancoAtual(b);
+        setIsDropdownOpenBank(false);
+        setSearchTermBank('');
+      }
+    } else if (e.key === 'Escape') {
+      setIsDropdownOpenBank(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isDropdownOpen) setActiveIndex(-1);
+  }, [isDropdownOpen]);
+
+  useEffect(() => {
+    if (isDropdownOpenBank) setActiveIndexBank(-1);
+  }, [isDropdownOpenBank]);
+
+  useEffect(() => {
+    if (activeIndex >= 0 && dropdownRef.current) {
+      const activeElement = dropdownRef.current.children[activeIndex] as HTMLElement;
+      if (activeElement) {
+        activeElement.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [activeIndex]);
+
+  useEffect(() => {
+    if (activeIndexBank >= 0 && dropdownBankRef.current) {
+      const activeElement = dropdownBankRef.current.children[activeIndexBank] as HTMLElement;
+      if (activeElement) {
+        activeElement.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [activeIndexBank]);
 
   const handleConvenioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setConvenio(e.target.value as 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO');
@@ -385,6 +469,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                         setSearchTerm('');
                       }}
                       onChange={(e) => setSearchTerm(e.target.value)}
+                      onKeyDown={handleKeyDown}
                       readOnly={false}
                     />
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
@@ -404,13 +489,9 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                           exit={{ opacity: 0, y: -10, scale: 0.95 }}
                           className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-20 max-h-64 overflow-y-auto overflow-x-hidden"
                         >
-                          <div className="p-2 space-y-1">
-                            {beneficios[convenio]
-                              .filter(b => 
-                                b.label.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                b.value.toLowerCase().includes(searchTerm.toLowerCase())
-                              )
-                              .map((b) => (
+                          <div className="p-2 space-y-1" ref={dropdownRef}>
+                            {filteredBeneficios
+                              .map((b, index) => (
                                 <button
                                   key={b.value}
                                   type="button"
@@ -422,8 +503,9 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                                     setIsDropdownOpen(false);
                                     setSearchTerm('');
                                   }}
+                                  onMouseEnter={() => setActiveIndex(index)}
                                   className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-left text-base font-medium transition-colors ${
-                                    codigoBeneficio === b.value 
+                                    codigoBeneficio === b.value || activeIndex === index
                                       ? 'bg-primary/10 text-primary font-bold' 
                                       : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                                   }`}
@@ -497,6 +579,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                         setSearchTermBank('');
                       }}
                       onChange={(e) => setSearchTermBank(e.target.value)}
+                      onKeyDown={handleKeyDownBank}
                     />
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
                     <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-transform duration-200 ${isDropdownOpenBank ? 'rotate-180' : ''}`} />
@@ -515,10 +598,9 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                           exit={{ opacity: 0, y: -10, scale: 0.95 }}
                           className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-20 max-h-64 overflow-y-auto overflow-x-hidden"
                         >
-                          <div className="p-2 space-y-1">
-                            {allBanks
-                              .filter(b => b.toLowerCase().includes(searchTermBank.toLowerCase()))
-                              .map((b) => (
+                          <div className="p-2 space-y-1" ref={dropdownBankRef}>
+                            {filteredBanks
+                              .map((b, index) => (
                                 <button
                                   key={b}
                                   type="button"
@@ -527,17 +609,23 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                                     setIsDropdownOpenBank(false);
                                     setSearchTermBank('');
                                   }}
+                                  onMouseEnter={() => setActiveIndexBank(index)}
                                   className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-left text-base font-medium transition-colors ${
-                                    bancoAtual === b 
+                                    bancoAtual === b || activeIndexBank === index
                                       ? 'bg-primary/10 text-primary font-bold' 
                                       : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                                   }`}
                                 >
-                                  <span className="truncate pr-4">{b}</span>
+                                  <div className="flex items-center gap-3 truncate">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${bancoAtual === b || activeIndexBank === index ? 'bg-primary/20 text-primary' : 'bg-slate-100 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
+                                      <Landmark className="w-4 h-4" />
+                                    </div>
+                                    <span className="truncate pr-4">{b}</span>
+                                  </div>
                                   {bancoAtual === b && <Check className="w-4 h-4 shrink-0" />}
                                 </button>
                               ))}
-                            {allBanks.filter(b => b.toLowerCase().includes(searchTermBank.toLowerCase())).length === 0 && (
+                            {filteredBanks.length === 0 && (
                               <div className="px-4 py-6 text-center text-slate-500 text-xs italic">
                                 Nenhum banco encontrado para &quot;{searchTermBank}&quot;
                               </div>

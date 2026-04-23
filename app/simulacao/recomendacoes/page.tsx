@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard, ShieldCheck, CheckCircle2, History, DollarSign, Star } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard, ShieldCheck, CheckCircle2, History, DollarSign, Star, Landmark } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useEffect, useRef } from 'react';
@@ -966,7 +966,12 @@ export default function Recomendacoes() {
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
                 <div className="space-y-1 col-span-2 sm:col-span-3">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Banco Atual</p>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{simData.bancoAtual}</p>
+                  <div className="flex items-center gap-2">
+                    <div className="size-6 rounded-lg bg-slate-100 dark:bg-white/5 text-slate-400 flex items-center justify-center shrink-0">
+                      <Landmark className="w-3.5 h-3.5" />
+                    </div>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{simData.bancoAtual}</p>
+                  </div>
                 </div>
                 <div className="space-y-1 col-span-1">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Parcela</p>

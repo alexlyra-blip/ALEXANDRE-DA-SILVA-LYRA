@@ -411,6 +411,50 @@ function ProposalDetailPageContent() {
     }
   };
 
+  const getStatusMessage = () => {
+    // Portability has its own priority message for non-terminal statuses
+    if (formData.loanType === 'PORTABILIDADE' && formData.status !== 'PAGO' && formData.status !== 'REPROVADO') {
+      return {
+        message: "O prazo de 5 dias úteis para o retorno do saldo é contado a partir da data de envio ao CIP. Certifique-se de atualizar o status para ANDAMENTO para ativar o cronômetro.",
+        color: "amber"
+      };
+    }
+
+    switch (formData.status) {
+      case 'ANDAMENTO':
+        return {
+          message: "Informamos que a proposta está em ANDAMENTO. Para a continuidade e conclusão do processo, é necessário que o benefício do cliente esteja desbloqueado, permitindo a averbação e a subsequente liberação do pagamento.",
+          color: "blue"
+        };
+      case 'PENDENTE':
+        return {
+          message: "A proposta está com status PENDENTE. Para prosseguimento, é necessário que a pendência seja sanada o quanto antes, garantindo a averbação e a conclusão do processo com pagamento.",
+          color: "amber"
+        };
+      case 'PAGO':
+        return {
+          message: "Informamos que a proposta foi concluída com status PAGA. O valor foi liberado e creditado na conta indicada para recebimento do benefício, estando disponível para movimentação.",
+          color: "emerald"
+        };
+      case 'REPROVADO':
+        return {
+          message: "A proposta foi REPROVADA. Orientamos verificar a possibilidade de nova digitação, com reaproveitamento da operação, para dar continuidade ao processo.",
+          color: "rose"
+        };
+      default:
+        return null; // RASCUNHO doesn't show message by default
+    }
+  };
+
+  const statusMsg = getStatusMessage();
+
+  const colorMap: Record<string, { bg: string, border: string, text: string, icon: string }> = {
+    amber: { bg: 'bg-amber-500/5', border: 'border-amber-500/10', text: 'text-amber-700 dark:text-amber-400', icon: 'text-amber-500' },
+    blue: { bg: 'bg-blue-500/5', border: 'border-blue-500/10', text: 'text-blue-700 dark:text-blue-400', icon: 'text-blue-500' },
+    emerald: { bg: 'bg-emerald-500/5', border: 'border-emerald-500/10', text: 'text-emerald-700 dark:text-emerald-400', icon: 'text-emerald-500' },
+    rose: { bg: 'bg-rose-500/5', border: 'border-rose-500/10', text: 'text-rose-700 dark:text-rose-400', icon: 'text-rose-500' },
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
@@ -468,6 +512,16 @@ function ProposalDetailPageContent() {
               >
                 <X className="w-5 h-5" />
               </button>
+              {(isNew || formData.status === 'RASCUNHO') && (
+                <button 
+                  onClick={handleSaveDraft}
+                  disabled={saving}
+                  className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                  Rascunho
+                </button>
+              )}
               <button 
                 onClick={handleSave}
                 disabled={saving}
@@ -979,13 +1033,14 @@ function ProposalDetailPageContent() {
             </div>
           </div>
 
-          <div className="bg-amber-500/5 border border-amber-500/10 rounded-2xl p-4 flex gap-3">
-            <Info className="w-5 h-5 text-amber-500 shrink-0" />
-            <p className="text-xs text-amber-700 dark:text-amber-400 font-medium leading-relaxed">
-              O prazo de 5 dias úteis para o retorno do saldo é contado a partir da data de envio ao CIP. 
-              Certifique-se de atualizar o status para <span className="font-bold">ANDAMENTO</span> para ativar o cronômetro.
-            </p>
-          </div>
+          {statusMsg && (
+            <div className={`${colorMap[statusMsg.color].bg} border ${colorMap[statusMsg.color].border} rounded-2xl p-4 flex gap-3`}>
+              <Info className={`w-5 h-5 ${colorMap[statusMsg.color].icon} shrink-0`} />
+              <p className={`text-xs ${colorMap[statusMsg.color].text} font-medium leading-relaxed`}>
+                {statusMsg.message}
+              </p>
+            </div>
+          )}
         </main>
       </div>
 
