@@ -54,16 +54,22 @@ export default function Recomendacoes() {
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [offers, setOffers] = useState<Offer[]>([]);
-  const [allCalculatedOffers, setAllCalculatedOffers] = useState<Offer[]>([]);
+  const [allCalculatedOffersMap, setAllCalculatedOffersMap] = useState<Record<string, Offer[]>>({});
+  const [filterReasonsMap, setFilterReasonsMap] = useState<Record<string, {bankName: string, reason: string, tabela?: string}[]>>({});
   const [showAllOffers, setShowAllOffers] = useState(false);
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('all');
   const [simData, setSimData] = useState<any>(null);
-  const [filterReasons, setFilterReasons] = useState<{bankName: string, reason: string, tabela?: string}[]>([]);
+  const [allSimulations, setAllSimulations] = useState<any[]>([]);
+  const [activeSimulationIndex, setActiveSimulationIndex] = useState(0);
   const [showFilterLog, setShowFilterLog] = useState(false);
   const [isAISummarizing, setIsAISummarizing] = useState(false);
   const { banks, generalRules, promotoraPriorities, promotoraInstallments, isLoaded } = useRules();
   const { profile } = useAuth();
-  const savedSimulationId = useRef<string | null>(null);
+  const savedSimulationIds = useRef<Set<string>>(new Set());
+
+  // Use active offers based on index
+  const allCalculatedOffers = allCalculatedOffersMap[simData?.id] || [];
+  const filterReasons = filterReasonsMap[simData?.id] || [];
 
   const handleSelectOffer = async (offer: Offer) => {
     try {
@@ -103,7 +109,11 @@ export default function Recomendacoes() {
     sessionStorage.setItem('selectedOffers', safeStringify(selected));
     
     // Redirect to new proposal page
-    router.push(`/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}&bancoPortado=${encodeURIComponent(simData?.bancoAtual || '')}`);
+    const baseUrl = `/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}&bancoPortado=${encodeURIComponent(simData?.bancoAtual || '')}`;
+    const namePart = simData?.nomeCliente ? `&nomeCliente=${encodeURIComponent(simData.nomeCliente)}` : '';
+    const cpfPart = simData?.cpfCliente ? `&cpfCliente=${encodeURIComponent(simData.cpfCliente)}` : '';
+    
+    router.push(`${baseUrl}${namePart}${cpfPart}`);
   };
 
   const handleShareWhatsApp = (offer: Offer) => {
@@ -155,439 +165,217 @@ export default function Recomendacoes() {
 
   // 1. Load simulation data from sessionStorage
   useEffect(() => {
-    const storedData = sessionStorage.getItem('simulationData');
-    if (storedData) {
+    const storedAll = sessionStorage.getItem('allSimulations');
+    if (storedAll) {
       try {
-        const parsed = JSON.parse(storedData);
-        setSimData(parsed);
+        const parsed = JSON.parse(storedAll);
+        setAllSimulations(parsed);
+        setSimData(parsed[activeSimulationIndex]);
       } catch (e) {
-        console.error("Error parsing simulationData:", e);
+        console.error("Error parsing allSimulations:", e);
+      }
+    } else {
+      const storedData = sessionStorage.getItem('simulationData');
+      if (storedData) {
+        try {
+          const parsed = JSON.parse(storedData);
+          setSimData(parsed);
+          setAllSimulations([parsed]);
+        } catch (e) {
+          console.error("Error parsing simulationData:", e);
+        }
       }
     }
-  }, [isSimulatorOpen]); // Re-check when simulator closes/opens
+  }, [isSimulatorOpen, activeSimulationIndex]); // Re-check when simulator closes/opens or active index changes
 
   // 2. Calculate offers when data or rules change
-  const lastSimulationTimeRef = useRef<number>(0);
   const calculationsCount = useRef<number>(0);
 
   useEffect(() => {
-    // We only wait for isLoaded and simData. Profile is optional for basic calculation but good to have.
-    if (!isLoaded || !simData || !banks.length) {
+    if (!isLoaded || !allSimulations.length || !banks.length) {
       return;
     }
 
     calculationsCount.current++;
-    console.log(`[SIMULATION #${calculationsCount.current}] CALCULATING OFFERS -`, new Date().toLocaleTimeString());
-    console.log("Banks version (last updated):", new Date(Math.max(...banks.map(b => (b as any).updatedAt || 0))).toLocaleTimeString());
-    console.log("Rules being used:", banks.map(b => ({ name: b.name, id: b.id, updatedAt: (b as any).updatedAt })));
-    
-    if (!profile) {
-      console.log("Profile not yet loaded, using fallback roles");
-    }
-    
-    console.log("Simulation Data:", simData);
+    console.log(`[SIMULATION #${calculationsCount.current}] CALCULATING OFFERS FOR ALL CONTRACTS -`, new Date().toLocaleTimeString());
 
-    const {
-      id: simulationId,
-      idade,
-      codigoBeneficio,
-      dataConcessao,
-      bancoAtual,
-      valorParcela,
-      saldoDevedor,
-      parcelasPagas,
-      prazoTotal,
-      parcelasRestantes,
-      isCliente60Mais
-    } = simData;
+    const newOffersMap: Record<string, Offer[]> = {};
+    const newReasonsMap: Record<string, any[]> = {};
 
-    const originalRate = simData.taxaJurosMensal ? simData.taxaJurosMensal * 100 : 0;
+    allSimulations.forEach(currentSim => {
+      const {
+        id: simulationId,
+        idade,
+        codigoBeneficio,
+        dataConcessao,
+        bancoAtual,
+        valorParcela,
+        saldoDevedor,
+        parcelasPagas,
+        prazoTotal,
+        parcelasRestantes,
+        isCliente60Mais
+      } = currentSim;
 
-    console.log("--- SIMULATION DATA ---", {
-      idade,
-      convenio: simData.convenio,
-      valorParcela,
-      saldoDevedor,
-      taxaJurosMensal: simData.taxaJurosMensal,
-      originalRate: originalRate.toFixed(4)
-    });
+      const originalRate = currentSim.taxaJurosMensal ? currentSim.taxaJurosMensal * 100 : 0;
+      const calculatedOffers: Offer[] = [];
+      const localFilterReasons: {bankName: string, reason: string, tabela?: string}[] = [];
 
-    const calculatedOffers: Offer[] = [];
-    const localFilterReasons: {bankName: string, reason: string, tabela?: string}[] = [];
-
-    // Calculate time of benefit in months
-    let benefitTimeMonths = 0;
-    if (dataConcessao) {
-      const concessaoDate = new Date(dataConcessao + 'T12:00:00');
-      const now = new Date();
-      
-      let years = now.getFullYear() - concessaoDate.getFullYear();
-      let months = now.getMonth() - concessaoDate.getMonth();
-      
-      if (now.getDate() < concessaoDate.getDate()) {
-        months--;
+      // Calculate time of benefit in months
+      let benefitTimeMonths = 0;
+      if (dataConcessao) {
+        const concessaoDate = new Date(dataConcessao + 'T12:00:00');
+        const now = new Date();
+        let years = now.getFullYear() - concessaoDate.getFullYear();
+        let months = now.getMonth() - concessaoDate.getMonth();
+        if (now.getDate() < concessaoDate.getDate()) months--;
+        if (months < 0) { years--; months += 12; }
+        benefitTimeMonths = years * 12 + months;
       }
-      
-      if (months < 0) {
-        years--;
-        months += 12;
-      }
-      
-      benefitTimeMonths = years * 12 + months;
-    }
 
-    const cleanBeneficio = codigoBeneficio.replace(/^0+/, '');
+      const cleanBeneficio = codigoBeneficio.replace(/^0+/, '');
 
-    console.log(`Processing ${banks.length} banks for simulation. Target banks: PAN, C6, FACTA, etc.`);
-    // Helper function to safely match bank rules (by code or name)
-    const checkBankMatch = (ruleBank: string, currentBank: string) => {
-      if (!ruleBank || !currentBank) return false;
-      const rule = ruleBank.trim().toLowerCase();
-      const current = currentBank.trim().toLowerCase();
-      
-      if (current === rule) return true;
-      
-      const parts = current.split('-');
-      if (parts.length >= 2) {
-        const code = parts[0].trim();
-        const name = parts.slice(1).join('-').trim();
-        
-        // Match exact code (e.g., "318")
-        if (rule === code) return true;
-        
-        // Match exact name (e.g., "bmg")
-        if (rule === name) return true;
-        
-        // Match substring in name (e.g., "bmg" inside "banco bmg")
-        if (rule.length >= 2 && name.includes(rule)) return true;
-      }
-      
-      // Fallback for partial matches, requiring at least 2 chars to avoid false positives
-      return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
-    };
-
-    banks.forEach(bank => {
-      const log = (reason: string, tabela?: string) => {
-        localFilterReasons.push({ bankName: bank.name, reason, tabela });
-        console.log(`[${bank.name}] ${tabela ? `- Tabela ${tabela}: ` : ''}${reason}`);
+      const checkBankMatch = (ruleBank: string, currentBank: string) => {
+        if (!ruleBank || !currentBank) return false;
+        const rule = ruleBank.trim().toLowerCase();
+        const current = currentBank.trim().toLowerCase();
+        if (current === rule) return true;
+        const parts = current.split('-');
+        if (parts.length >= 2) {
+          const code = parts[0].trim();
+          const name = parts.slice(1).join('-').trim();
+          if (rule === code || rule === name || (rule.length >= 2 && name.includes(rule))) return true;
+        }
+        return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
       };
 
-      // 0. General Cliente 60+ status
-      const effectiveIs60Mais = isCliente60Mais != null ? isCliente60Mais : (idade >= 60);
+      banks.forEach(bank => {
+        const log = (reason: string, tabela?: string) => {
+          localFilterReasons.push({ bankName: bank.name, reason, tabela });
+        };
 
-      // 0. Active Filter
-      if (bank.isActive === false) return;
+        const effectiveIs60Mais = isCliente60Mais != null ? isCliente60Mais : (idade >= 60);
+        if (bank.isActive === false) return;
+        if (profile?.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) return;
+        
+        const bankConvenio = bank.convenio || 'INSS';
+        const simConvenio = currentSim.convenio || 'INSS';
+        if (bankConvenio !== simConvenio) return;
+        if (bank.subConvenio && bank.subConvenio !== currentSim.subConvenio) return;
 
-      // 0.1 Allowed Banks Filter
-      if (profile.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) {
-        log(`filtrado por allowedBanks`);
-        return;
-      }
+        const isInvalidity = ['4', '04', '5', '05', '11', '30', '32', '33', '34', '92'].includes(cleanBeneficio);
+        const isLOAS = ['87', '88'].includes(cleanBeneficio);
 
-      // 0.1 Convenio Filter
-      const bankConvenio = bank.convenio || 'INSS'; // Default to INSS if not set
-      const simConvenio = simData.convenio || 'INSS'; // Default to INSS if not set
-      if (bankConvenio !== simConvenio) {
-        log(`filtrado por convenio: ${bankConvenio} !== ${simConvenio}`);
-        return;
-      }
-
-      // 0.2 Sub-Convenio Filter
-      if (bank.subConvenio && bank.subConvenio !== simData.subConvenio) {
-        log(`filtrado por subConvenio: ${bank.subConvenio} !== ${simData.subConvenio}`);
-        return;
-      }
-
-      // 1. Espécie Invalidez (04, 05, 11, 30, 32, 33, 34, 92) - CHECK THIS FIRST
-      const isInvalidity = ['4', '04', '5', '05', '11', '30', '32', '33', '34', '92'].includes(cleanBeneficio);
-      const isLOAS = ['87', '88'].includes(cleanBeneficio);
-
-      if (isInvalidity) {
-        // 1. Rule: Aceita Espécie Invalidez field must be checked
-        if (bank.acceptsInvalidez === false) {
-          log(`filtrado: Banco não aceita espécie Invalidez`);
-          return;
+        if (isInvalidity) {
+          if (bank.acceptsInvalidez === false) return;
+          const isActuallyOver60 = idade >= 60;
+          if (isActuallyOver60) {
+            if (!bank.acceptsOver60Invalidez) return;
+          } else {
+            const minAgeDisability = bank.invalidezAgeYears || 0;
+            if (minAgeDisability === 0 || idade < minAgeDisability) return;
+            const requiredMonths = (bank.minBenefitTimeYears || 0) * 12 + (bank.minBenefitTimeMonths || 0);
+            if (requiredMonths > 0 && benefitTimeMonths < requiredMonths) return;
+          }
         }
 
-        // 2. Rule: If client REAL AGE is 60+
-        const isActuallyOver60 = idade >= 60;
-        
-        if (isActuallyOver60) {
-          // Check specific Invalidez 60+ field
-          if (!bank.acceptsOver60Invalidez) {
-            log(`filtrado: Banco não aceita espécie Invalidez para clientes acima de 60 anos (Regra Específica Invalidez)`);
-            return;
-          }
-          // LIBERATED: If actually 60+ and acceptsOver60Invalidez is true, we DON'T validate benefit time.
-          log(`Liberado: Cliente 60+ com Invalidez aceita (sem validar tempo de benefício)`);
+        if (bank.minInstallmentValue && valorParcela < bank.minInstallmentValue) return;
+        const bSumSaldoTrocoGlobal = !!(bank.sumBalanceAndTroco || bank.sumSaldoTroco);
+        if (!bSumSaldoTrocoGlobal && bank.minBalance && saldoDevedor < bank.minBalance) return;
+
+        if (!isInvalidity) {
+          if ((bank.minAge > 0 && idade < bank.minAge) || (bank.maxAge > 0 && idade > bank.maxAge)) return;
         } else {
-          // 3. Rule: If client is < 60
-          const minAgeDisability = bank.invalidezAgeYears || 0;
-          
-          // "se estiver como 0 e o cliente estiver menos de 60 anos não será liberado"
-          if (minAgeDisability === 0) {
-            log(`filtrado: Banco não configurou Idade Mínima para Invalidez < 60 (Idade Mínima = 0)`);
-            return;
-          }
-
-          // Validate Minimum client age for disability
-          if (idade < minAgeDisability) {
-            log(`filtrado por idade mínima invalidez: ${idade} < ${minAgeDisability}`);
-            return;
-          }
-          
-          // Validate Minimum time with benefit (concession date)
-          const requiredMonths = (bank.minBenefitTimeYears || 0) * 12 + (bank.minBenefitTimeMonths || 0);
-          if (requiredMonths > 0 && benefitTimeMonths < requiredMonths) {
-            log(`filtrado por tempo mínimo de benefício: ${benefitTimeMonths} < ${requiredMonths} meses`);
-            return;
-          }
+          const ageLimit = bank.invalidezAgeYears || 0;
+          if (ageLimit === 0 && bank.maxAge > 0 && idade > bank.maxAge) return;
+          if (ageLimit > 0 && idade > ageLimit) return;
         }
-      }
 
-      // 2. Parcela Mínima
-      if (bank.minInstallmentValue && valorParcela < bank.minInstallmentValue) {
-        log(`filtrado por minInstallmentValue`);
-        return;
-      }
-
-      // 3. Saldo Mínimo
-      const bSumSaldoTrocoGlobal = !!(bank.sumBalanceAndTroco || bank.sumSaldoTroco);
-      if (!bSumSaldoTrocoGlobal && bank.minBalance && saldoDevedor < bank.minBalance) {
-        log(`filtrado por minBalance (${saldoDevedor} < ${bank.minBalance})`);
-        return;
-      }
-
-      // 4. Idade Geral
-      // Se for invalidez, a regra de idade já foi validada acima (ou o banco não tem regra específica)
-      // Mas o maxAge geral do banco ainda deve ser respeitado como limite absoluto
-      if (!isInvalidity) {
-        if ((bank.minAge > 0 && idade < bank.minAge) || (bank.maxAge > 0 && idade > bank.maxAge)) {
-          log(`filtered by general age: ${idade} (min: ${bank.minAge}, max: ${bank.maxAge})`);
-          return;
+        if (effectiveIs60Mais && bank.accepts60Mais === false) return;
+        if (isLOAS) {
+          if (!bank.acceptsLOAS) return;
+          if (currentSim.isAnalfabeto && !bank.acceptsIlliterate) return;
         }
-      } else {
-        // Para invalidez, se o banco NÃO tem ageLimit específico, ainda validamos o maxAge geral
-        const ageLimit = bank.invalidezAgeYears || 0;
-        if (ageLimit === 0 && bank.maxAge > 0 && idade > bank.maxAge) {
-          log(`filtered by general maxAge (Invalidez fallback): ${idade} > ${bank.maxAge}`);
-          return;
-        }
-        if (ageLimit > 0 && idade > ageLimit) {
-          log(`filtered by specific Invalidez ageLimit: ${idade} > ${ageLimit}`);
-          return;
-        }
-      }
+        if (currentSim.isAnalfabeto && !bank.acceptsIlliterate) return;
 
-      // 4.1 60 Mais
-      if (effectiveIs60Mais && bank.accepts60Mais === false) {
-        log(`filtered: Não aceita 60+`);
-        return;
-      }
+        const targetGeneralRule = generalRules.find((r: any) => checkBankMatch(r.banco, bank.name));
+        if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) return;
 
-      // 5. LOAS (87, 88)
-      if (isLOAS) {
-        if (!bank.acceptsLOAS) {
-          log(`filtered by acceptsLOAS`);
-          return;
-        }
-        if (simData.isAnalfabeto && !bank.acceptsIlliterate) {
-          log(`filtered by acceptsIlliterate (LOAS)`);
-          return;
-        }
-      }
-
-      // 5.1 Analfabeto (Geral)
-      if (simData.isAnalfabeto && !bank.acceptsIlliterate) {
-        log(`filtered by acceptsIlliterate (General)`);
-        return;
-      }
-
-      const targetGeneralRule = generalRules.find((r: any) => checkBankMatch(r.banco, bank.name));
-
-      // 6. Banco Atual (Não portam)
-      // Se o banco escolhido na simulação estiver na lista de bancos que NÃO PORTA, ele não será ofertado.
-      if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) {
-        log(`filtered by nonAcceptedBanks: ${bancoAtual} is in the exclusion list for ${bank.name}`);
-        localFilterReasons[bank.id] = `O banco ${bank.name} não realiza portabilidade do ${bancoAtual}.`;
-        return;
-      }
-
-      // 7. Bancos que porta com regras específicas (Quantidade de Parcelas)
-      let requiredInstallments = 0;
-      let hasSpecificRule = false;
-      
-      const effectiveParcelasPagas = parcelasPagas !== undefined ? parcelasPagas : (parseInt(prazoTotal || 0) - parseInt(parcelasRestantes || 0));
-
-      // Verifica se o banco de origem consta no campo "Bancos que porta com regras específicas"
-      const specificRule = bank.specificInstallmentRules?.find((r: any) => checkBankMatch(r.bank, bancoAtual));
-      
-      if (specificRule) {
-        // Se houver regra específica, ela é SOBERANA e ÚNICA para este par de bancos.
-        requiredInstallments = parseInt(specificRule.installments) || 0;
-        hasSpecificRule = true;
-        log(`Specific rule found for ${bank.name} -> ${bancoAtual}: requires ${requiredInstallments} installments.`);
-      } else {
-        // Se NÃO estiver na lista específica, segue a hierarquia normal de regras de parcelas
-        
-        // 1. Regra da Promotora/Broker para este banco de origem
-        const pInstallment = promotoraInstallments[bancoAtual];
-        if (pInstallment !== undefined && pInstallment > 0) {
-          requiredInstallments = pInstallment;
+        let requiredInstallments = 0;
+        const effectiveParcelasPagas = parcelasPagas !== undefined ? parcelasPagas : (parseInt(prazoTotal || 0) - parseInt(parcelasRestantes || 0));
+        const specificRule = bank.specificInstallmentRules?.find((r: any) => checkBankMatch(r.bank, bancoAtual));
+        if (specificRule) {
+          requiredInstallments = parseInt(specificRule.installments) || 0;
         } else {
-          // 2. Regra Geral do sistema para este banco de origem
-          const generalRule = generalRules.find((r: any) => checkBankMatch(r.banco, bancoAtual));
-          if (generalRule) {
-            requiredInstallments = generalRule.parcelasAceitas;
+          const pInstallment = promotoraInstallments?.[bancoAtual];
+          if (pInstallment !== undefined && pInstallment > 0) {
+            requiredInstallments = pInstallment;
+          } else {
+            const generalRule = generalRules.find((r: any) => checkBankMatch(r.banco, bancoAtual));
+            if (generalRule) requiredInstallments = generalRule.parcelasAceitas;
           }
+          const bankGeneralLimit = bank.minPaidInstallments || targetGeneralRule?.parcelasAceitas || 0;
+          requiredInstallments = Math.max(requiredInstallments, bankGeneralLimit);
         }
-        
-        // 3. Consolida com o limite mínimo padrão do Banco de Destino (o mais restritivo prevalece)
-        const bankGeneralLimit = bank.minPaidInstallments || targetGeneralRule?.parcelasAceitas || 0;
-        
-        requiredInstallments = Math.max(requiredInstallments, bankGeneralLimit);
-      }
 
-      // FILTRO FINAL DE PARCELAS: A quantidade de parcelas deve ser IGUAL ou MAIOR a quantidade informada.
-      if (requiredInstallments > 0 && effectiveParcelasPagas < requiredInstallments) {
-        log(`filtered by installments: current ${effectiveParcelasPagas} < required ${requiredInstallments} (${hasSpecificRule ? 'Specific Rule' : 'General Hierarchy'})`);
-        localFilterReasons[bank.id] = `O banco ${bank.name} exige no mínimo ${requiredInstallments} parcelas pagas para portar ${bancoAtual}.`;
-        return;
-      }
+        if (requiredInstallments > 0 && effectiveParcelasPagas < requiredInstallments) return;
 
-      let hasValidTable = false;
+        if (bank.tabelas && bank.tabelas.length > 0) {
+          bank.tabelas.forEach((tabela: any) => {
+            const parseRate = (val: any) => {
+              if (val === undefined || val === null || val === '') return 0;
+              if (typeof val === 'number') return val;
+              return parseFloat(String(val).replace(',', '.')) || 0;
+            };
 
-      // If eligible, calculate for each table
-      if (bank.tabelas && bank.tabelas.length > 0) {
-        bank.tabelas.forEach((tabela: any) => {
-          const parseRate = (val: any) => {
-            if (val === undefined || val === null || val === '') return 0;
-            if (typeof val === 'number') return val;
-            return parseFloat(String(val).replace(',', '.')) || 0;
-          };
+            const coef = tabela.coeficiente;
+            if (!coef || coef <= 0) return;
+            const valorContrato = valorParcela / coef;
+            const valorTroco = valorContrato - saldoDevedor;
+            const bSumSaldoTroco = bSumSaldoTrocoGlobal || !!tabela.somaSaldoTroco;
+            if (bSumSaldoTroco && bank.minBalance && (saldoDevedor + valorTroco) < bank.minBalance) return;
 
-          const coef = tabela.coeficiente;
-          
-          // Skip if coefficient is not valid for division
-          if (!coef || coef <= 0) {
-            log(`invalid coefficient ${coef}`, tabela.nome);
-            return;
-          }
+            const valorAValidar = bSumSaldoTroco ? (saldoDevedor + valorTroco) : saldoDevedor;
+            const bankMinTroco = parseRate(bank.minTroco);
+            const tableMinTicket = (tabela.useMinTicket === true) ? parseRate(tabela.minTicket) : 0;
+            const effectiveMinTicket = tableMinTicket > 0 ? tableMinTicket : bankMinTroco;
 
-          const valorContrato = valorParcela / coef;
-          const valorTroco = valorContrato - saldoDevedor;
-          
-          // REFINEMENT: Ticket Mínimo / Saldo Mínimo Check
-          const bSumSaldoTroco = bSumSaldoTrocoGlobal || !!tabela.somaSaldoTroco;
+            if (effectiveMinTicket > 0 && valorAValidar < effectiveMinTicket) return;
+            if (bank.minInstallmentValue && valorParcela < bank.minInstallmentValue) return;
 
-          // Se a opção de somar estiver ativa, validamos o Saldo+Troco contra o Saldo Mínimo do Banco
-          if (bSumSaldoTroco && bank.minBalance && (saldoDevedor + valorTroco) < bank.minBalance) {
-            log(`filtered by minBalance (Balance + Troco): ${(saldoDevedor + valorTroco).toFixed(2)} < ${bank.minBalance}`, tabela.nome);
-            return;
-          }
+            const taxaTabelaValida = parseRate(tabela.taxaTabela) > 0 ? parseRate(tabela.taxaTabela) : parseRate(bank.refinRate);
+            const bankAdjustment = parseRate(bank.ajusteTaxa);
+            const bankPortRate = parseRate(bank.portabilityRate);
+            const novaTaxaPort = Number((originalRate + bankAdjustment).toFixed(2));
+            if (bankPortRate > 0 && novaTaxaPort < bankPortRate) return;
 
-          const valorAValidar = bSumSaldoTroco ? (saldoDevedor + valorTroco) : saldoDevedor;
-          
-          const bankMinTroco = parseRate(bank.minTroco);
-          const tableMinTicket = (tabela.useMinTicket === true) ? parseRate(tabela.minTicket) : 0;
-          const effectiveMinTicket = tableMinTicket > 0 ? tableMinTicket : bankMinTroco;
+            const orig = Number(originalRate.toFixed(2));
+            const taxaPonderadaBase = Math.round(((orig + novaTaxaPort) / 2) * 100) / 100;
+            const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));
+            const taxaPonderadaFinal = Math.round((taxaPonderadaBase + ajusteTabela) * 100) / 100;
+            const bUseTaxaPonderada = Boolean(tabela.useTaxaPonderada);
 
-          if (effectiveMinTicket > 0 && valorAValidar < effectiveMinTicket) {
-            log(`filtered by minTicket (${bSumSaldoTroco ? 'Saldo+Troco' : 'Saldo'}): ${valorAValidar.toFixed(2)} < ${effectiveMinTicket.toFixed(2)}`, tabela.nome);
-            return;
-          }
-
-          // 2. Parcela Mínima
-          if (bank.minInstallmentValue && valorParcela < bank.minInstallmentValue) {
-            log(`filtered by minInstallmentValue: ${valorParcela} < ${bank.minInstallmentValue}`, tabela.nome);
-            return;
-          }
-
-          const tTabela = parseRate(tabela.taxaTabela);
-          const taxaTabelaValida = tTabela > 0 ? tTabela : parseRate(bank.refinRate);
-          const bankAdjustment = parseRate(bank.ajusteTaxa);
-          
-          const tDiferencial = parseRate(tabela.taxaDiferencial);
-          const bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
-          const bankPortRate = parseRate(bank.portabilityRate);
-          
-          // --- CORREÇÃO CÁLCULO TAXA PONDERADA ---
-          // 1. Calcular a "NOVA TAXA PORT."
-          const novaTaxaPort = Number((originalRate + bankAdjustment).toFixed(2));
-          
-          // 2. Validação da Taxa Mínima do Banco (Piso)
-          // Regra: Se a "Nova Taxa Port." for menor que a "Taxa Mínima" do banco, o banco não fica disponível.
-          if (bankPortRate > 0 && novaTaxaPort < bankPortRate) {
-            log(`FILTRADO POR TAXA MÍNIMA: Nova Taxa Port. (${novaTaxaPort.toFixed(2)}%) < Taxa Mínima do Banco (${bankPortRate.toFixed(2)}%)`, tabela.nome);
-            return;
-          }
-          
-          // 3. Calcular a TAXA PONDERADA para o Filtro da Mesa
-          // Regra Correta: (TAXA ATUAL + NOVA TAXA PORT) / 2 + AJUSTE
-          const orig = Number(originalRate.toFixed(2));
-          
-          const taxaPonderadaBase = Math.round(((orig + novaTaxaPort) / 2) * 100) / 100;
-          const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));
-          const taxaPonderadaFinal = Math.round((taxaPonderadaBase + ajusteTabela) * 100) / 100;
-          
-          const bUseTaxaPonderada = Boolean(tabela.useTaxaPonderada);
-          
-          // PRIORIDADE ROBUSTA DEBUG
-          if (bank.name.toLowerCase().includes('digio') || bank.name.toLowerCase().includes('dibio') || bank.name.toLowerCase().includes('c6')) {
-             console.log(`[DEBUG RATES] Banco: ${bank.name}, Tabela: ${tabela.nome}`);
-             console.log(`   Taxa Atual (Orig): ${orig}%`);
-             console.log(`   Nova Taxa Port: ${novaTaxaPort}%`);
-             console.log(`   Taxa Mínima (Piso): ${bankPortRate}%`);
-             console.log(`   Taxa Ponderada (Base): ${taxaPonderadaBase}%`);
-             console.log(`   Ajuste Ponderada: ${ajusteTabela}%`);
-             console.log(`   Taxa Ponderada Final: ${taxaPonderadaFinal}%`);
-          }
-
-          // CRITICAL FILTER: As tabelas só devem ser ofertadas se a taxa base da tabela for menor ou igual a 'Taxa Ponderada'
-          // weighted rate is the maximum allowed table rate in this mode.
-          if (bUseTaxaPonderada === true) {
-            if (taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
-              log(`FILTRADO POR TAXA PONDERADA: Taxa Tabela (${taxaTabelaValida.toFixed(2)}%) > Taxa Ponderada (${taxaPonderadaFinal.toFixed(2)}%)`, tabela.nome);
-              return;
+            if (bUseTaxaPonderada === true) {
+              if (taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) return;
             }
-          }
-          
-          // Final portability rate to be used in installments calculation
-          const finalNovaTaxaPort = novaTaxaPort;
 
-          const taxaPonderada = taxaPonderadaFinal;
-          const rules: string[][] = [];
+            if (valorTroco <= 0) return;
 
-          // POPULAR REGRAS/SELOS VISUAIS
-          if (bank.acceptsLOAS) rules.push(['Aceita LOAS']); // Manteve o LOAS porque o usuário não pediu para mudar, mas podemos filtrar também
-          if (bank.acceptsIlliterate && simData.isAnalfabeto) rules.push(['Aceita Analfabeto']);
-          if (bank.acceptsInvalidez !== false && isInvalidity) rules.push(['Aceita Invalidez']);
-          if (bank.accepts60Mais && (simData.idade >= 60 || simData.isCliente60Mais)) rules.push(['Aceita 60+']);
-          if (bank.sumBalanceAndTroco || bank.sumSaldoTroco) rules.push(['Soma Saldo+Troco']);
-          if (tabela.useTaxaPonderada) rules.push(['Taxa Ponderada Mesa']);
-
-          // Regra final de elegibilidade básica
-          if (valorTroco <= 0) {
-            log(`filtered by valorTroco <= 0: ${valorTroco.toFixed(2)}`, tabela.nome);
-            return;
-          }
-
-          hasValidTable = true;
-          calculatedOffers.push({
+            calculatedOffers.push({
               id: `${bank.id}-${tabela.nome}`,
               name: bank.name,
-              logo: bank.logoUrl || 'https://images.unsplash.com/photo-1501167786227-4cba60f6d58f?q=80&w=100&auto=format&fit=crop',
+              logo: bank.logoUrl || 'https://picsum.photos/seed/bank/100/100',
               tabela: tabela.nome,
               valorContrato,
               valorTroco,
               saldoDevedor,
               novaTaxaPortabilidade: novaTaxaPort,
               novaTaxaPortTarget: novaTaxaPort,
-              taxaPonderada,
+              taxaPonderada: taxaPonderadaFinal,
               originalRateCalculated: orig,
               taxaBase: taxaTabelaValida,
               priority: (targetGeneralRule?.priority && targetGeneralRule.priority > 0) ? targetGeneralRule.priority : (bank.priority || 0),
-              rules,
+              rules: [], // Simplified for map
               convenio: bank.convenio || 'INSS',
               subConvenio: bank.subConvenio,
               tabelasCount: bank.tabelas.length,
@@ -595,106 +383,54 @@ export default function Recomendacoes() {
               ajusteTaxaPonderada: ajusteTabela,
               useTaxaPonderada: bUseTaxaPonderada
             });
-        });
-      } else {
-        log(`filtered: sem tabelas`);
-      }
-      
-      if (!hasValidTable && bank.tabelas && bank.tabelas.length > 0) {
-        // Se tinha tabelas mas nenhuma passou, log extra opcional
-      }
-    });
-
-    // Sort calculated offers before comparison and state update
-    calculatedOffers.sort((a, b) => {
-      const bankIdA = a.id.split('-')[0];
-      const bankIdB = b.id.split('-')[0];
-      
-      const pA = promotoraPriorities[bankIdA] ?? a.priority ?? 999;
-      const pB = promotoraPriorities[bankIdB] ?? b.priority ?? 999;
-      
-      const finalPA = (pA === 0 || pA === undefined) ? 999 : pA;
-      const finalPB = (pB === 0 || pB === undefined) ? 999 : pB;
-      
-      if (finalPA !== finalPB) {
-        return finalPA - finalPB;
-      }
-      return b.valorTroco - a.valorTroco;
-    });
-
-    // Check if offers actually changed before updating state
-    const currentOffersStr = JSON.stringify(calculatedOffers);
-    const prevOffersStr = JSON.stringify(allCalculatedOffers);
-
-    if (currentOffersStr !== prevOffersStr) {
-        console.log(`[SIMULATION #${calculationsCount.current}] UPDATING OFFERS STATE - Found ${calculatedOffers.length} offers`);
-        setAllCalculatedOffers(calculatedOffers);
-    }
-    
-    // Guard filter reasons update
-    const currentReasonsStr = JSON.stringify(localFilterReasons);
-    const prevReasonsStr = JSON.stringify(filterReasons);
-    if (currentReasonsStr !== prevReasonsStr) {
-      setFilterReasons(localFilterReasons);
-    }
-    
-    // Save simulation to Firestore if it hasn't been saved yet
-    if (simulationId && savedSimulationId.current !== simulationId && calculatedOffers.length > 0) {
-      savedSimulationId.current = simulationId;
-      
-      const topOffer = calculatedOffers[0];
-      const simulationRecord = {
-        ...simData,
-        userId: profile?.uid,
-        userName: profile?.name,
-        userAvatar: profile?.avatarUrl || profile?.photoUrl || null,
-        userRole: profile?.role,
-        corretorId: (profile?.role === 'corretor' || profile?.role === 'vendedor') ? profile?.uid : null,
-        createdBy: profile?.createdBy || null,
-        promotoraId: profile?.role === 'promotora' ? profile?.uid : (profile?.promotoraId || profile?.createdBy || 'admin'),
-        recommendedBanks: calculatedOffers.slice(0, 3).map(o => o.name),
-        topOffer: topOffer?.name || null,
-        topOfferTabela: topOffer?.tabela || null,
-        topOfferContrato: topOffer?.valorContrato || 0,
-        topOfferTroco: topOffer?.valorTroco || 0,
-        topOfferTaxa: topOffer?.novaTaxaPortabilidade || 0,
-        topOfferPrazo: topOffer.prazoRefinPort || (simData.subConvenio === 'Marinha' ? 72 : (simData.prazoTotal || 96))
-      };
-
-      console.log("Saving simulation record:", {
-        id: simulationId,
-        userId: simulationRecord.userId,
-        authUid: profile?.uid,
-        match: simulationRecord.userId === profile?.uid
-      });
-
-      const docRef = doc(db, 'simulations', simulationId);
-      getDoc(docRef).then(docSnap => {
-        if (!docSnap.exists()) {
-          setDoc(docRef, { ...simulationRecord, createdAt: serverTimestamp() })
-            .catch(err => {
-              console.error("Error saving simulation:", err);
-              const errInfo = {
-                error: err instanceof Error ? err.message : String(err),
-                operationType: 'create',
-                path: `simulations/${simulationId}`,
-                authInfo: {
-                  userId: profile?.uid,
-                  email: profile?.email,
-                }
-              };
-              console.error('Firestore Error: ', safeStringify(errInfo));
-            });
-        } else {
-          setDoc(docRef, simulationRecord, { merge: true })
-            .catch(err => {
-              console.error("Error updating simulation:", err);
-            });
+          });
         }
       });
-    }
 
-  }, [banks, generalRules, isLoaded, profile, promotoraPriorities, promotoraInstallments, simData]);
+      calculatedOffers.sort((a, b) => {
+        const bankIdA = a.id.split('-')[0];
+        const bankIdB = b.id.split('-')[0];
+        const pA = promotoraPriorities?.[bankIdA] ?? a.priority ?? 999;
+        const pB = promotoraPriorities?.[bankIdB] ?? b.priority ?? 999;
+        const finalPA = (pA === 0) ? 999 : pA;
+        const finalPB = (pB === 0) ? 999 : pB;
+        if (finalPA !== finalPB) return finalPA - finalPB;
+        return b.valorTroco - a.valorTroco;
+      });
+
+      newOffersMap[simulationId] = calculatedOffers;
+      newReasonsMap[simulationId] = localFilterReasons;
+
+      // Save to Firestore individually
+      if (!savedSimulationIds.current.has(simulationId) && calculatedOffers.length > 0) {
+        savedSimulationIds.current.add(simulationId);
+        const topOffer = calculatedOffers[0];
+        const simulationRecord = {
+          ...currentSim,
+          userId: profile?.uid,
+          userName: profile?.name,
+          userAvatar: profile?.avatarUrl || profile?.photoUrl || null,
+          userRole: profile?.role,
+          corretorId: (profile?.role === 'corretor' || profile?.role === 'vendedor') ? profile?.uid : null,
+          createdBy: profile?.createdBy || null,
+          promotoraId: profile?.role === 'promotora' ? profile?.uid : (profile?.promotoraId || profile?.createdBy || 'admin'),
+          recommendedBanks: calculatedOffers.slice(0, 3).map(o => o.name),
+          topOffer: topOffer?.name || null,
+          topOfferTabela: topOffer?.tabela || null,
+          topOfferContrato: topOffer?.valorContrato || 0,
+          topOfferTroco: topOffer?.valorTroco || 0,
+          topOfferTaxa: topOffer?.novaTaxaPortabilidade || 0,
+          topOfferPrazo: topOffer.prazoRefinPort || (currentSim.subConvenio === 'Marinha' ? 72 : (currentSim.prazoTotal || 96)),
+          createdAt: serverTimestamp()
+        };
+        setDoc(doc(db, 'simulations', simulationId), simulationRecord, { merge: true }).catch(err => console.error("Error saving simulation:", err));
+      }
+    });
+
+    setAllCalculatedOffersMap(newOffersMap);
+    setFilterReasonsMap(newReasonsMap);
+
+  }, [banks, generalRules, isLoaded, profile, promotoraPriorities, promotoraInstallments, allSimulations]);
 
   // Update 'Principais Ofertas' (offers) whenever allCalculatedOffers or sortBy changes
   useEffect(() => {
@@ -837,13 +573,14 @@ export default function Recomendacoes() {
     doc.setTextColor(15, 23, 42); // Slate 900
     doc.text('Dados da Simulação', 14, 45);
 
-    const simTableData = [
-      ['Banco Atual', simData.bancoAtual || 'Não informado'],
-      ['Valor da Parcela', formatCurrency(simData.valorParcela || 0)],
-      ['Saldo Devedor', formatCurrency(simData.saldoDevedor || 0)],
-      ['Parcelas Pagas', `${simData.parcelasPagas || 0} de ${simData.prazoTotal || 0}`],
-      ['Idade', `${simData.idade || 0} anos`],
-    ];
+    const simTableData = [];
+    if (simData.nomeCliente) simTableData.push(['Cliente', simData.nomeCliente]);
+    if (simData.cpfCliente) simTableData.push(['CPF', simData.cpfCliente]);
+    simTableData.push(['Banco Atual', simData.bancoAtual || 'Não informado']);
+    simTableData.push(['Valor da Parcela', formatCurrency(simData.valorParcela || 0)]);
+    simTableData.push(['Saldo Devedor', formatCurrency(simData.saldoDevedor || 0)]);
+    simTableData.push(['Parcelas Pagas', `${simData.parcelasPagas || 0} de ${simData.prazoTotal || 0}`]);
+    simTableData.push(['Idade', `${simData.idade || 0} anos`]);
 
     autoTable(doc, {
       startY: 50,
@@ -883,6 +620,90 @@ export default function Recomendacoes() {
     doc.text('Sujeito a análise cadastral e de crédito pelo banco emissor.', pageWidth / 2, lastY + 5, { align: 'center' });
 
     doc.save(`simulacao_${offer.name.toLowerCase().replace(/\s+/g, '_')}.pdf`);
+  };
+
+  const handleGenerateGlobalPDF = () => {
+    if (allSimulations.length === 0) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let currentY = 20;
+
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(17, 82, 212);
+    doc.text('Relatório Integrado de Simulações', pageWidth / 2, currentY, { align: 'center' });
+    currentY += 8;
+
+    doc.setFontSize(12);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, currentY, { align: 'center' });
+    currentY += 15;
+
+    // Primary Client info if available
+    const firstSim = allSimulations[0];
+    if (firstSim.nomeCliente || firstSim.cpfCliente) {
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42);
+      doc.text('Informações do Cliente', 14, currentY);
+      currentY += 5;
+      
+      const clientData = [];
+      if (firstSim.nomeCliente) clientData.push(['Nome', firstSim.nomeCliente]);
+      if (firstSim.cpfCliente) clientData.push(['CPF', firstSim.cpfCliente]);
+      
+      autoTable(doc, {
+        startY: currentY,
+        body: clientData,
+        theme: 'plain',
+        styles: { fontSize: 10 },
+        columnStyles: { 0: { fontStyle: 'bold', width: 30 } }
+      });
+      currentY = (doc as any).lastAutoTable.finalY + 15;
+    }
+
+    allSimulations.forEach((sim, index) => {
+      // Check if we need a new page
+      if (currentY > 240) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFontSize(16);
+      doc.setTextColor(17, 82, 212);
+      doc.text(`Contrato #${index + 1}: ${sim.bancoAtual}`, 14, currentY);
+      currentY += 5;
+
+      const simTable = [
+        ['Parcela', formatCurrency(sim.valorParcela)],
+        ['Saldo Devedor', formatCurrency(sim.saldoDevedor)],
+        ['Prazo', `${sim.prazoTotal}x (${sim.parcelasRestantes} rest.)`]
+      ];
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Resumo do Contrato', 'Dados']],
+        body: simTable,
+        theme: 'striped',
+        headStyles: { fillColor: [71, 85, 105] },
+        styles: { fontSize: 9 }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+      
+      // Note: In a real scenario, we might want to show the top offer for this simulation here.
+      // For now, listing the input data clearly.
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text('---', pageWidth / 2, currentY, { align: 'center' });
+      currentY += 10;
+    });
+
+    doc.setFontSize(9);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Relatório emitido pelo Sistema de Portabilidade Consignada.', pageWidth / 2, 285, { align: 'center' });
+
+    doc.save(`relatorio_simulacoes_${firstSim.nomeCliente?.replace(/\s+/g, '_') || 'cliente'}.pdf`);
   };
 
   const [selectedTableIndices, setSelectedTableIndices] = useState<Record<string, number>>({});
@@ -946,6 +767,28 @@ export default function Recomendacoes() {
           </div>
 
           {/* Summary Section */}
+          {allSimulations.length > 1 && (
+            <div className="mx-4 mt-4 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {allSimulations.map((sim, idx) => (
+                <button
+                  key={sim.id}
+                  onClick={() => setActiveSimulationIndex(idx)}
+                  className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shrink-0 border-2 flex items-center gap-2 ${
+                    activeSimulationIndex === idx 
+                      ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-105' 
+                      : 'bg-white dark:bg-surface-dark border-slate-100 dark:border-white/5 text-slate-500 hover:border-primary/50'
+                  }`}
+                >
+                  <Landmark className={`w-3 h-3 ${activeSimulationIndex === idx ? 'text-white' : 'text-slate-400'}`} />
+                  <span>Contrato #{idx + 1}</span>
+                  {activeSimulationIndex === idx && (
+                     <div className="size-1.5 rounded-full bg-white animate-pulse" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
           {simData && (
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
@@ -959,10 +802,39 @@ export default function Recomendacoes() {
                   </div>
                   <h3 className="text-sm font-bold uppercase tracking-tight">Resumo da Simulação</h3>
                 </div>
-                <div className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-[10px] font-black uppercase">
-                  Validação Ativa
+                <div className="flex items-center gap-2">
+                  {allSimulations.length > 1 && (
+                    <button 
+                      onClick={handleGenerateGlobalPDF}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+                    >
+                      <Download className="w-3 h-3" />
+                      Relatório Geral
+                    </button>
+                  )}
+                  <div className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-[10px] font-black uppercase">
+                    Validação Ativa
+                  </div>
                 </div>
               </div>
+
+              {(simData.nomeCliente || simData.cpfCliente) && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-white/5">
+                  {simData.nomeCliente && (
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Cliente</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{simData.nomeCliente}</span>
+                    </div>
+                  )}
+                  {simData.cpfCliente && (
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest">CPF</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">{simData.cpfCliente}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
                 <div className="space-y-1 col-span-2 sm:col-span-3">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Banco Atual</p>

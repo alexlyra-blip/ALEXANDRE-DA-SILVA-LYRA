@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { HelpCircle, User, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark } from 'lucide-react';
+import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2 } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useRef, useEffect } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
@@ -22,6 +22,8 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const { profile } = useAuth();
   const { banks: rulesBanks } = useRules();
   const router = useRouter();
+  const [nomeCliente, setNomeCliente] = useState('');
+  const [cpfCliente, setCpfCliente] = useState('');
   const [idade, setIdade] = useState('');
   const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO'>('INSS');
   const [subConvenio, setSubConvenio] = useState('');
@@ -30,10 +32,42 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTermBank, setSearchTermBank] = useState('');
   const [isDropdownOpenBank, setIsDropdownOpenBank] = useState(false);
+  const [dropdownBankIndex, setDropdownBankIndex] = useState<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [activeIndexBank, setActiveIndexBank] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dropdownBankRef = useRef<HTMLDivElement>(null);
+
+  interface Contract {
+    id: string;
+    bancoAtual: string;
+    valorParcela: string;
+    prazoTotal: string;
+    parcelasRestantes: string;
+    saldoDevedor: string;
+  }
+
+  const [contracts, setContracts] = useState<Contract[]>([
+    { id: crypto.randomUUID(), bancoAtual: '', valorParcela: '', prazoTotal: '', parcelasRestantes: '', saldoDevedor: '' }
+  ]);
+
+  const addContract = () => {
+    if (contracts.length < 5) {
+      setContracts([...contracts, { id: crypto.randomUUID(), bancoAtual: '', valorParcela: '', prazoTotal: '', parcelasRestantes: '', saldoDevedor: '' }]);
+    }
+  };
+
+  const removeContract = (id: string) => {
+    if (contracts.length > 1) {
+      setContracts(contracts.filter(c => c.id !== id));
+    }
+  };
+
+  const updateContract = (index: number, fields: Partial<Contract>) => {
+    const newContracts = [...contracts];
+    newContracts[index] = { ...newContracts[index], ...fields };
+    setContracts(newContracts);
+  };
   
   const allBanks = Array.from(new Set([
     "121 - AGIBANK", "250 - BCV", "025 - BANCO ALFA", "233 - BANCO CIFRA", "001 - BANCO DO BRASIL",
@@ -189,14 +223,16 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       setActiveIndexBank(prev => (prev > 0 ? prev - 1 : prev));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (activeIndexBank >= 0 && activeIndexBank < filteredBanks.length) {
+      if (activeIndexBank >= 0 && activeIndexBank < filteredBanks.length && dropdownBankIndex !== null) {
         const b = filteredBanks[activeIndexBank];
-        setBancoAtual(b);
+        updateContract(dropdownBankIndex, { bancoAtual: b });
         setIsDropdownOpenBank(false);
         setSearchTermBank('');
+        setDropdownBankIndex(null);
       }
     } else if (e.key === 'Escape') {
       setIsDropdownOpenBank(false);
+      setDropdownBankIndex(null);
     }
   };
 
@@ -236,11 +272,6 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
     }
   };
   const [dataConcessao, setDataConcessao] = useState('');
-  const [bancoAtual, setBancoAtual] = useState('');
-  const [valorParcela, setValorParcela] = useState('');
-  const [saldoDevedor, setSaldoDevedor] = useState('');
-  const [prazoTotal, setPrazoTotal] = useState('');
-  const [parcelasRestantes, setParcelasRestantes] = useState('');
   const [isAnalfabeto, setIsAnalfabeto] = useState<boolean | null>(null);
   const [isCliente60Mais, setIsCliente60Mais] = useState<boolean | null>(null);
 
@@ -275,17 +306,18 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
     return parseFloat(value.replace(/\./g, '').replace(',', '.'));
   };
 
-  const handleValorParcelaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setValorParcela(formatCurrency(e.target.value));
+  const formatCPF = (value: string) => {
+    const numeric = value.replace(/\D/g, '');
+    if (numeric.length <= 11) {
+      return numeric
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    }
+    return numeric.slice(0, 11);
   };
 
-  const handleSaldoDevedorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSaldoDevedor(formatCurrency(e.target.value));
-  };
-
-  const parcelasPagas = (parseInt(prazoTotal) || 0) - (parseInt(parcelasRestantes) || 0);
-
-  const calculateInterestRate = () => {
+  const calculateInterestRate = (saldoDevedor: string, valorParcela: string, parcelasRestantes: string) => {
     const pv = parseCurrency(saldoDevedor);
     const pmt = parseCurrency(valorParcela);
     const n = parseInt(parcelasRestantes) || 0;
@@ -310,9 +342,16 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
     return { monthlyRate, annualRate };
   };
 
-  const interestRate = calculateInterestRate();
-  const isInvalidCalculation = parseCurrency(valorParcela) > 0 && parseInt(parcelasRestantes) > 0 && parseCurrency(saldoDevedor) > 0 && parseCurrency(valorParcela) * parseInt(parcelasRestantes) <= parseCurrency(saldoDevedor);
+  const isContractInvalid = (c: Contract) => {
+    return parseCurrency(c.valorParcela) > 0 && 
+           parseInt(c.parcelasRestantes) > 0 && 
+           parseCurrency(c.saldoDevedor) > 0 && 
+           parseCurrency(c.valorParcela) * parseInt(c.parcelasRestantes) <= parseCurrency(c.saldoDevedor);
+  };
 
+  const hasInvalidContract = contracts.some(c => isContractInvalid(c));
+  const isFormIncomplete = contracts.some(c => !c.bancoAtual || !c.valorParcela || !c.prazoTotal || !c.parcelasRestantes || !c.saldoDevedor);
+  
   const [isSimulating, setIsSimulating] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiInput, setAiInput] = useState('');
@@ -350,14 +389,21 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         if (['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS', 'CLT PRIVADO'].includes(conv)) setConvenio(conv as any);
       }
       if (data.codigoBeneficio) setCodigoBeneficio(data.codigoBeneficio);
+      
+      const firstContract = { ...contracts[0] };
       if (data.bancoAtual) {
         const foundBank = allBanks.find(b => b.toLowerCase().includes(data.bancoAtual.toLowerCase()));
-        if (foundBank) setBancoAtual(foundBank);
+        if (foundBank) firstContract.bancoAtual = foundBank;
       }
-      if (data.valorParcela) setValorParcela(formatCurrency((data.valorParcela * 100).toString()));
-      if (data.prazoTotal) setPrazoTotal(data.prazoTotal.toString());
-      if (data.parcelasRestantes) setParcelasRestantes(data.parcelasRestantes.toString());
-      if (data.saldoDevedor) setSaldoDevedor(formatCurrency((data.saldoDevedor * 100).toString()));
+      if (data.valorParcela) firstContract.valorParcela = formatCurrency((data.valorParcela * 100).toString());
+      if (data.prazoTotal) firstContract.prazoTotal = data.prazoTotal.toString();
+      if (data.parcelasRestantes) firstContract.parcelasRestantes = data.parcelasRestantes.toString();
+      if (data.saldoDevedor) firstContract.saldoDevedor = formatCurrency((data.saldoDevedor * 100).toString());
+      
+      const newContracts = [...contracts];
+      newContracts[0] = firstContract;
+      setContracts(newContracts);
+      
       setIsAIModalOpen(false);
       setAiInput('');
     } catch (error) {
@@ -368,42 +414,49 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   };
 
   const handleSimulate = () => {
-    if (isInvalidCalculation) return;
+    if (hasInvalidContract || isFormIncomplete) return;
 
     if (parseInt(idade) >= 60 && isCliente60Mais === null) {
       alert("Por favor, informe se o cliente é 60+.");
       return;
     }
 
-    const valorParcelaParsed = parseCurrency(valorParcela);
-    if (profile?.limiteCredito && valorParcelaParsed > profile.limiteCredito) {
-      alert(`Valor da parcela excede o limite de crédito.`);
+    const totalParcelas = contracts.reduce((sum, c) => sum + parseCurrency(c.valorParcela), 0);
+    if (profile?.limiteCredito && totalParcelas > profile.limiteCredito) {
+      alert(`O valor total das parcelas (R$ ${totalParcelas.toFixed(2)}) excede seu limite de crédito.`);
       return;
     }
     setIsSimulating(true);
   };
 
   const onAnimationComplete = () => {
-    const simulationData = {
-      id: crypto.randomUUID(),
-      convenio,
-      subConvenio,
-      idade: parseInt(idade) || 0,
-      codigoBeneficio,
-      dataConcessao,
-      bancoAtual,
-      valorParcela: parseCurrency(valorParcela),
-      prazoTotal: parseInt(prazoTotal) || 0,
-      parcelasRestantes: parseInt(parcelasRestantes) || 0,
-      saldoDevedor: parseCurrency(saldoDevedor),
-      parcelasPagas,
-      isAnalfabeto,
-      isCliente60Mais,
-      taxaJurosMensal: interestRate?.monthlyRate || 0,
-      taxaJurosAnual: interestRate?.annualRate || 0,
-      timestamp: Date.now()
-    };
-    sessionStorage.setItem('simulationData', safeStringify(simulationData));
+    const simulations = contracts.map(c => {
+      const rate = calculateInterestRate(c.saldoDevedor, c.valorParcela, c.parcelasRestantes);
+      return {
+        id: c.id,
+        nomeCliente,
+        cpfCliente,
+        convenio,
+        subConvenio,
+        idade: parseInt(idade) || 0,
+        codigoBeneficio,
+        dataConcessao,
+        bancoAtual: c.bancoAtual,
+        valorParcela: parseCurrency(c.valorParcela),
+        prazoTotal: parseInt(c.prazoTotal) || 0,
+        parcelasRestantes: parseInt(c.parcelasRestantes) || 0,
+        saldoDevedor: parseCurrency(c.saldoDevedor),
+        parcelasPagas: (parseInt(c.prazoTotal) || 0) - (parseInt(c.parcelasRestantes) || 0),
+        isAnalfabeto,
+        isCliente60Mais,
+        taxaJurosMensal: rate?.monthlyRate || 0,
+        taxaJurosAnual: rate?.annualRate || 0,
+        timestamp: Date.now()
+      };
+    });
+    
+    sessionStorage.setItem('simulationData', safeStringify(simulations[0]));
+    sessionStorage.setItem('allSimulations', safeStringify(simulations));
     router.push('/simulacao/recomendacoes');
   };
 
@@ -441,6 +494,34 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
               <h3 className="text-lg font-bold">Informações do Cliente</h3>
             </div>
             <div className="space-y-4">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">Nome do Cliente (Opcional)</label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
+                    <input 
+                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm" 
+                      type="text" 
+                      value={nomeCliente} 
+                      onChange={(e) => setNomeCliente(e.target.value)} 
+                      placeholder="Nome completo do segurado" 
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">CPF (Opcional)</label>
+                  <div className="relative">
+                    <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
+                    <input 
+                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm" 
+                      type="text" 
+                      value={cpfCliente} 
+                      onChange={(e) => setCpfCliente(formatCPF(e.target.value))} 
+                      placeholder="000.000.000-00" 
+                    />
+                  </div>
+                </div>
+              </div>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-slate-600 dark:text-white">Convênio</label>
                 <div className="bg-slate-100 dark:bg-slate-900/50 p-1 rounded-2xl flex flex-wrap gap-1">
@@ -560,127 +641,195 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
           <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/20 to-transparent mb-8"></div>
 
           <section className="mb-10">
-            <div className="flex items-center gap-2 mb-4">
-              <FileText className="text-primary w-6 h-6" />
-              <h3 className="text-lg font-bold">Detalhes do Contrato</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FileText className="text-primary w-6 h-6" />
+                <h3 className="text-lg font-bold">Detalhes do Contrato</h3>
+              </div>
+              <button 
+                type="button"
+                onClick={addContract}
+                disabled={contracts.length >= 5}
+                className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-bold hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Adicionar Contrato</span>
+              </button>
             </div>
-            <div className="space-y-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-white">Banco Atual</label>
-                <div className="relative">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-10 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                      placeholder="Buscar banco..."
-                      value={isDropdownOpenBank ? searchTermBank : bancoAtual}
-                      onFocus={() => {
-                        setIsDropdownOpenBank(true);
-                        setSearchTermBank('');
-                      }}
-                      onChange={(e) => setSearchTermBank(e.target.value)}
-                      onKeyDown={handleKeyDownBank}
-                    />
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
-                    <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-transform duration-200 ${isDropdownOpenBank ? 'rotate-180' : ''}`} />
-                  </div>
+            
+            <div className="space-y-6">
+              {contracts.map((contract, index) => {
+                const rate = calculateInterestRate(contract.saldoDevedor, contract.valorParcela, contract.parcelasRestantes);
+                const invalid = isContractInvalid(contract);
 
-                  <AnimatePresence>
-                    {isDropdownOpenBank && (
-                      <>
-                        <div 
-                          className="fixed inset-0 z-10" 
-                          onClick={() => setIsDropdownOpenBank(false)}
-                        />
-                        <motion.div
-                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                          className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-20 max-h-64 overflow-y-auto overflow-x-hidden"
+                return (
+                  <div key={contract.id} className={`p-4 rounded-2xl border ${invalid ? 'border-red-200 bg-red-50/30' : 'border-slate-100 dark:border-slate-800 bg-slate-50/50'} relative group`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Contrato #{index + 1}</span>
+                      {contracts.length > 1 && (
+                        <button 
+                          onClick={() => removeContract(contract.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
                         >
-                          <div className="p-2 space-y-1" ref={dropdownBankRef}>
-                            {filteredBanks
-                              .map((b, index) => (
-                                <button
-                                  key={b}
-                                  type="button"
-                                  onClick={() => {
-                                    setBancoAtual(b);
-                                    setIsDropdownOpenBank(false);
-                                    setSearchTermBank('');
-                                  }}
-                                  onMouseEnter={() => setActiveIndexBank(index)}
-                                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-left text-base font-medium transition-colors ${
-                                    bancoAtual === b || activeIndexBank === index
-                                      ? 'bg-primary/10 text-primary font-bold' 
-                                      : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-3 truncate">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${bancoAtual === b || activeIndexBank === index ? 'bg-primary/20 text-primary' : 'bg-slate-100 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
-                                      <Landmark className="w-4 h-4" />
-                                    </div>
-                                    <span className="truncate pr-4">{b}</span>
-                                  </div>
-                                  {bancoAtual === b && <Check className="w-4 h-4 shrink-0" />}
-                                </button>
-                              ))}
-                            {filteredBanks.length === 0 && (
-                              <div className="px-4 py-6 text-center text-slate-500 text-xs italic">
-                                Nenhum banco encontrado para &quot;{searchTermBank}&quot;
-                              </div>
-                            )}
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-semibold text-slate-600 dark:text-white">Banco Atual</label>
+                        <div className="relative">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-10 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                              placeholder="Buscar banco..."
+                              value={(isDropdownOpenBank && dropdownBankIndex === index) ? searchTermBank : contract.bancoAtual}
+                              onFocus={() => {
+                                setIsDropdownOpenBank(true);
+                                setSearchTermBank('');
+                                setDropdownBankIndex(index);
+                              }}
+                              onChange={(e) => setSearchTermBank(e.target.value)}
+                              onKeyDown={handleKeyDownBank}
+                            />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+                            <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-transform duration-200 ${isDropdownOpenBank && dropdownBankIndex === index ? 'rotate-180' : ''}`} />
                           </div>
-                        </motion.div>
-                      </>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
 
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-white">Valor da Parcela</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">R$</span>
-                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium" type="text" value={valorParcela} onChange={handleValorParcelaChange} placeholder="0,00" />
-                </div>
-              </div>
+                          <AnimatePresence>
+                            {isDropdownOpenBank && dropdownBankIndex === index && (
+                              <>
+                                <div 
+                                  className="fixed inset-0 z-10" 
+                                  onClick={() => {
+                                    setIsDropdownOpenBank(false);
+                                    setDropdownBankIndex(null);
+                                  }}
+                                />
+                                <motion.div
+                                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                  className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-20 max-h-64 overflow-y-auto overflow-x-hidden"
+                                >
+                                  <div className="p-2 space-y-1" ref={dropdownBankRef}>
+                                    {filteredBanks
+                                      .map((b, bIndex) => (
+                                        <button
+                                          key={b}
+                                          type="button"
+                                          onClick={() => {
+                                            updateContract(index, { bancoAtual: b });
+                                            setIsDropdownOpenBank(false);
+                                            setSearchTermBank('');
+                                            setDropdownBankIndex(null);
+                                          }}
+                                          onMouseEnter={() => setActiveIndexBank(bIndex)}
+                                          className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-left text-base font-medium transition-colors ${
+                                            contract.bancoAtual === b || activeIndexBank === bIndex
+                                              ? 'bg-primary/10 text-primary font-bold' 
+                                              : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-3 truncate">
+                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${contract.bancoAtual === b || activeIndexBank === bIndex ? 'bg-primary/20 text-primary' : 'bg-slate-100 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
+                                              <Landmark className="w-4 h-4" />
+                                            </div>
+                                            <span className="truncate pr-4">{b}</span>
+                                          </div>
+                                          {contract.bancoAtual === b && <Check className="w-4 h-4 shrink-0" />}
+                                        </button>
+                                      ))}
+                                    {filteredBanks.length === 0 && (
+                                      <div className="px-4 py-6 text-center text-slate-500 text-xs italic">
+                                        Nenhum banco encontrado para &quot;{searchTermBank}&quot;
+                                      </div>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              </>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-600 dark:text-white">Prazo Total</label>
-                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium" type="number" value={prazoTotal} onChange={(e) => setPrazoTotal(e.target.value)} />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-600 dark:text-white">Parcelas Restantes</label>
-                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium" type="number" value={parcelasRestantes} onChange={(e) => setParcelasRestantes(e.target.value)} />
-                </div>
-              </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-semibold text-slate-600 dark:text-white">Valor da Parcela</label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">R$</span>
+                          <input 
+                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium" 
+                            type="text" 
+                            value={contract.valorParcela} 
+                            onChange={(e) => updateContract(index, { valorParcela: formatCurrency(e.target.value) })} 
+                            placeholder="0,00" 
+                          />
+                        </div>
+                      </div>
 
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-600 dark:text-white">Saldo Devedor</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">R$</span>
-                  <input className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium" type="text" value={saldoDevedor} onChange={handleSaldoDevedorChange} placeholder="0.000,00" />
-                </div>
-              </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-sm font-semibold text-slate-600 dark:text-white">Prazo Total</label>
+                          <input 
+                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium" 
+                            type="number" 
+                            value={contract.prazoTotal} 
+                            onChange={(e) => updateContract(index, { prazoTotal: e.target.value })} 
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-sm font-semibold text-slate-600 dark:text-white">Parcelas Restantes</label>
+                          <input 
+                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium" 
+                            type="number" 
+                            value={contract.parcelasRestantes} 
+                            onChange={(e) => updateContract(index, { parcelasRestantes: e.target.value })} 
+                          />
+                        </div>
+                      </div>
 
-              {interestRate && !isInvalidCalculation && (
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 rounded-xl p-4 flex flex-col gap-2">
-                  <h4 className="text-sm font-bold text-emerald-700 dark:text-emerald-400">Taxa Atual</h4>
-                  <div className="flex justify-between">
-                    <span className="text-xs text-emerald-600">Mensal:</span>
-                    <span className="text-sm font-bold">{(interestRate.monthlyRate * 100).toFixed(2)}% a.m.</span>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-semibold text-slate-600 dark:text-white">Saldo Devedor</label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">R$</span>
+                          <input 
+                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium" 
+                            type="text" 
+                            value={contract.saldoDevedor} 
+                            onChange={(e) => updateContract(index, { saldoDevedor: formatCurrency(e.target.value) })} 
+                            placeholder="0.000,00" 
+                          />
+                        </div>
+                      </div>
+
+                      {rate && !invalid && (
+                        <div className="bg-emerald-50/50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-2xl p-4 flex flex-col gap-0.5 mt-2 transition-all">
+                          <h4 className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Taxa Atual</h4>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[11px] font-bold text-emerald-600/70 dark:text-emerald-400/60">Mensal:</span>
+                            <span className="text-base font-black text-slate-900 dark:text-white">
+                              {(rate.monthlyRate * 100).toFixed(2)}% a.m.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })}
             </div>
           </section>
         </main>
 
         <footer className={`sticky bottom-0 bg-white dark:bg-black/95 p-4 border-t border-primary/10`}>
-          <button onClick={handleSimulate} disabled={isInvalidCalculation} className={`w-full font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all ${isInvalidCalculation ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-primary text-white'}`}>
-            <span>Analisar Melhores Opções</span>
+          <button 
+            onClick={handleSimulate} 
+            disabled={hasInvalidContract || isFormIncomplete} 
+            className={`w-full font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all ${hasInvalidContract || isFormIncomplete ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-primary text-white'}`}
+          >
+            <span>Analisar {contracts.length > 1 ? `${contracts.length} Contratos` : 'Melhores Opções'}</span>
             <TrendingUp className="w-5 h-5" />
           </button>
         </footer>

@@ -59,14 +59,23 @@ export default function Sidebar() {
           <div className="overflow-hidden">
             <p className="font-black text-sm truncate leading-tight">{profile?.name || 'Usuário'}</p>
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mt-1">{profile?.role || 'Corretor'}</p>
-            <div className="flex items-center gap-1.5 text-white/40 mt-1 font-mono text-[11px]">
-              <Clock className="w-3.5 h-3.5" />
-              <span className="font-bold">{formatTime(inactivityTimeLeft)}</span>
+            <div className="flex items-center justify-between mt-2 bg-white/5 rounded-xl p-2">
+              <div className="flex items-center gap-1.5 text-white/60 font-mono text-[11px]">
+                <Clock className="w-3.5 h-3.5" />
+                <span className="font-bold">{formatTime(inactivityTimeLeft)}</span>
+              </div>
+              <button 
+                onClick={() => logout()}
+                title="Sair do Sistema"
+                className="flex items-center justify-center size-7 bg-red-500 text-white rounded-lg transition-all shadow-lg shadow-red-500/20 hover:scale-110 active:scale-95 ml-2"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </div>
         
-        <div className="h-px bg-white/10 w-full mb-8" />
+        <div className="h-px bg-white/10 w-full mb-8 opacity-50" />
 
         <nav className="space-y-2">
           {menuItems.map((item) => {
@@ -123,13 +132,6 @@ export default function Sidebar() {
           <Settings className="w-5 h-5 opacity-60" />
           <span className="text-sm">Configurações</span>
         </Link>
-        <button 
-          onClick={() => logout()}
-          className="flex items-center gap-3 p-4 rounded-2xl w-full text-left hover:bg-red-600 hover:text-white text-white/80 transition-all"
-        >
-          <LogOut className="w-5 h-5 opacity-60 group-hover:opacity-100" />
-          <span className="text-sm">Sair</span>
-        </button>
       </div>
     </aside>
   );

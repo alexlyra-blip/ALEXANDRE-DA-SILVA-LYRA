@@ -115,8 +115,8 @@ function ProposalDetailPageContent() {
   const [showCopySuccess, setShowCopySuccess] = useState(false);
   
   const [formData, setFormData] = useState({
-    clientName: '',
-    clientCpf: '',
+    clientName: searchParams.get('nome') || '',
+    clientCpf: searchParams.get('cpf') || '',
     proposalDate: format(new Date(), 'yyyy-MM-dd'),
     proposalNumber: '',
     status: 'PENDENTE',
