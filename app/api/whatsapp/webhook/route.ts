@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { runSimulation, SimulationInput } from '@/lib/simulation-service';
 
 export const dynamic = 'force-dynamic';
 
 const getAI = () => {
   const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-  return new GoogleGenerativeAI(apiKey);
+  return new GoogleGenAI({ apiKey });
 };
 
 // Tokens de configuração
@@ -16,35 +16,35 @@ const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
 // Schema para extração de dados da simulação
 const simulationSchema = {
-  type: SchemaType.OBJECT,
+  type: Type.OBJECT,
   properties: {
     isSimulationData: {
-      type: SchemaType.BOOLEAN,
+      type: Type.BOOLEAN,
       description: "Verdadeiro se a mensagem contém dados suficientes para uma simulação."
     },
     data: {
-      type: SchemaType.OBJECT,
+      type: Type.OBJECT,
       properties: {
-        valorParcela: { type: SchemaType.NUMBER },
-        saldoDevedor: { type: SchemaType.NUMBER },
-        idade: { type: SchemaType.NUMBER },
+        valorParcela: { type: Type.NUMBER },
+        saldoDevedor: { type: Type.NUMBER },
+        idade: { type: Type.NUMBER },
         convenio: { 
-          type: SchemaType.STRING,
+          type: Type.STRING,
           enum: ['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS']
         },
-        subConvenio: { type: SchemaType.STRING },
-        parcelasPagas: { type: SchemaType.NUMBER },
-        parcelasRestantes: { type: SchemaType.NUMBER },
-        codigoBeneficio: { type: SchemaType.STRING },
-        dataConcessao: { type: SchemaType.STRING, description: "Formato YYYY-MM-DD" },
-        isAnalfabeto: { type: SchemaType.BOOLEAN },
-        bancoAtual: { type: SchemaType.STRING },
-        taxaJurosMensal: { type: SchemaType.NUMBER, description: "Taxa de juros mensal atual do contrato (ex: 1.85)" }
+        subConvenio: { type: Type.STRING },
+        parcelasPagas: { type: Type.NUMBER },
+        parcelasRestantes: { type: Type.NUMBER },
+        codigoBeneficio: { type: Type.STRING },
+        dataConcessao: { type: Type.STRING, description: "Formato YYYY-MM-DD" },
+        isAnalfabeto: { type: Type.BOOLEAN },
+        bancoAtual: { type: Type.STRING },
+        taxaJurosMensal: { type: Type.NUMBER, description: "Taxa de juros mensal atual do contrato (ex: 1.85)" }
       }
     },
     missingFields: {
-      type: SchemaType.ARRAY,
-      items: { type: SchemaType.STRING },
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
       description: "Lista de campos que ainda faltam para completar a simulação."
     }
   },
@@ -93,21 +93,21 @@ export async function POST(request: Request) {
       }
 
       // 1. Usar a IA para extrair dados ou gerar resposta
-      const model = getAI().getGenerativeModel({
-        model: "gemini-1.5-flash",
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: simulationSchema,
-        },
-      });
-
+      const ai = getAI();
       const prompt = `Você é um assistente de crédito consignado. Analise a mensagem do cliente: "${text}".
       Extraia os dados para simulação de portabilidade. 
       Campos necessários: Idade, Convênio (INSS, SIAPE, etc), Banco Atual, Valor da Parcela, Saldo Devedor, Parcelas Pagas, Parcelas Restantes, Código do Benefício, Taxa de Juros Atual (se mencionada).
       Se o cliente não enviou tudo, identifique o que falta.`;
 
-      const result = await model.generateContent(prompt);
-      const extraction = JSON.parse(result.response.text());
+      const result = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: simulationSchema,
+        },
+      });
+      const extraction = JSON.parse(result.text);
 
       let replyText = "";
 
@@ -130,15 +130,17 @@ export async function POST(request: Request) {
         }
       } else {
         // 3. Gerar resposta conversacional pedindo o que falta
-        const chatModel = getAI().getGenerativeModel({ model: "gemini-1.5-flash" });
         const chatPrompt = `Você é um assistente de crédito. O cliente disse: "${text}". 
         Os dados extraídos foram: ${JSON.stringify(extraction.data)}. 
         Os campos que faltam são: ${extraction.missingFields?.join(', ') || 'todos'}.
         Gere uma resposta curta e amigável pedindo os dados que faltam para fazer a simulação de portabilidade. 
         Se for apenas um "Oi", peça: Idade, Convênio, Banco Atual, Valor da Parcela e Saldo Devedor.`;
         
-        const chatResult = await chatModel.generateContent(chatPrompt);
-        replyText = chatResult.response.text();
+        const chatResult = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: chatPrompt
+        });
+        replyText = chatResult.text;
       }
 
       // 4. Enviar a resposta via WhatsApp

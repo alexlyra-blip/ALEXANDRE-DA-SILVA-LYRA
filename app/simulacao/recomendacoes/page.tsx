@@ -13,12 +13,12 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { safeStringify } from '@/lib/utils';
 
 const getAI = () => {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-  return new GoogleGenerativeAI(apiKey);
+  return new GoogleGenAI({ apiKey });
 };
 
 type SortOption = 'menor_troco' | 'valor_troco' | 'valor_contrato';
@@ -137,22 +137,25 @@ export default function Recomendacoes() {
     setIsAISummarizing(true);
     try {
       const ai = getAI();
-      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
       const topOffers = offers.slice(0, 3);
       const offersText = topOffers.map((o, i) => 
         `Oferta ${i+1}: Banco ${o.name}, Tabela ${o.tabela}, Troco de ${formatCurrency(o.valorTroco)}, Taxa de ${o.novaTaxaPortabilidade?.toFixed(2)}%`
       ).join('\n');
 
-      const response = await model.generateContent(`Crie uma mensagem profissional e persuasiva para WhatsApp enviando os resultados de uma simulação de portabilidade de crédito consignado para um cliente.
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Crie uma mensagem profissional e persuasiva para WhatsApp enviando os resultados de uma simulação de portabilidade de crédito consignado para um cliente.
         Dados da simulação:
         Parcela atual: ${formatCurrency(simData?.valorParcela || 0)}
         
         Principais Ofertas encontradas:
         ${offersText}
         
-        A mensagem deve ser amigável, destacar o valor do troco e convidar o cliente para escolher a melhor opção. Use emojis e negrito para destacar valores.`);
+        A mensagem deve ser amigável, destacar o valor do troco e convidar o cliente para escolher a melhor opção. Use emojis e negrito para destacar valores.`
+      });
 
-      const message = response.response.text();
+      const message = response.text;
+      if (!message) throw new Error("Sem resposta da IA");
       const encodedMessage = encodeURIComponent(message);
       window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
     } catch (error) {

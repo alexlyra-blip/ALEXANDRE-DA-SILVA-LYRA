@@ -31,7 +31,10 @@ import { ptBR } from 'date-fns/locale';
 const STATUS_OPTIONS = [
   { id: 'RASCUNHO', label: 'RASCUNHO', color: 'bg-slate-500', activeColor: 'bg-slate-500 text-white shadow-lg shadow-slate-500/30' },
   { id: 'PENDENTE', label: 'PENDENTE', color: 'bg-amber-500', activeColor: 'bg-amber-500 text-white shadow-lg shadow-amber-500/30' },
+  { id: 'AGUARDA PORTABILIDADE', label: 'AG. PORTABILIDADE', color: 'bg-cyan-500', activeColor: 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30' },
   { id: 'ANDAMENTO', label: 'ANDAMENTO', color: 'bg-blue-500', activeColor: 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' },
+  { id: 'AGUARDA AVERBAÇÃO PORT', label: 'AG. AVERBAÇÃO PORT', color: 'bg-indigo-500', activeColor: 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' },
+  { id: 'AG AVERBAÇÃO', label: 'AG. AVERBAÇÃO', color: 'bg-purple-500', activeColor: 'bg-purple-500 text-white shadow-lg shadow-purple-500/30' },
   { id: 'PAGO', label: 'PAGO', color: 'bg-emerald-500', activeColor: 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' },
   { id: 'REPROVADO', label: 'REPROVADO', color: 'bg-rose-500', activeColor: 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' },
 ];
@@ -137,6 +140,9 @@ function ProposalDetailPageContent() {
     bancoPortado: searchParams.get('bancoPortado') || '',
     numeroContrato: '',
     portabilityStatus: '',
+    isLinkedRefin: searchParams.get('isLinkedRefin') === 'true',
+    parentId: searchParams.get('parentId') || '',
+    shouldCreateRefin: false,
   });
 
   const formatToCurrencyInput = (val: string | number) => {
@@ -257,6 +263,9 @@ function ProposalDetailPageContent() {
           bancoPortado: proposal.bancoPortado || '',
           numeroContrato: proposal.numeroContrato || '',
           portabilityStatus: proposal.portabilityStatus || '',
+          isLinkedRefin: proposal.isLinkedRefin || false,
+          parentId: proposal.parentId || '',
+          shouldCreateRefin: proposal.shouldCreateRefin || false,
         });
 
         setInputValues({
@@ -295,7 +304,8 @@ function ProposalDetailPageContent() {
     const today = startOfDay(new Date());
     const returnDate = startOfDay(expectedReturnDate);
     
-    if (isAfter(today, returnDate)) return 0;
+    if (isAfter(today, returnDate)) return -1;
+    if (today.getTime() === returnDate.getTime()) return 0;
     
     let count = 0;
     let current = new Date(today);
@@ -430,6 +440,21 @@ function ProposalDetailPageContent() {
     }
 
     switch (formData.status) {
+      case 'AGUARDA PORTABILIDADE':
+        return {
+          message: "Esta proposta de Refinanciamento está aguardando o processamento inicial da Portabilidade vinculada.",
+          color: "cyan"
+        };
+      case 'AGUARDA AVERBAÇÃO PORT':
+        return {
+          message: "Esta proposta de Refinanciamento está aguardando a finalização da Portabilidade vinculada. Após a finalização da portabilidade, esta proposta entrará em fase de averbação.",
+          color: "indigo"
+        };
+      case 'AG AVERBAÇÃO':
+        return {
+          message: "A portabilidade vinculada foi finalizada. Esta proposta agora aguarda averbação para que possa ser paga.",
+          color: "purple"
+        };
       case 'ANDAMENTO':
         return {
           message: "Informamos que a proposta está em ANDAMENTO. Para a continuidade e conclusão do processo, é necessário que o benefício do cliente esteja desbloqueado, permitindo a averbação e a subsequente liberação do pagamento.",
@@ -460,6 +485,9 @@ function ProposalDetailPageContent() {
   const colorMap: Record<string, { bg: string, border: string, text: string, icon: string }> = {
     amber: { bg: 'bg-amber-500/5', border: 'border-amber-500/10', text: 'text-amber-700 dark:text-amber-400', icon: 'text-amber-500' },
     blue: { bg: 'bg-blue-500/5', border: 'border-blue-500/10', text: 'text-blue-700 dark:text-blue-400', icon: 'text-blue-500' },
+    cyan: { bg: 'bg-cyan-500/5', border: 'border-cyan-500/10', text: 'text-cyan-700 dark:text-cyan-400', icon: 'text-cyan-500' },
+    indigo: { bg: 'bg-indigo-500/5', border: 'border-indigo-500/10', text: 'text-indigo-700 dark:text-indigo-400', icon: 'text-indigo-500' },
+    purple: { bg: 'bg-purple-500/5', border: 'border-purple-500/10', text: 'text-purple-700 dark:text-purple-400', icon: 'text-purple-500' },
     emerald: { bg: 'bg-emerald-500/5', border: 'border-emerald-500/10', text: 'text-emerald-700 dark:text-emerald-400', icon: 'text-emerald-500' },
     rose: { bg: 'bg-rose-500/5', border: 'border-rose-500/10', text: 'text-rose-700 dark:text-rose-400', icon: 'text-rose-500' },
   };
@@ -644,7 +672,11 @@ function ProposalDetailPageContent() {
                   </div>
                   {remainingDays !== null && !formData.portabilityStatus && (
                     <div className="text-right">
-                      {remainingDays === 0 ? (
+                      {remainingDays === -1 ? (
+                        <p className="text-xs font-black text-rose-600 dark:text-rose-400 animate-pulse">
+                          Saldo Expirado
+                        </p>
+                      ) : remainingDays === 0 ? (
                         <p className="text-xs font-black text-rose-600 dark:text-rose-400 animate-pulse">
                           Verificar retorno do saldo
                         </p>
@@ -725,6 +757,22 @@ function ProposalDetailPageContent() {
           {/* Form Fields */}
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {formData.loanType === 'PORTABILIDADE' && isNew && (
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 cursor-pointer hover:border-primary/30 transition-all">
+                    <input 
+                      type="checkbox"
+                      checked={formData.shouldCreateRefin}
+                      onChange={(e) => setFormData({ ...formData, shouldCreateRefin: e.target.checked })}
+                      className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <span className="block text-sm font-black text-slate-900 dark:text-white">Vincular Refin da Portabilidade?</span>
+                      <span className="block text-[10px] text-slate-500 font-bold uppercase">Uma proposta de refinanciamento será criada automaticamente ligada a esta portabilidade</span>
+                    </div>
+                  </label>
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                   <User className="w-3.5 h-3.5" />

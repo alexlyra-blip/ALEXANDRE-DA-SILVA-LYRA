@@ -79,7 +79,9 @@ export default function PropostasPage() {
     }
 
     const today = startOfDay(new Date());
-    if (isAfter(today, returnDateObj)) return 0;
+    if (isAfter(today, returnDateObj)) return -1;
+    
+    if (today.getTime() === returnDateObj.getTime()) return 0;
     
     let count = 0;
     let current = new Date(today);
@@ -180,16 +182,19 @@ export default function PropostasPage() {
       return matchesSearch && matchesStatus && matchesBank && matchesCorretor && matchesLoanType && matchesDate;
     });
 
-    // Sort by status group, then by date within status
-    return filtered.sort((a, b) => {
-      const statusOrder: Record<string, number> = {
-        'RASCUNHO': 0,
-        'ANDAMENTO': 1,
-        'PENDENTE': 2,
-        'PAGO': 3,
-        'REPROVADO': 4
-      };
+    // Sort by status group, then group parents and children together
+    const statusOrder: Record<string, number> = {
+      'RASCUNHO': 0,
+      'AGUARDA PORTABILIDADE': 1,
+      'ANDAMENTO': 1,
+      'AGUARDA AVERBAÇÃO PORT': 1,
+      'AG AVERBAÇÃO': 1,
+      'PENDENTE': 2,
+      'PAGO': 3,
+      'REPROVADO': 4
+    };
 
+    return filtered.sort((a, b) => {
       const statusA = (a.status || '').toUpperCase() as string;
       const statusB = (b.status || '').toUpperCase() as string;
 
@@ -200,11 +205,23 @@ export default function PropostasPage() {
         return orderA - orderB;
       }
 
-      // Within same status, sort by date (newest first)
-      const dateA = a.proposalDate ? new Date(a.proposalDate).getTime() : 0;
-      const dateB = b.proposalDate ? new Date(b.proposalDate).getTime() : 0;
-      
-      return dateB - dateA;
+      // Dentro do mesmo status, agrupar por vínculo
+      const getAnchorId = (p: any) => p.parentId && p.isLinkedRefin ? p.parentId : p.id;
+      const anchorA = getAnchorId(a);
+      const anchorB = getAnchorId(b);
+
+      if (anchorA !== anchorB) {
+        // Se são de grupos diferentes, ordenar por data da proposta principal do grupo
+        const getAnchorTime = (p: any) => {
+          const anchorId = getAnchorId(p);
+          const anchor = proposals.find(prop => prop.id === anchorId);
+          return anchor?.createdAt ? new Date(anchor.createdAt).getTime() : (p.createdAt ? new Date(p.createdAt).getTime() : 0);
+        };
+        return getAnchorTime(b) - getAnchorTime(a);
+      }
+
+      // Se são do mesmo grupo (Portabilidade + seu Refin), Portabilidade vem primeiro
+      return a.isLinkedRefin ? 1 : -1;
     });
   }, [proposals, searchTerm, statusFilter, dateFilter, customStartDate, customEndDate, bankFilter, corretorFilter, loanTypeFilter]);
 
@@ -259,7 +276,10 @@ export default function PropostasPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'PENDENTE': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+      case 'AGUARDA PORTABILIDADE': return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20';
       case 'ANDAMENTO': return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
+      case 'AGUARDA AVERBAÇÃO PORT': return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20';
+      case 'AG AVERBAÇÃO': return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20';
       case 'PAGO': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
       case 'REPROVADO': return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
       default: return 'bg-slate-500/10 text-slate-600 border-slate-500/20';
@@ -269,7 +289,10 @@ export default function PropostasPage() {
   const getSoftBgColor = (status: string) => {
     switch (status) {
       case 'PENDENTE': return 'bg-amber-50 dark:bg-amber-950/10';
+      case 'AGUARDA PORTABILIDADE': return 'bg-cyan-50 dark:bg-cyan-950/10';
       case 'ANDAMENTO': return 'bg-blue-50 dark:bg-blue-950/10';
+      case 'AGUARDA AVERBAÇÃO PORT': return 'bg-indigo-50 dark:bg-indigo-950/10';
+      case 'AG AVERBAÇÃO': return 'bg-purple-50 dark:bg-purple-950/10';
       case 'PAGO': return 'bg-emerald-50 dark:bg-emerald-950/10';
       case 'REPROVADO': return 'bg-rose-50 dark:bg-rose-950/10';
       default: return 'bg-white dark:bg-slate-900';
@@ -519,8 +542,8 @@ export default function PropostasPage() {
                             #{proposal.proposalNumber || '---'}
                           </span>
                           {proposal.loanType && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                              {proposal.loanType}
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${proposal.isLinkedRefin ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}>
+                              {proposal.isLinkedRefin ? `REFIN DA PORTABILIDADE` : proposal.loanType}
                             </span>
                           )}
                           {proposal.corretor && (
@@ -585,14 +608,26 @@ export default function PropostasPage() {
                               <span>{proposal.portabilityStatus}</span>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg">
-                              <Clock className="w-3 h-3" />
-                              <span>
-                                {calculateRemainingDays(proposal.expectedReturnDate, proposal.cipSentDate) === 0 
-                                  ? 'Retorno Hoje' 
-                                  : `Faltam ${calculateRemainingDays(proposal.expectedReturnDate, proposal.cipSentDate)} dias`}
-                              </span>
-                            </div>
+                                (() => {
+                                  const days = calculateRemainingDays(proposal.expectedReturnDate, proposal.cipSentDate);
+                                  let badgeClasses = "text-blue-500 bg-blue-500/10";
+                                  let label = `Faltam ${days} dias`;
+                                  
+                                  if (days === -1) {
+                                    badgeClasses = "text-rose-600 bg-rose-500/10 animate-pulse";
+                                    label = "Saldo Expirado";
+                                  } else if (days === 0) {
+                                    badgeClasses = "text-amber-600 bg-amber-500/10 animate-pulse";
+                                    label = "Retorno Hoje";
+                                  }
+
+                                  return (
+                                    <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg ${badgeClasses}`}>
+                                      <Clock className="w-3 h-3" />
+                                      <span>{label}</span>
+                                    </div>
+                                  );
+                                })()
                           )
                         )}
 

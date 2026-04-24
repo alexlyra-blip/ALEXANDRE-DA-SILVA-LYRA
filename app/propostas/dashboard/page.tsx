@@ -311,7 +311,7 @@ export default function DashboardPropostasPage() {
                   <TrendingUp className="w-5 h-5 text-emerald-500" />
                   Aproveitamento
                 </h3>
-                <div className="h-40 w-full relative">
+                <div className="h-80 w-full relative">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -321,20 +321,22 @@ export default function DashboardPropostasPage() {
                         ]}
                         cx="50%"
                         cy="50%"
-                        innerRadius={45}
-                        outerRadius={70}
-                        paddingAngle={0}
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={5}
                         dataKey="value"
-                        startAngle={90}
-                        endAngle={-270}
-                        cornerRadius={10}
+                        animationDuration={800}
+                        isAnimationActive={true}
+                        stroke="none"
                       >
                         <Cell fill="#10b981" />
-                        <Cell fill="#e2e8f0" />
+                        <Cell fill="#f1f5f9" />
                       </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'transparent', borderRadius: '12px' }} />
+                      <Legend iconType="circle" />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8">
                     <p className="text-3xl font-black text-slate-900 tracking-tighter">
                       {stats.totalValue > 0 ? Math.round((stats.totalPago / stats.totalValue) * 100) : 0}%
                     </p>

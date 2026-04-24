@@ -1,12 +1,14 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 async function generateLoginImage() {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY!;
-  const ai = new GoogleGenerativeAI(apiKey);
-  const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const ai = new GoogleGenAI({ apiKey });
   
-  const response = await model.generateContent("A high-quality, professional banner for a financial portability service called 'Portabilidade PRO'...");
-  // Note: Standard Gemini 1.5 Flash doesn't generate images directly like this, 
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: "A high-quality, professional banner for a financial portability service called 'Portabilidade PRO'..."
+  });
+  // Note: Standard Gemini Flash doesn't generate images directly like this, 
   // but we'll fix the syntax so it at least compiles/runs without crashing the build if analyzed.
 
   if (response.candidates && response.candidates[0]?.content?.parts) {

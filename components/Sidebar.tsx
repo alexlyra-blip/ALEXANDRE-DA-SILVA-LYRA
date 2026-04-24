@@ -25,13 +25,22 @@ export default function Sidebar() {
     const rotationInterval = setInterval(() => {
       avatarControls.start({ 
         rotateY: [0, 720], 
-        transition: { duration: 2, ease: "easeInOut" }                
+        transition: { duration: 1.5, ease: "easeInOut" }                
       });
     }, 120000); // 120 segundos = 2 minutos
+    
+    // Trigger initial animation after a short delay
+    const initialAnimationTimeout = setTimeout(() => {
+      avatarControls.start({ 
+        rotateY: [0, 720], 
+        transition: { duration: 1.5, ease: "easeInOut" }                
+      });
+    }, 2000);
     
     return () => {
         clearInterval(timer);
         clearInterval(rotationInterval);
+        clearTimeout(initialAnimationTimeout);
     };
   }, [avatarControls]);
 
@@ -80,20 +89,21 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between bg-white/5 rounded-lg p-1.5">
-          <div className="flex items-center gap-1.5 text-white/60 font-mono text-[11px]">
-            <Clock className="w-3.5 h-3.5" />
+        <div className="flex items-center justify-between bg-white/5 rounded-lg p-1.5 py-2">
+          <div className="flex items-center gap-1.5 text-white/60 font-mono text-[10px]">
+            <Clock className="w-3 h-3" />
             <span className="font-bold">{formatTime(inactivityTimeLeft)}</span>
+            <span className="text-[7px] font-black tracking-tight text-white/40 uppercase ml-0.5">DESLOGAR</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 pl-1 border-l border-white/10 ml-1">
             <button 
               onClick={() => logout()}
               title="Sair do Sistema"
               className="flex items-center justify-center size-6 bg-red-500 text-white rounded-md transition-all shadow-lg shadow-red-500/20 hover:scale-110 active:scale-95"
             >
-              <LogOut className="w-3 h-3" />
+              <LogOut className="w-2.5 h-2.5" />
             </button>
-            <span className="text-[8px] font-black tracking-widest text-white/60 uppercase">SAIR</span>
+            <span className="text-[9px] font-black tracking-widest text-secondary uppercase">SAIR</span>
           </div>
         </div>
 

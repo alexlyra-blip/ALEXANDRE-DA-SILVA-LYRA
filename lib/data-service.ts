@@ -508,17 +508,78 @@ export const saveProposal = async (proposal: any) => {
   const { id, ...data } = proposal;
   
   if (id) {
+    // Logic for updating linked Refinancing proposals
+    if (data.loanType === 'PORTABILIDADE') {
+      try {
+        const q = query(
+          collection(db, 'proposals'), 
+          where('parentId', '==', id),
+          where('isLinkedRefin', '==', true)
+        );
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+          const refinDoc = snapshot.docs[0];
+          let newRefinStatus = null;
+
+          // Transition 1: Portability reaches 'AGUARDA AVERBAÇÃO PORT'
+          if (data.status === 'AGUARDA AVERBAÇÃO PORT') {
+            newRefinStatus = 'AGUARDA AVERBAÇÃO PORT';
+          }
+          
+          // Transition 2: Portability is finalized
+          if (data.portabilityStatus === 'PORTABILIDADE FINALIZADA') {
+            newRefinStatus = 'AG AVERBAÇÃO';
+          }
+
+          if (newRefinStatus) {
+            await updateDoc(doc(db, 'proposals', refinDoc.id), {
+              status: newRefinStatus,
+              updatedAt: serverTimestamp()
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Error updating linked Refin proposal:", e);
+      }
+    }
+
     await updateDoc(doc(db, 'proposals', id), {
       ...data,
       updatedAt: serverTimestamp()
     });
     return id;
   } else {
+    // Creating a new proposal
     const docRef = await addDoc(collection(db, 'proposals'), {
       ...data,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
+
+    // If it's a new Portabilidade and user chose to link refin, auto-create it
+    if (data.loanType === 'PORTABILIDADE' && data.shouldCreateRefin) {
+      try {
+        await addDoc(collection(db, 'proposals'), {
+          ...data,
+          loanType: 'REFINANCIAMENTO',
+          isLinkedRefin: true,
+          parentId: docRef.id,
+          status: 'AGUARDA PORTABILIDADE',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          // Don't copy portability specific fields to the refin
+          cipSentDate: null,
+          cipReturnDate: null,
+          expectedReturnDate: null,
+          portabilityStatus: null,
+          shouldCreateRefin: false // Don't propagate this
+        });
+      } catch (e) {
+        console.error("Error auto-creating linked Refin proposal:", e);
+      }
+    }
+
     return docRef.id;
   }
 };

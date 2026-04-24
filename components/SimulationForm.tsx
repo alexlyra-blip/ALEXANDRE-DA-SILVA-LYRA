@@ -7,7 +7,7 @@ import { useState, useRef, useEffect } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 import { safeStringify } from '@/lib/utils';
 import Link from 'next/link';
@@ -15,7 +15,7 @@ import { ArrowLeft } from 'lucide-react';
 
 const getAI = () => {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-  return new GoogleGenerativeAI(apiKey);
+  return new GoogleGenAI({ apiKey });
 };
 
 export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: boolean }) {
@@ -419,27 +419,29 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
     setIsAILoading(true);
     try {
       const ai = getAI();
-      const model = ai.getGenerativeModel({
-        model: "gemini-1.5-flash",
-        generationConfig: {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Extraia os dados de simulação de portabilidade do seguinte texto: "${aiInput}".`,
+        config: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
-              idade: { type: SchemaType.NUMBER },
-              convenio: { type: SchemaType.STRING },
-              codigoBeneficio: { type: SchemaType.STRING },
-              bancoAtual: { type: SchemaType.STRING },
-              valorParcela: { type: SchemaType.NUMBER },
-              prazoTotal: { type: SchemaType.NUMBER },
-              parcelasRestantes: { type: SchemaType.NUMBER },
-              saldoDevedor: { type: SchemaType.NUMBER },
+              idade: { type: Type.NUMBER },
+              convenio: { type: Type.STRING },
+              codigoBeneficio: { type: Type.STRING },
+              bancoAtual: { type: Type.STRING },
+              valorParcela: { type: Type.NUMBER },
+              prazoTotal: { type: Type.NUMBER },
+              parcelasRestantes: { type: Type.NUMBER },
+              saldoDevedor: { type: Type.NUMBER },
             }
           }
         }
       });
-      const response = await model.generateContent(`Extraia os dados de simulação de portabilidade do seguinte texto: "${aiInput}".`);
-      const data = JSON.parse(response.response.text());
+      const text = response.text;
+      if (!text) throw new Error("No response from AI");
+      const data = JSON.parse(text);
       if (data.idade) setIdade(data.idade.toString());
       if (data.convenio) {
         const conv = data.convenio.toUpperCase();

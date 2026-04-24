@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { calculateOffers, SimulationParams } from '@/lib/simulation-engine';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { normalizePhone, validateWhatsAppUser, logWhatsAppAttempt } from '@/lib/whatsapp-utils';
 
-// Função para obter o modelo Gemini de forma preguiçosa (evita erros de inicialização se a chave faltar no boot)
-function getGeminiModel() {
+// Função para obter o AI de forma preguiçosa
+function getAI() {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
   
-  const ai = new GoogleGenerativeAI(apiKey);
-  return ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+  return new GoogleGenAI({ apiKey });
 }
 
 // Handler para GET (Verificação de Webhook do WhatsApp/Meta + Diagnóstico)
@@ -69,14 +68,14 @@ export async function GET(req: Request) {
 export async function POST(req: NextRequest) {
   try {
     const adminDb = getAdminDb();
-    const model = getGeminiModel();
+    const ai = getAI();
 
     if (!adminDb) {
       return NextResponse.json({ error: 'Database connection failed' }, { status: 500 });
     }
 
-    if (!model) {
-      console.error("Gemini AI model not initialized. Missing API Key.");
+    if (!ai) {
+      console.error("Gemini AI not initialized. Missing API Key.");
       // Tentar enviar uma mensagem de erro para o usuário se possível, ou apenas logar
       return NextResponse.json({ error: 'AI not configured' }, { status: 500 });
     }
@@ -159,8 +158,11 @@ export async function POST(req: NextRequest) {
     Se algum parâmetro não puder ser extraído, deixe o campo como null.
     Retorne APENAS o JSON, sem explicações.`;
 
-    const result = await model.generateContent(prompt);
-    const textExtraido = result.response.text().trim();
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt
+    });
+    const textExtraido = result.text.trim();
     
     let simParams: Partial<SimulationParams> = {};
     try {
