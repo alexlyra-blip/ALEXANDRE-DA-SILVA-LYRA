@@ -126,6 +126,42 @@ export default function RegrasBanco() {
   const [generalRuleParcelas, setGeneralRuleParcelas] = useState('');
   const [generalRulePrioridade, setGeneralRulePrioridade] = useState('');
 
+  const resetBankForm = useCallback(() => {
+    setEditingBankId(null);
+    setBankName('');
+    setLogoUrl('');
+    setMinAge('');
+    setMaxAge('');
+    setMinInstallmentValue('');
+    setMinBalance('');
+    setMinTroco('');
+    setPortabilityRate('');
+    setRefinRate('');
+    setSumBalanceAndTroco(false);
+    setNonAcceptedBanks([]);
+    setNonAcceptedBankInput('');
+    setExcludedBenefits([]);
+    setExcludedBenefitInput('');
+    setSpecificInstallmentRules([]);
+    setSpecificBankInput('');
+    setSpecificInstallmentsInput('');
+    setAcceptsIlliterate(false);
+    setAcceptsLOAS(false);
+    setAcceptsInvalidez(true);
+    setInvalidezAgeYears('');
+    setAcceptsOver60Invalidez(false);
+    setMinBenefitTimeYears('');
+    setMinBenefitTimeMonths('');
+    setMinPaidInstallments('');
+    setPriority('');
+    setIsActive(true);
+    setConvenio('INSS');
+    setSubConvenio('');
+    setTaxaContratoAtualPreview('1.85');
+    setTabelas([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '' }]);
+    setErrors({});
+  }, []);
+
   const addTabela = () => {
     setTabelas([...tabelas, { nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '' }]);
   };
@@ -610,6 +646,7 @@ export default function RegrasBanco() {
             {isAdmin && (
               <button 
                 onClick={() => {
+                  resetBankForm();
                   setIsActive(true);
                   setIsBankModalOpen(true);
                 }}

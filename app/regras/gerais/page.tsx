@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRules } from '@/contexts/RuleContext';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Plus, X, ListOrdered, Settings2, Landmark } from 'lucide-react';
+import { ShieldCheck, Plus, X, ListOrdered, Settings2, Landmark, ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 export default function RegrasGeraisPage() {
   const { profile } = useAuth();
@@ -109,6 +110,9 @@ export default function RegrasGeraisPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
+        <Link href="/regras/banco" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors">
+          <ArrowLeft className="text-slate-900 dark:text-slate-100 w-6 h-6" />
+        </Link>
         <div className="size-12 rounded-full bg-primary text-white flex items-center justify-center shrink-0">
           <Settings2 className="w-6 h-6" />
         </div>

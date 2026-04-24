@@ -1,10 +1,11 @@
 'use client';
 
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { LayoutDashboard, Landmark, FileText, Users, Banknote, LogOut, Settings, Sun, Moon, ClipboardList, Clock } from 'lucide-react';
-import { motion } from 'motion/react';
+import { LayoutDashboard, Landmark, FileText, Users, Banknote, LogOut, Settings, Sun, Moon, ClipboardList, Clock, Calendar } from 'lucide-react';
+import { motion, useAnimation } from 'motion/react';
 import { PromotoraAvatar } from './PromotoraAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -12,6 +13,27 @@ export default function Sidebar() {
   const { profile, logout, inactivityTimeLeft } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const avatarControls = useAnimation();
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    
+    // Animação a cada 2 minutos
+    const rotationInterval = setInterval(() => {
+      avatarControls.start({ 
+        rotateY: [0, 720], 
+        transition: { duration: 2, ease: "easeInOut" }                
+      });
+    }, 120000); // 120 segundos = 2 minutos
+    
+    return () => {
+        clearInterval(timer);
+        clearInterval(rotationInterval);
+    };
+  }, [avatarControls]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -38,44 +60,55 @@ export default function Sidebar() {
       <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl animate-pulse pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary/10 rounded-full -ml-12 -mb-12 blur-xl pointer-events-none" />
       
-      <div className="p-8 relative z-10">
-        <div className="flex items-center gap-3 mb-8">
+      <div className="p-4 relative z-10">
+        <div className="flex items-center gap-2 mb-4">
           <motion.div
-            animate={{ y: [0, -4, 0] }}
+            animate={{ y: [0, -2, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-            style={{ perspective: 1000 }}
           >
-            <motion.div
-              animate={{ rotateY: [0, 360, 360] }}
-              transition={{ duration: 120, repeat: Infinity, times: [0, 0.008, 1], ease: "easeInOut" }}
-            >
+            <motion.div animate={avatarControls}>
               <PromotoraAvatar 
                 logoUrl={profile?.avatarUrl || profile?.photoUrl} 
                 name={profile?.name} 
-                className="size-14 border-2 border-white/30 shadow-xl" 
+                className="size-12 border-2 border-white/30 shadow-xl" 
               />
             </motion.div>
           </motion.div>
           <div className="overflow-hidden">
             <p className="font-black text-sm truncate leading-tight">{profile?.name || 'Usuário'}</p>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mt-1">{profile?.role || 'Corretor'}</p>
-            <div className="flex items-center justify-between mt-2 bg-white/5 rounded-xl p-2">
-              <div className="flex items-center gap-1.5 text-white/60 font-mono text-[11px]">
-                <Clock className="w-3.5 h-3.5" />
-                <span className="font-bold">{formatTime(inactivityTimeLeft)}</span>
-              </div>
-              <button 
-                onClick={() => logout()}
-                title="Sair do Sistema"
-                className="flex items-center justify-center size-7 bg-red-500 text-white rounded-lg transition-all shadow-lg shadow-red-500/20 hover:scale-110 active:scale-95 ml-2"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">{profile?.role || 'Corretor'}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between bg-white/5 rounded-lg p-1.5">
+          <div className="flex items-center gap-1.5 text-white/60 font-mono text-[11px]">
+            <Clock className="w-3.5 h-3.5" />
+            <span className="font-bold">{formatTime(inactivityTimeLeft)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => logout()}
+              title="Sair do Sistema"
+              className="flex items-center justify-center size-6 bg-red-500 text-white rounded-md transition-all shadow-lg shadow-red-500/20 hover:scale-110 active:scale-95"
+            >
+              <LogOut className="w-3 h-3" />
+            </button>
+            <span className="text-[8px] font-black tracking-widest text-white/60 uppercase">SAIR</span>
+          </div>
+        </div>
+
+        <div className="mt-4 px-2 py-1.5 bg-white/5 rounded-lg border border-white/5 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/40">
+            <Calendar className="w-3 h-3" />
+            <span>{currentTime.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/40">
+            <Clock className="w-3 h-3" />
+            <span>{currentTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
         </div>
         
-        <div className="h-px bg-white/10 w-full mb-8 opacity-50" />
+        <div className="h-px bg-white/10 w-full my-6 opacity-50" />
 
         <nav className="space-y-2">
           {menuItems.map((item) => {

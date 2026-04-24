@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { QuotaAlert } from '@/components/QuotaAlert';
-import { collection, query, onSnapshot, orderBy, where, limit, Timestamp, doc, or, and, updateDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, limit, Timestamp, doc, updateDoc } from 'firebase/firestore';                
 import { db } from '@/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PromotoraAvatar } from '@/components/PromotoraAvatar';
@@ -254,7 +254,8 @@ export default function Dashboard() {
       'INSS': '#1152d4',
       'SIAPE': '#f59e0b',
       'GOVERNO': '#FF0000',
-      'FORÇAS ARMADAS': '#47953D'
+      'FORÇAS ARMADAS': '#47953D',
+      'CLT PRIVADO': '#7c3aed'
     };
 
     // Daily chart data (Volume and Value)
@@ -264,22 +265,25 @@ export default function Dashboard() {
     today.setHours(0, 0, 0, 0);
     let simulationsToday = 0;
 
+    // Detect all convenios in filtered simulations to ensure they are represented in charts
+    const activeConvenios = new Set<string>(['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS', 'CLT PRIVADO']);
+    filteredSimulations.forEach(sim => {
+      if (sim.convenio) activeConvenios.add(sim.convenio.toUpperCase());
+    });
+    const sortedConvenios = Array.from(activeConvenios).sort();
+
     // Initialize last 7 days
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-      dailyData[dateStr] = {
-        date: dateStr,
-        'INSS': 0,
-        'SIAPE': 0,
-        'GOVERNO': 0,
-        'FORÇAS ARMADAS': 0,
-        'INSS_val': 0,
-        'SIAPE_val': 0,
-        'GOVERNO_val': 0,
-        'FORÇAS ARMADAS_val': 0
-      };
+      
+      const dayData: any = { date: dateStr };
+      sortedConvenios.forEach(c => {
+        dayData[c] = 0;
+        dayData[`${c}_val`] = 0;
+      });
+      dailyData[dateStr] = dayData;
     }
 
     filteredSimulations.forEach(sim => {
@@ -303,9 +307,9 @@ export default function Dashboard() {
           dailyData[dateStr][conv] += 1;
           dailyData[dateStr][`${conv}_val`] += convVal;
         } else {
-          // Fallback for unknown convenio
-          dailyData[dateStr]['INSS'] += 1;
-          dailyData[dateStr]['INSS_val'] += convVal;
+          // If a new convenio appears that wasn't in sortedConvenios (shouldn't happen with our detection)
+          dailyData[dateStr][conv] = 1;
+          dailyData[dateStr][`${conv}_val`] = convVal;
         }
       }
     });
@@ -325,6 +329,7 @@ export default function Dashboard() {
       chartData, 
       donutData,
       simulationsToday,
+      sortedConvenios,
       CONVENIO_COLORS
     };
   }, [filteredSimulations]);
@@ -537,7 +542,7 @@ export default function Dashboard() {
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button 
               onClick={generateDashboardReport}
               disabled={generatingReport}
@@ -652,38 +657,17 @@ export default function Dashboard() {
                       }} 
                     />
                     <Legend wrapperStyle={{ fontSize: '11px' }} verticalAlign="top" height={36} iconType="circle" />
-                    <Line 
-                      type="monotone" 
-                      dataKey="INSS" 
-                      stroke={stats.CONVENIO_COLORS['INSS']} 
-                      strokeWidth={3} 
-                      dot={{ r: 4, fill: stats.CONVENIO_COLORS['INSS'], strokeWidth: 2, stroke: '#fff' }}
-                      activeDot={{ r: 6, strokeWidth: 0 }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="SIAPE" 
-                      stroke={stats.CONVENIO_COLORS['SIAPE']} 
-                      strokeWidth={3} 
-                      dot={{ r: 4, fill: stats.CONVENIO_COLORS['SIAPE'], strokeWidth: 2, stroke: '#fff' }}
-                      activeDot={{ r: 6, strokeWidth: 0 }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="GOVERNO" 
-                      stroke={stats.CONVENIO_COLORS['GOVERNO']} 
-                      strokeWidth={3} 
-                      dot={{ r: 4, fill: stats.CONVENIO_COLORS['GOVERNO'], strokeWidth: 2, stroke: '#fff' }}
-                      activeDot={{ r: 6, strokeWidth: 0 }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="FORÇAS ARMADAS" 
-                      stroke={stats.CONVENIO_COLORS['FORÇAS ARMADAS']} 
-                      strokeWidth={3} 
-                      dot={{ r: 4, fill: stats.CONVENIO_COLORS['FORÇAS ARMADAS'], strokeWidth: 2, stroke: '#fff' }}
-                      activeDot={{ r: 6, strokeWidth: 0 }}
-                    />
+                    {stats.sortedConvenios.map((conv) => (
+                      <Line 
+                        key={conv}
+                        type="monotone" 
+                        dataKey={conv} 
+                        stroke={stats.CONVENIO_COLORS[conv] || '#94a3b8'} 
+                        strokeWidth={3} 
+                        dot={{ r: 4, fill: stats.CONVENIO_COLORS[conv] || '#94a3b8', strokeWidth: 2, stroke: '#fff' }}
+                        activeDot={{ r: 6, strokeWidth: 0 }}
+                      />
+                    ))}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -727,10 +711,15 @@ export default function Dashboard() {
                       }} 
                     />
                     <Legend wrapperStyle={{ fontSize: '11px' }} verticalAlign="top" height={36} iconType="circle" />
-                    <Bar dataKey="INSS_val" name="INSS" fill={stats.CONVENIO_COLORS['INSS']} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="SIAPE_val" name="SIAPE" fill={stats.CONVENIO_COLORS['SIAPE']} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="GOVERNO_val" name="GOVERNO" fill={stats.CONVENIO_COLORS['GOVERNO']} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="FORÇAS ARMADAS_val" name="FORÇAS ARMADAS" fill={stats.CONVENIO_COLORS['FORÇAS ARMADAS']} radius={[4, 4, 0, 0]} />
+                    {stats.sortedConvenios.map((conv) => (
+                      <Bar 
+                        key={`${conv}_val`}
+                        dataKey={`${conv}_val`} 
+                        name={conv} 
+                        fill={stats.CONVENIO_COLORS[conv] || '#94a3b8'} 
+                        radius={[4, 4, 0, 0]} 
+                      />
+                    ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>

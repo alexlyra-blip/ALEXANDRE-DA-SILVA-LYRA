@@ -40,7 +40,7 @@ interface Offer {
   originalRateCalculated?: number;
   priority?: number;
   rules?: string[][];
-  convenio: 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS';
+  convenio: 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO';
   subConvenio?: string;
   tabelasCount: number;
   prazoRefinPort?: number;
