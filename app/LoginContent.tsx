@@ -299,9 +299,10 @@ export default function LoginContent() {
               type="button"
               onClick={handleResetPassword}
               disabled={isResetting || isLoading}
-              className="text-xs font-semibold hover:underline disabled:opacity-50"
+              className="text-xs font-semibold hover:underline disabled:opacity-50 flex items-center gap-1"
               style={{ color: branding.primaryColor }}
             >
+              {isResetting && <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>}
               {isResetting ? 'Enviando...' : 'Esqueceu a senha?'}
             </button>
           </div>

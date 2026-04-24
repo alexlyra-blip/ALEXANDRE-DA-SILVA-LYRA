@@ -109,7 +109,7 @@ export default function Recomendacoes() {
     sessionStorage.setItem('selectedOffers', safeStringify(selected));
     
     // Redirect to new proposal page
-    const baseUrl = `/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}&bancoPortado=${encodeURIComponent(simData?.bancoAtual || '')}`;
+    const baseUrl = `/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}&bancoPortado=${encodeURIComponent(simData?.bancoAtual || '')}&fromSim=true`;
     const namePart = simData?.nomeCliente ? `&nomeCliente=${encodeURIComponent(simData.nomeCliente)}` : '';
     const cpfPart = simData?.cpfCliente ? `&cpfCliente=${encodeURIComponent(simData.cpfCliente)}` : '';
     
@@ -664,7 +664,7 @@ export default function Recomendacoes() {
 
     allSimulations.forEach((sim, index) => {
       // Check if we need a new page
-      if (currentY > 240) {
+      if (currentY > 200) {
         doc.addPage();
         currentY = 20;
       }
@@ -675,7 +675,7 @@ export default function Recomendacoes() {
       currentY += 5;
 
       const simTable = [
-        ['Parcela', formatCurrency(sim.valorParcela)],
+        ['Parcela Atual', formatCurrency(sim.valorParcela)],
         ['Saldo Devedor', formatCurrency(sim.saldoDevedor)],
         ['Prazo', `${sim.prazoTotal}x (${sim.parcelasRestantes} rest.)`]
       ];
@@ -691,8 +691,74 @@ export default function Recomendacoes() {
 
       currentY = (doc as any).lastAutoTable.finalY + 10;
       
-      // Note: In a real scenario, we might want to show the top offer for this simulation here.
-      // For now, listing the input data clearly.
+      // Add Top Troco Offer for this simulation
+      const simOffers = allCalculatedOffersMap[sim.id] || [];
+      const sortedByTroco = [...simOffers].sort((a, b) => b.valorTroco - a.valorTroco);
+      const bestTrocoOffer = sortedByTroco[0];
+
+      if (bestTrocoOffer) {
+        doc.setFontSize(14);
+        doc.setTextColor(16, 185, 129); // Emerald 500
+        doc.text('Melhor Oferta de Troco:', 14, currentY);
+        currentY += 6;
+
+        const bestOfferData = [
+          ['Banco Destino', bestTrocoOffer.name],
+          ['Tabela Utilizada', bestTrocoOffer.tabela],
+          ['Valor do Contrato', formatCurrency(bestTrocoOffer.valorContrato)],
+          ['VALOR DO TROCO', formatCurrency(bestTrocoOffer.valorTroco)],
+          ['Taxa de Portabilidade', `${(bestTrocoOffer.novaTaxaPortabilidade || 0).toFixed(2)}%`],
+          ['Taxa Ponderada', `${bestTrocoOffer.taxaPonderada?.toFixed(2)}%`]
+        ];
+
+        autoTable(doc, {
+          startY: currentY,
+          body: bestOfferData,
+          theme: 'grid',
+          styles: { fontSize: 9 },
+          columnStyles: { 0: { fontStyle: 'bold', fillColor: [248, 250, 252] } },
+          didParseCell: function(data) {
+            if (data.row.index === 3) { // VALOR DO TROCO row
+              data.cell.styles.fontStyle = 'bold';
+              if (data.column.index === 1) data.cell.styles.textColor = [16, 185, 129];
+            }
+          }
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 12;
+
+        // List other top options
+        if (sortedByTroco.length > 1) {
+          doc.setFontSize(12);
+          doc.setTextColor(100, 116, 139);
+          doc.text('Principais Tabelas de Troco:', 14, currentY);
+          currentY += 5;
+
+          const trocoTableData = sortedByTroco.slice(0, 5).map(o => [
+            o.name,
+            o.tabela,
+            formatCurrency(o.valorTroco),
+            `${(o.novaTaxaPortabilidade || 0).toFixed(2)}%`
+          ]);
+
+          autoTable(doc, {
+            startY: currentY,
+            head: [['Banco', 'Tabela', 'Vlr. Troco', 'Taxa']],
+            body: trocoTableData,
+            theme: 'striped',
+            headStyles: { fillColor: [100, 116, 139] },
+            styles: { fontSize: 8 }
+          });
+
+          currentY = (doc as any).lastAutoTable.finalY + 15;
+        }
+      } else {
+        doc.setFontSize(10);
+        doc.setTextColor(239, 68, 68); // Red 500
+        doc.text('Nenhuma oferta disponível para este contrato nas regras atuais.', 14, currentY);
+        currentY += 15;
+      }
+
       doc.setFontSize(10);
       doc.setTextColor(100, 116, 139);
       doc.text('---', pageWidth / 2, currentY, { align: 'center' });

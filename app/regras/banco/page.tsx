@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Info, Search, ShieldCheck, Landmark, Save, User, TrendingDown, TrendingUp, Plus, X, Settings, FileText, Trash2, Edit, CheckCircle2, AlertCircle, Hash, Percent, Zap, Lock, Settings2, Clock } from 'lucide-react';
+import { ArrowLeft, Info, Search, ShieldCheck, Landmark, Save, User, TrendingDown, TrendingUp, Plus, X, Settings, FileText, Trash2, Edit, CheckCircle2, AlertCircle, Hash, Percent, Zap, Lock, Settings2, Clock, Loader2 } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useRouter } from 'next/navigation';
 import { useRules, BankRule, GeneralRule } from '@/contexts/RuleContext';
@@ -1670,7 +1670,7 @@ export default function RegrasBanco() {
                 disabled={isSaving || Object.keys(errors).length > 0}
                 className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
               >
-                <Save className="w-4 h-4" />
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {isSaving ? 'Salvando...' : 'Salvar Banco e Regras'}
               </button>
             </div>

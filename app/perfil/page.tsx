@@ -78,7 +78,9 @@ export default function Perfil() {
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState(profile?.email || '');
   const [isEditingPhone, setIsEditingPhone] = useState(false);
-  const [newPhone, setNewPhone] = useState(profile?.phone || '');
+  const [isUpdatingPhone, setIsUpdatingPhone] = useState(false);
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('conta');
   const [resetMessage, setResetMessage] = useState({ type: '', text: '' });
@@ -106,6 +108,7 @@ export default function Perfil() {
       return;
     }
 
+    setIsUpdatingPhone(true);
     try {
       const userRef = doc(db, 'users', profile.uid);
       await updateDoc(userRef, { phone: newPhone });
@@ -114,6 +117,8 @@ export default function Perfil() {
     } catch (error: any) {
       console.error("Error updating phone:", error);
       showToast(`Erro ao atualizar telefone: ${error.message}`, "error");
+    } finally {
+      setIsUpdatingPhone(false);
     }
   };
 
@@ -123,6 +128,7 @@ export default function Perfil() {
       return;
     }
 
+    setIsUpdatingEmail(true);
     try {
       await updateEmail(newEmail);
       const userRef = doc(db, 'users', profile.uid);
@@ -132,6 +138,8 @@ export default function Perfil() {
     } catch (error: any) {
       console.error("Error updating email:", error);
       showToast(`Erro ao atualizar e-mail: ${error.message}`, "error");
+    } finally {
+      setIsUpdatingEmail(false);
     }
   };
 
@@ -141,6 +149,7 @@ export default function Perfil() {
       return;
     }
 
+    setIsUpdatingPassword(true);
     try {
       await updatePassword(newPassword);
       showToast("Senha atualizada com sucesso!", "success");
@@ -148,6 +157,8 @@ export default function Perfil() {
     } catch (error: any) {
       console.error("Error updating password:", error);
       showToast(`Erro ao atualizar senha: ${error.message}`, "error");
+    } finally {
+      setIsUpdatingPassword(false);
     }
   };
 
@@ -322,10 +333,24 @@ export default function Perfil() {
                       type="email"
                       value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
-                      className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary outline-none"
+                      disabled={isUpdatingEmail}
+                      className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary outline-none disabled:opacity-50"
                     />
-                    <button onClick={handleUpdateEmail} className="text-xs font-bold text-primary hover:text-primary/80">Salvar</button>
-                    <button onClick={() => setIsEditingEmail(false)} className="text-xs font-bold text-slate-500 hover:text-slate-700">Cancelar</button>
+                    <button 
+                      onClick={handleUpdateEmail} 
+                      disabled={isUpdatingEmail}
+                      className="text-xs font-bold text-primary hover:text-primary/80 disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {isUpdatingEmail && <Loader2 className="w-3 h-3 animate-spin" />}
+                      Salvar
+                    </button>
+                    <button 
+                      onClick={() => setIsEditingEmail(false)} 
+                      disabled={isUpdatingEmail}
+                      className="text-xs font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
                   </div>
                 ) : (
                   <div className="flex items-center justify-between mt-1">
@@ -345,10 +370,24 @@ export default function Perfil() {
                       onChange={(e) => setNewPhone(formatPhone(e.target.value))}
                       placeholder="(00) 00000-0000"
                       maxLength={15}
-                      className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary outline-none"
+                      disabled={isUpdatingPhone}
+                      className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary outline-none disabled:opacity-50"
                     />
-                    <button onClick={handleUpdatePhone} className="text-xs font-bold text-primary hover:text-primary/80">Salvar</button>
-                    <button onClick={() => setIsEditingPhone(false)} className="text-xs font-bold text-slate-500 hover:text-slate-700">Cancelar</button>
+                    <button 
+                      onClick={handleUpdatePhone} 
+                      disabled={isUpdatingPhone}
+                      className="text-xs font-bold text-primary hover:text-primary/80 disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {isUpdatingPhone && <Loader2 className="w-3 h-3 animate-spin" />}
+                      Salvar
+                    </button>
+                    <button 
+                      onClick={() => setIsEditingPhone(false)} 
+                      disabled={isUpdatingPhone}
+                      className="text-xs font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
                   </div>
                 ) : (
                   <div className="flex items-center justify-between mt-1">
@@ -454,9 +493,15 @@ export default function Perfil() {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Nova senha"
-                  className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary outline-none"
+                  disabled={isUpdatingPassword}
+                  className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary outline-none disabled:opacity-50"
                 />
-                <button onClick={handleUpdatePassword} className="py-2 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary/90 transition-colors">
+                <button 
+                  onClick={handleUpdatePassword} 
+                  disabled={isUpdatingPassword}
+                  className="py-2 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isUpdatingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
                   Atualizar Senha
                 </button>
               </div>

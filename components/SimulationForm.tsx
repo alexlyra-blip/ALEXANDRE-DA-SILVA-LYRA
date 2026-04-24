@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2 } from 'lucide-react';
+import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2, AlertCircle } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useRef, useEffect } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
@@ -35,7 +35,32 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [dropdownBankIndex, setDropdownBankIndex] = useState<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [activeIndexBank, setActiveIndexBank] = useState(-1);
+  const [visibleBanksCount, setVisibleBanksCount] = useState(15);
+  const [visibleBeneficiosCount, setVisibleBeneficiosCount] = useState(15);
+  const [activeContractTab, setActiveContractTab] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const validateCPF = (cpf: string) => {
+    const cleanCpf = cpf.replace(/\D/g, '');
+    if (cleanCpf.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(cleanCpf)) return false;
+    
+    let sum = 0;
+    for (let i = 0; i < 9; i++) sum += parseInt(cleanCpf.charAt(i)) * (10 - i);
+    let rev = 11 - (sum % 11);
+    if (rev === 10 || rev === 11) rev = 0;
+    if (rev !== parseInt(cleanCpf.charAt(9))) return false;
+    
+    sum = 0;
+    for (let i = 0; i < 10; i++) sum += parseInt(cleanCpf.charAt(i)) * (11 - i);
+    rev = 11 - (sum % 11);
+    if (rev === 10 || rev === 11) rev = 0;
+    if (rev !== parseInt(cleanCpf.charAt(10))) return false;
+    
+    return true;
+  };
+  
+  const isCpfValid = validateCPF(cpfCliente);
   const dropdownBankRef = useRef<HTMLDivElement>(null);
 
   interface Contract {
@@ -53,13 +78,24 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
 
   const addContract = () => {
     if (contracts.length < 5) {
-      setContracts([...contracts, { id: crypto.randomUUID(), bancoAtual: '', valorParcela: '', prazoTotal: '', parcelasRestantes: '', saldoDevedor: '' }]);
+      const newId = crypto.randomUUID();
+      setContracts([...contracts, { id: newId, bancoAtual: '', valorParcela: '', prazoTotal: '', parcelasRestantes: '', saldoDevedor: '' }]);
+      setActiveContractTab(contracts.length); // Switch to the new tab
     }
   };
 
-  const removeContract = (id: string) => {
+  const removeContract = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (contracts.length > 1) {
-      setContracts(contracts.filter(c => c.id !== id));
+      const indexToRemove = contracts.findIndex(c => c.id === id);
+      const newContracts = contracts.filter(c => c.id !== id);
+      setContracts(newContracts);
+      // Adjust active tab if necessary
+      if (activeContractTab >= newContracts.length) {
+        setActiveContractTab(newContracts.length - 1);
+      } else if (activeContractTab > indexToRemove) {
+        setActiveContractTab(activeContractTab - 1);
+      }
     }
   };
 
@@ -187,12 +223,33 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
 
   const filteredBanks = allBanks.filter(b => b.toLowerCase().includes(searchTermBank.toLowerCase()));
 
+  const displayedBeneficios = filteredBeneficios.slice(0, visibleBeneficiosCount);
+  const displayedBanks = filteredBanks.slice(0, visibleBanksCount);
+
+  const handleDropdownScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 50) {
+      setVisibleBeneficiosCount(prev => prev + 15);
+    }
+  };
+
+  const handleBankDropdownScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 50) {
+      setVisibleBanksCount(prev => prev + 15);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!isDropdownOpen) return;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActiveIndex(prev => (prev < filteredBeneficios.length - 1 ? prev + 1 : prev));
+      setActiveIndex(prev => {
+        const next = prev < filteredBeneficios.length - 1 ? prev + 1 : prev;
+        if (next >= visibleBeneficiosCount) setVisibleBeneficiosCount(prev => prev + 1);
+        return next;
+      });
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIndex(prev => (prev > 0 ? prev - 1 : prev));
@@ -513,12 +570,21 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                   <div className="relative">
                     <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
                     <input 
-                      className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm" 
+                      className={`w-full rounded-xl border ${cpfCliente && !isCpfValid ? 'border-rose-300 bg-rose-50/10' : 'border-primary/20'} bg-white dark:bg-white h-14 pl-12 pr-12 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm`} 
                       type="text" 
                       value={cpfCliente} 
                       onChange={(e) => setCpfCliente(formatCPF(e.target.value))} 
                       placeholder="000.000.000-00" 
                     />
+                    {cpfCliente && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                        {isCpfValid ? (
+                          <Check className="text-emerald-500 w-5 h-5 anim-bounce-in" />
+                        ) : (
+                          <AlertCircle className="text-rose-500 w-5 h-5 anim-shake" />
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -568,10 +634,11 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                           initial={{ opacity: 0, y: -10, scale: 0.95 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                          onScroll={handleDropdownScroll}
                           className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-20 max-h-64 overflow-y-auto overflow-x-hidden"
                         >
                           <div className="p-2 space-y-1" ref={dropdownRef}>
-                            {filteredBeneficios
+                            {displayedBeneficios
                               .map((b, index) => (
                                 <button
                                   key={b.value}
@@ -641,7 +708,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
           <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/20 to-transparent mb-8"></div>
 
           <section className="mb-10">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <FileText className="text-primary w-6 h-6" />
                 <h3 className="text-lg font-bold">Detalhes do Contrato</h3>
@@ -650,28 +717,69 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                 type="button"
                 onClick={addContract}
                 disabled={contracts.length >= 5}
-                className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-bold hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-4 py-2 bg-emerald-500/10 text-emerald-600 rounded-xl text-xs font-black uppercase tracking-tight hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm border border-emerald-500/10"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Adicionar Contrato</span>
+                <Plus className="w-4 h-4" />
+                <span>Novo Contrato</span>
               </button>
             </div>
             
+            {contracts.length > 1 && (
+              <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-none px-1">
+                {contracts.map((c, idx) => (
+                  <div
+                    key={`tab-${c.id}`}
+                    onClick={() => setActiveContractTab(idx)}
+                    className={`flex-shrink-0 min-w-[100px] px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 flex items-center justify-between gap-2 cursor-pointer ${
+                      activeContractTab === idx 
+                        ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30' 
+                        : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-400 hover:border-primary/20'
+                    }`}
+                  >
+                    <span>Contrato #{idx + 1}</span>
+                    <button 
+                      type="button"
+                      onClick={(e) => removeContract(c.id, e)}
+                      className={`hover:bg-black/10 rounded-full p-0.5 ${activeContractTab === idx ? 'block' : 'hidden md:block'}`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            
             <div className="space-y-6">
               {contracts.map((contract, index) => {
+                if (contracts.length > 1 && activeContractTab !== index) return null;
+                
                 const rate = calculateInterestRate(contract.saldoDevedor, contract.valorParcela, contract.parcelasRestantes);
                 const invalid = isContractInvalid(contract);
 
                 return (
-                  <div key={contract.id} className={`p-4 rounded-2xl border ${invalid ? 'border-red-200 bg-red-50/30' : 'border-slate-100 dark:border-slate-800 bg-slate-50/50'} relative group`}>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Contrato #{index + 1}</span>
+                  <motion.div 
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    key={contract.id} 
+                    className={`p-6 rounded-3xl border transition-all ${invalid ? 'border-red-200 bg-red-50/10 shadow-inner' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl shadow-black/5'} relative border-t-4 ${invalid ? 'border-t-rose-500' : 'border-t-primary'}`}
+                  >
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="size-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Detalhes da Operação</span>
+                          <h4 className="text-base font-bold text-slate-900 dark:text-white">Contrato #{index + 1}</h4>
+                        </div>
+                      </div>
                       {contracts.length > 1 && (
                         <button 
-                          onClick={() => removeContract(contract.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
+                          onClick={(e) => removeContract(contract.id, e)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-rose-500 bg-rose-50 rounded-lg text-xs font-bold hover:bg-rose-500 hover:text-white transition-all"
                         >
                           <Trash2 className="w-4 h-4" />
+                          <span>Excluir</span>
                         </button>
                       )}
                     </div>
@@ -712,10 +820,11 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                                   initial={{ opacity: 0, y: -10, scale: 0.95 }}
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
                                   exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                  onScroll={handleBankDropdownScroll}
                                   className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-20 max-h-64 overflow-y-auto overflow-x-hidden"
                                 >
                                   <div className="p-2 space-y-1" ref={dropdownBankRef}>
-                                    {filteredBanks
+                                    {displayedBanks
                                       .map((b, bIndex) => (
                                         <button
                                           key={b}
@@ -760,7 +869,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                         <div className="relative">
                           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">R$</span>
                           <input 
-                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium" 
+                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none" 
                             type="text" 
                             value={contract.valorParcela} 
                             onChange={(e) => updateContract(index, { valorParcela: formatCurrency(e.target.value) })} 
@@ -773,16 +882,16 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                         <div className="flex flex-col gap-2">
                           <label className="text-sm font-semibold text-slate-600 dark:text-white">Prazo Total</label>
                           <input 
-                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium" 
+                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none" 
                             type="number" 
                             value={contract.prazoTotal} 
                             onChange={(e) => updateContract(index, { prazoTotal: e.target.value })} 
                           />
                         </div>
                         <div className="flex flex-col gap-2">
-                          <label className="text-sm font-semibold text-slate-600 dark:text-white">Parcelas Restantes</label>
+                          <label className="text-sm font-semibold text-slate-600 dark:text-white">Parc. Restantes</label>
                           <input 
-                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium" 
+                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 p-4 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none" 
                             type="number" 
                             value={contract.parcelasRestantes} 
                             onChange={(e) => updateContract(index, { parcelasRestantes: e.target.value })} 
@@ -795,7 +904,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                         <div className="relative">
                           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">R$</span>
                           <input 
-                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium" 
+                            className="w-full rounded-xl border border-primary/20 bg-white dark:bg-white h-14 pl-12 pr-4 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none" 
                             type="text" 
                             value={contract.saldoDevedor} 
                             onChange={(e) => updateContract(index, { saldoDevedor: formatCurrency(e.target.value) })} 
@@ -805,32 +914,46 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                       </div>
 
                       {rate && !invalid && (
-                        <div className="bg-emerald-50/50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-2xl p-4 flex flex-col gap-0.5 mt-2 transition-all">
-                          <h4 className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Taxa Atual</h4>
-                          <div className="flex justify-between items-center">
-                            <span className="text-[11px] font-bold text-emerald-600/70 dark:text-emerald-400/60">Mensal:</span>
-                            <span className="text-base font-black text-slate-900 dark:text-white">
+                        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 flex flex-col gap-1 mt-2 shadow-inner">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp className="w-4 h-4 text-emerald-500" />
+                            <h4 className="text-sm font-black uppercase tracking-tighter text-emerald-600 dark:text-emerald-400">Análise de Taxa</h4>
+                          </div>
+                          <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-3 rounded-xl border border-emerald-500/10 shadow-sm">
+                            <span className="text-xs font-bold text-slate-500">Taxa Mensal Estimada:</span>
+                            <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
                               {(rate.monthlyRate * 100).toFixed(2)}% a.m.
                             </span>
                           </div>
                         </div>
                       )}
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
           </section>
         </main>
 
-        <footer className={`sticky bottom-0 bg-white dark:bg-black/95 p-4 border-t border-primary/10`}>
+        <footer className={`sticky bottom-0 bg-white/80 dark:bg-black/80 backdrop-blur-md p-4 border-t border-primary/10 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]`}>
           <button 
             onClick={handleSimulate} 
-            disabled={hasInvalidContract || isFormIncomplete} 
-            className={`w-full font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all ${hasInvalidContract || isFormIncomplete ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-primary text-white'}`}
+            disabled={hasInvalidContract || isFormIncomplete || isSimulating} 
+            className={`w-full font-black uppercase tracking-wider py-4 rounded-2xl flex items-center justify-center gap-2 transition-all relative overflow-hidden group shadow-xl ${
+              hasInvalidContract || isFormIncomplete || isSimulating 
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
+                : 'bg-primary text-white hover:bg-primary-dark hover:scale-[1.01] active:scale-[0.98]'
+            }`}
           >
-            <span>Analisar {contracts.length > 1 ? `${contracts.length} Contratos` : 'Melhores Opções'}</span>
-            <TrendingUp className="w-5 h-5" />
+            <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {isSimulating ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              <>
+                <span className="relative z-10 text-base">Analisar {contracts.length > 1 ? `${contracts.length} Contratos` : 'Melhores Opções'}</span>
+                <TrendingUp className="w-5 h-5 relative z-10 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
+              </>
+            )}
           </button>
         </footer>
       </div>

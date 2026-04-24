@@ -104,6 +104,7 @@ function ProposalDetailPageContent() {
   const { profile, loading: authLoading } = useAuth();
   
   const isNew = proposalId === 'nova';
+  const isFromSim = searchParams.get('fromSim') === 'true';
   
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -115,8 +116,8 @@ function ProposalDetailPageContent() {
   const [showCopySuccess, setShowCopySuccess] = useState(false);
   
   const [formData, setFormData] = useState({
-    clientName: searchParams.get('nome') || '',
-    clientCpf: searchParams.get('cpf') || '',
+    clientName: searchParams.get('nome') || searchParams.get('nomeCliente') || '',
+    clientCpf: searchParams.get('cpf') || searchParams.get('cpfCliente') || '',
     proposalDate: format(new Date(), 'yyyy-MM-dd'),
     proposalNumber: '',
     status: 'PENDENTE',
@@ -336,7 +337,11 @@ function ProposalDetailPageContent() {
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
-        router.push('/propostas');
+        if (isFromSim) {
+          router.push('/simulacao/recomendacoes');
+        } else {
+          router.push('/propostas');
+        }
       }, 2000);
     } catch (error) {
       console.error('Error saving proposal:', error);
@@ -368,7 +373,11 @@ function ProposalDetailPageContent() {
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
-        router.push('/propostas');
+        if (isFromSim) {
+          router.push('/simulacao/recomendacoes');
+        } else {
+          router.push('/propostas');
+        }
       }, 2000);
     } catch (error) {
       console.error('Error saving draft:', error);
