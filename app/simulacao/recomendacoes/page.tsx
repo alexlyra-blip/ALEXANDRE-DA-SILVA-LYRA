@@ -2,19 +2,22 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard, ShieldCheck, CheckCircle2, History, DollarSign, Star, Landmark } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard, ShieldCheck, CheckCircle2, History, DollarSign, Star, Landmark, ClipboardList } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuotaAlert } from '@/components/QuotaAlert';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { handleFirestoreError, OperationType } from '@/lib/data-service';
+import BottomNav from '@/components/BottomNav';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GoogleGenAI } from "@google/genai";
 import { safeStringify } from '@/lib/utils';
+import { useToast } from '@/contexts/ToastContext';
 
 const getAI = () => {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
@@ -50,6 +53,7 @@ import SimulationForm from '@/components/SimulationForm';
 
 export default function Recomendacoes() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [sortBy, setSortBy] = useState<SortOption>('menor_troco');
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
@@ -68,27 +72,58 @@ export default function Recomendacoes() {
   const savedSimulationIds = useRef<Set<string>>(new Set());
 
   // Use active offers based on index
-  const allCalculatedOffers = allCalculatedOffersMap[simData?.id] || [];
-  const filterReasons = filterReasonsMap[simData?.id] || [];
+  const allCalculatedOffers = useMemo(() => 
+    allCalculatedOffersMap[simData?.id] || [], 
+    [allCalculatedOffersMap, simData?.id]
+  );
+
+  const filterReasons = useMemo(() => 
+    filterReasonsMap[simData?.id] || [],
+    [filterReasonsMap, simData?.id]
+  );
 
   const handleSelectOffer = async (offer: Offer) => {
     try {
-      const simulationId = simData?.id || savedSimulationId.current || crypto.randomUUID();
+      const simulationId = simData?.id || crypto.randomUUID();
       const docRef = doc(db, 'simulations', simulationId);
       
+      // Prepare a clean, lightweight version of simData to avoid document size issues
+      const cleanSimData = simData ? {
+        id: simData.id,
+        nomeCliente: simData.nomeCliente,
+        cpfCliente: simData.cpfCliente,
+        idade: simData.idade,
+        convenio: simData.convenio,
+        subConvenio: simData.subConvenio,
+        bancoAtual: simData.bancoAtual,
+        valorParcela: simData.valorParcela,
+        prazoTotal: simData.prazoTotal,
+        parcelasRestantes: simData.parcelasRestantes,
+        saldoDevedor: simData.saldoDevedor
+      } : null;
+
+      const avatarUrl = simData?.userAvatar || profile?.photoUrl || profile?.avatarUrl || null;
+      const safeAvatarUrl = (avatarUrl && avatarUrl.length < 2000) ? avatarUrl : null;
+
       // Comprehensive save to ensure it appears correctly in Dashboard
       await setDoc(docRef, {
         userId: simData?.userId || profile?.uid,
         userName: simData?.userName || profile?.name,
-        userAvatar: simData?.userAvatar || profile?.photoUrl || profile?.avatarUrl || null,
+        userAvatar: safeAvatarUrl,
         promotoraId: simData?.promotoraId || profile?.promotoraId || profile?.uid,
         corretorId: profile?.role === 'corretor' || profile?.role === 'vendedor' ? profile?.uid : null,
         createdBy: profile?.createdBy || null,
         createdAt: simData?.createdAt || new Date().toISOString(),
-        simData: simData,
-        offers: allCalculatedOffers.slice(0, 10).map(o => ({
-          ...o,
-          rules: [] // Remove rules to save space
+        simData: cleanSimData,
+        offers: allCalculatedOffers.slice(0, 5).map(o => ({
+          id: o.id,
+          name: o.name,
+          tabela: o.tabela,
+          valorTroco: o.valorTroco,
+          valorContrato: o.valorContrato,
+          saldoDevedor: o.saldoDevedor,
+          prazoRefinPort: o.prazoRefinPort,
+          logo: o.logo && o.logo.length < 500 ? o.logo : null
         })),
         recommendedBanks: allCalculatedOffers.slice(0, 3).map(o => o.name),
         topOffer: offer.name,
@@ -96,11 +131,12 @@ export default function Recomendacoes() {
         topOfferContrato: offer.valorContrato,
         topOfferTroco: offer.valorTroco,
         topOfferTaxa: offer.novaTaxaPortabilidade,
-        topOfferPrazo: offer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96))
+        topOfferPrazo: offer.prazoRefinPort || (simData?.subConvenio === 'Marinha' ? 72 : (simData?.prazoTotal || 96)),
+        updatedAt: serverTimestamp()
       }, { merge: true });
 
     } catch (err) {
-      console.error('Error updating selected offer in simulations:', err);
+      handleFirestoreError(err, OperationType.WRITE, `simulations/${simData?.id || 'new'}`);
     }
 
     const stored = sessionStorage.getItem('selectedOffers');
@@ -160,7 +196,7 @@ export default function Recomendacoes() {
       window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
     } catch (error) {
       console.error("Erro ao gerar resumo com IA:", error);
-      alert("Não foi possível gerar o resumo com IA. Tente usar o compartilhamento individual.");
+      showToast("Não foi possível gerar o resumo com IA. Tente usar o compartilhamento individual.", 'error');
     } finally {
       setIsAISummarizing(false);
     }
@@ -192,10 +228,11 @@ export default function Recomendacoes() {
   }, [isSimulatorOpen, activeSimulationIndex]); // Re-check when simulator closes/opens or active index changes
 
   // 2. Calculate offers when data or rules change
+  const { isAuthReady } = useAuth();
   const calculationsCount = useRef<number>(0);
 
   useEffect(() => {
-    if (!isLoaded || !allSimulations.length || !banks.length) {
+    if (!isLoaded || !allSimulations.length || !banks.length || !profile?.uid || !isAuthReady) {
       return;
     }
 
@@ -408,11 +445,30 @@ export default function Recomendacoes() {
       if (!savedSimulationIds.current.has(simulationId) && calculatedOffers.length > 0) {
         savedSimulationIds.current.add(simulationId);
         const topOffer = calculatedOffers[0];
+        
+        // Clean currentSim to avoid document size issues
+        const cleanCurrentSim = {
+          id: currentSim.id,
+          nomeCliente: currentSim.nomeCliente,
+          cpfCliente: currentSim.cpfCliente,
+          idade: currentSim.idade,
+          convenio: currentSim.convenio,
+          subConvenio: currentSim.subConvenio,
+          bancoAtual: currentSim.bancoAtual,
+          valorParcela: currentSim.valorParcela,
+          prazoTotal: currentSim.prazoTotal,
+          parcelasRestantes: currentSim.parcelasRestantes,
+          saldoDevedor: currentSim.saldoDevedor
+        };
+
+        const avatarUrl = profile?.avatarUrl || profile?.photoUrl || null;
+        const safeAvatarUrl = (avatarUrl && avatarUrl.length < 2000) ? avatarUrl : null;
+
         const simulationRecord = {
-          ...currentSim,
+          ...cleanCurrentSim,
           userId: profile?.uid,
           userName: profile?.name,
-          userAvatar: profile?.avatarUrl || profile?.photoUrl || null,
+          userAvatar: safeAvatarUrl,
           userRole: profile?.role,
           corretorId: (profile?.role === 'corretor' || profile?.role === 'vendedor') ? profile?.uid : null,
           createdBy: profile?.createdBy || null,
@@ -426,7 +482,9 @@ export default function Recomendacoes() {
           topOfferPrazo: topOffer.prazoRefinPort || (currentSim.subConvenio === 'Marinha' ? 72 : (currentSim.prazoTotal || 96)),
           createdAt: serverTimestamp()
         };
-        setDoc(doc(db, 'simulations', simulationId), simulationRecord, { merge: true }).catch(err => console.error("Error saving simulation:", err));
+        setDoc(doc(db, 'simulations', simulationId), simulationRecord, { merge: true }).catch(err => {
+          handleFirestoreError(err, OperationType.WRITE, `simulations/${simulationId}`);
+        });
       }
     });
 
@@ -832,7 +890,9 @@ export default function Recomendacoes() {
               <span>{isSimulatorOpen ? 'Fechar Simulador' : 'Nova Simulação'}</span>
             </button>
             
-            <div className="w-8 md:hidden" /> {/* Spacer for mobile centering */}
+            <Link href="/propostas" className="text-slate-900 dark:text-slate-100 flex size-8 shrink-0 items-center justify-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+              <ClipboardList className="w-5 h-5" />
+            </Link>
           </div>
 
           {/* Summary Section */}
@@ -1438,6 +1498,7 @@ export default function Recomendacoes() {
         </button>
       ) : null}
 
+      <BottomNav activeTab="ofertas" />
     </div>
   );
 }

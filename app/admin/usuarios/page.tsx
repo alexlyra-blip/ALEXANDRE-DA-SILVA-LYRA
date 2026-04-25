@@ -585,13 +585,13 @@ function UsuariosAdminContent() {
 
   const confirmDelete = async () => {
     if (!userToDelete || deleteConfirmationName !== userToDelete.name) {
-      alert("O nome digitado não corresponde.");
+      showToast("O nome digitado não corresponde.", "error");
       return;
     }
     try {
       // Permission check: Admin can delete any, Promotora can only delete their own created users
       if (profile?.role !== 'admin' && userToDelete.createdBy !== profile?.uid) {
-        alert("Você não tem permissão para excluir este usuário.");
+        showToast("Você não tem permissão para excluir este usuário.", "error");
         return;
       }
 
@@ -607,12 +607,12 @@ function UsuariosAdminContent() {
 
       await deleteDoc(doc(db, 'users', userToDelete.id));
       await logAuditAction('DELETE_USER', userToDelete.id, `Nome deletado: ${userToDelete.name}, Email: ${userToDelete.email}`);
-      alert("Usuário excluído com sucesso!");
+      showToast("Usuário excluído com sucesso!", "success");
       setUserToDelete(null);
       setDeleteConfirmationName('');
     } catch (error) {
       console.error("Error deleting user:", error);
-      alert("Erro ao excluir usuário.");
+      showToast("Erro ao excluir usuário.", "error");
     }
   };
 
@@ -1500,7 +1500,7 @@ function UsuariosAdminContent() {
                         onClick={() => {
                           if (loginImageUrl) {
                             navigator.clipboard.writeText(loginImageUrl);
-                            alert("URL copiada!");
+                            showToast("URL copiada!", "success");
                           }
                         }}
                         className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary transition-all active:scale-95"

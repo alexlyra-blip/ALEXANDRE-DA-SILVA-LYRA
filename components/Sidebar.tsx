@@ -122,7 +122,7 @@ export default function Sidebar() {
 
         <nav className="space-y-2">
           {menuItems.map((item) => {
-            const isActive = pathname === item.path;
+            const isActive = pathname === item.path || (item.path !== '/dashboard' && pathname.startsWith(item.path));
             return (
               <Link 
                 key={item.path} 

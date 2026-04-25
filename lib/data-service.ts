@@ -522,17 +522,22 @@ export const saveProposal = async (proposal: any) => {
           const refinDoc = snapshot.docs[0];
           let newRefinStatus = null;
 
-          // Transition 1: Portability reaches 'AGUARDA AVERBAÇÃO PORT'
-          if (data.status === 'AGUARDA AVERBAÇÃO PORT') {
+          // Transições automáticas baseadas no status da Portabilidade
+          if (data.status === 'PENDENTE') {
+            newRefinStatus = 'PENDENTE';
+          } else if (data.status === 'ANDAMENTO') {
+            newRefinStatus = 'AGUARDA PORTABILIDADE';
+          } else if (data.status === 'AGUARDA AVERBAÇÃO PORT') {
             newRefinStatus = 'AGUARDA AVERBAÇÃO PORT';
           }
           
-          // Transition 2: Portability is finalized
-          if (data.portabilityStatus === 'PORTABILIDADE FINALIZADA') {
+          // Transição final: Portabilidade finalizada (status interno ou status pago)
+          if (data.portabilityStatus === 'PORTABILIDADE FINALIZADA' || data.status === 'PAGO') {
             newRefinStatus = 'AG AVERBAÇÃO';
           }
 
-          if (newRefinStatus) {
+          if (newRefinStatus && newRefinStatus !== refinDoc.data().status) {
+            console.log(`DataService: Syncing linked Refin ${refinDoc.id} to status ${newRefinStatus}`);
             await updateDoc(doc(db, 'proposals', refinDoc.id), {
               status: newRefinStatus,
               updatedAt: serverTimestamp()
@@ -553,27 +558,33 @@ export const saveProposal = async (proposal: any) => {
     // Creating a new proposal
     const docRef = await addDoc(collection(db, 'proposals'), {
       ...data,
+      isLinkedRefin: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
 
     // If it's a new Portabilidade and user chose to link refin, auto-create it
-    if (data.loanType === 'PORTABILIDADE' && data.shouldCreateRefin) {
+    const shouldCreateLinkedRefin = data.loanType === 'PORTABILIDADE' && (data.shouldCreateRefin === true || data.shouldCreateRefin === 'true');
+    
+    if (shouldCreateLinkedRefin) {
       try {
         await addDoc(collection(db, 'proposals'), {
           ...data,
           loanType: 'REFINANCIAMENTO',
           isLinkedRefin: true,
           parentId: docRef.id,
-          status: 'AGUARDA PORTABILIDADE',
-          createdAt: serverTimestamp(),
+          // Se a portabilidade nasce PENDENTE, o refin também nasce PENDENTE
+          // Se já nasce em ANDAMENTO, o refin nasce AGUARDA PORTABILIDADE
+          status: data.status === 'PENDENTE' ? 'PENDENTE' : 'AGUARDA PORTABILIDADE',
+          createdAt: new Date(Date.now() - 1000), 
           updatedAt: serverTimestamp(),
           // Don't copy portability specific fields to the refin
           cipSentDate: null,
           cipReturnDate: null,
+          cipReturnTimestamp: null,
           expectedReturnDate: null,
           portabilityStatus: null,
-          shouldCreateRefin: false // Don't propagate this
+          shouldCreateRefin: false 
         });
       } catch (e) {
         console.error("Error auto-creating linked Refin proposal:", e);

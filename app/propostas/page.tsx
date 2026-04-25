@@ -26,9 +26,11 @@ import { format, startOfDay, isAfter, addBusinessDays, subDays, isWithinInterval
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function PropostasPage() {
   const { profile, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
   const [proposals, setProposals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -103,8 +105,10 @@ export default function PropostasPage() {
     try {
       await deleteProposal(id);
       setProposals(proposals.filter(p => p.id !== id));
+      showToast("Proposta excluída com sucesso!", "success");
     } catch (error) {
       console.error('Error deleting proposal:', error);
+      showToast("Erro ao excluir proposta.", "error");
     } finally {
       setDeletingId(null);
       setProposalToDelete(null);

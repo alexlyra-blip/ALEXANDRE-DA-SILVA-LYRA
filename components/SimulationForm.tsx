@@ -7,6 +7,7 @@ import { useState, useRef, useEffect } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { GoogleGenAI, Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 import { safeStringify } from '@/lib/utils';
@@ -21,6 +22,7 @@ const getAI = () => {
 export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const { profile } = useAuth();
   const { banks: rulesBanks } = useRules();
+  const { showToast } = useToast();
   const router = useRouter();
   const [nomeCliente, setNomeCliente] = useState('');
   const [cpfCliente, setCpfCliente] = useState('');
@@ -476,13 +478,13 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
     if (hasInvalidContract || isFormIncomplete) return;
 
     if (parseInt(idade) >= 60 && isCliente60Mais === null) {
-      alert("Por favor, informe se o cliente é 60+.");
+      showToast("Por favor, informe se o cliente é 60+.", 'error');
       return;
     }
 
     const totalParcelas = contracts.reduce((sum, c) => sum + parseCurrency(c.valorParcela), 0);
     if (profile?.limiteCredito && totalParcelas > profile.limiteCredito) {
-      alert(`O valor total das parcelas (R$ ${totalParcelas.toFixed(2)}) excede seu limite de crédito.`);
+      showToast(`O valor total das parcelas (R$ ${totalParcelas.toFixed(2)}) excede seu limite de crédito.`, 'error');
       return;
     }
     setIsSimulating(true);

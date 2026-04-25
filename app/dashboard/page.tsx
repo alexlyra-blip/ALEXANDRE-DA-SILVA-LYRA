@@ -45,9 +45,11 @@ import html2canvas from 'html2canvas';
 
 import { DashboardSkeleton } from '@/components/DashboardSkeleton';
 import { getBrandingSettings } from '@/lib/data-service';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function Dashboard() {
   const { profile, user, isAuthReady, logout, isPending, setQuotaExceeded } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
   const [simulations, setSimulations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -381,7 +383,7 @@ export default function Dashboard() {
       doc.save('relatorio_dashboard.pdf');
     } catch (error) {
       console.error('Error generating report:', error);
-      alert('Erro ao gerar relatório. Tente novamente.');
+      showToast('Erro ao gerar relatório. Tente novamente.', 'error');
     } finally {
       setGeneratingReport(false);
     }
@@ -463,8 +465,22 @@ export default function Dashboard() {
       doc.save(`simulacao_${(sim.userName || 'usuario').toLowerCase().replace(/\s+/g, '_')}.pdf`);
     } catch (error) {
       console.error('Error generating simulation PDF:', error);
-      alert('Erro ao gerar PDF da simulação.');
+      showToast('Erro ao gerar PDF da simulação.', 'error');
     }
+  };
+
+  const handleSaveProposal = (sim: any) => {
+    const namePart = sim.nomeCliente ? `&nome=${encodeURIComponent(sim.nomeCliente)}` : '';
+    const cpfPart = sim.cpfCliente ? `&cpf=${encodeURIComponent(sim.cpfCliente)}` : '';
+    const bankPart = sim.topOffer ? `&bank=${encodeURIComponent(sim.topOffer)}` : '';
+    const tablePart = sim.topOfferTabela ? `&tabela=${encodeURIComponent(sim.topOfferTabela)}` : '';
+    const valuePart = `&valor=${sim.topOfferContrato || 0}`;
+    const trocoPart = `&troco=${sim.topOfferTroco || 0}`;
+    const parcelaPart = `&parcela=${sim.valorParcela || 0}`;
+    const saldoPart = `&saldoDevedor=${sim.saldoDevedor || 0}`;
+    const bancoPortadoPart = sim.bancoAtual ? `&bancoPortado=${encodeURIComponent(sim.bancoAtual)}` : '';
+    
+    router.push(`/propostas/nova?fromSim=true${namePart}${cpfPart}${bankPart}${tablePart}${valuePart}${trocoPart}${parcelaPart}${saldoPart}${bancoPortadoPart}`);
   };
 
   if (isPending) {
@@ -933,7 +949,7 @@ export default function Dashboard() {
                       </td>
                       <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                         <button 
-                          onClick={(e) => { e.stopPropagation(); console.log("Salvar proposta", sim); /* Implementar lógica de salvar aqui */ }}
+                          onClick={(e) => { e.stopPropagation(); handleSaveProposal(sim); }}
                           className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-400 hover:text-blue-600 transition-colors"
                           title="Salvar Proposta"
                         >

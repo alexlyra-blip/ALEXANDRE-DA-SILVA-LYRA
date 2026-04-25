@@ -18,9 +18,11 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function RegrasCalculo() {
   const { profile } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
   const { banks, generalRules, addBank, updateBank, deleteBank, addGeneralRule, updateGeneralRule, deleteGeneralRule } = useRules();
 
@@ -243,7 +245,7 @@ export default function RegrasCalculo() {
       setIsGeneralModalOpen(false);
     } catch (error) {
       console.error("Erro ao salvar regra geral:", error);
-      alert("Erro ao salvar regra geral. Tente novamente.");
+      showToast("Erro ao salvar regra geral. Tente novamente.", 'error');
     } finally {
       setIsSaving(false);
     }

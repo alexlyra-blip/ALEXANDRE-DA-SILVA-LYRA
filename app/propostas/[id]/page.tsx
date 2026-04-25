@@ -27,6 +27,7 @@ import BottomNav from '@/components/BottomNav';
 import { saveProposal, deleteProposal, getProposals } from '@/lib/data-service';
 import { format, addBusinessDays, differenceInBusinessDays, isAfter, startOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useToast } from '@/contexts/ToastContext';
 
 const STATUS_OPTIONS = [
   { id: 'RASCUNHO', label: 'RASCUNHO', color: 'bg-slate-500', activeColor: 'bg-slate-500 text-white shadow-lg shadow-slate-500/30' },
@@ -105,6 +106,7 @@ function ProposalDetailPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
   
   const isNew = proposalId === 'nova';
   const isFromSim = searchParams.get('fromSim') === 'true';
@@ -117,6 +119,8 @@ function ProposalDetailPageContent() {
   const [showBankSuggestions, setShowBankSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCopySuccess, setShowCopySuccess] = useState(false);
+  
+  const [showReturnModal, setShowReturnModal] = useState(false);
   
   const [formData, setFormData] = useState({
     clientName: searchParams.get('nome') || searchParams.get('nomeCliente') || '',
@@ -343,18 +347,28 @@ function ProposalDetailPageContent() {
         expectedReturnDate: expectedReturnDate ? expectedReturnDate.toISOString() : null,
       };
       
-      await saveProposal(proposalData);
+      console.log("ProposalPage: Saving proposal data:", proposalData);
+      const savedId = await saveProposal(proposalData);
+      console.log("ProposalPage: Saved successfully, ID:", savedId);
+      
+      if (formData.shouldCreateRefin) {
+        showToast("Propostas de Portabilidade e Refinanciamento criadas!", "success");
+      } else {
+        showToast("Proposta salva com sucesso!", "success");
+      }
+      
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
         if (isFromSim) {
-          router.push('/simulacao/recomendacoes');
+          setShowReturnModal(true);
         } else {
           router.push('/propostas');
         }
-      }, 2000);
+      }, 1500);
     } catch (error) {
       console.error('Error saving proposal:', error);
+      showToast("Erro ao salvar proposta.", "error");
       setError('Erro ao salvar proposta. Verifique sua conexão.');
     } finally {
       setSaving(false);
@@ -380,17 +394,25 @@ function ProposalDetailPageContent() {
       };
       
       await saveProposal(proposalData);
+      
+      if (formData.shouldCreateRefin) {
+        showToast("Rascunhos de Portabilidade e Refinanciamento salvos!", "success");
+      } else {
+        showToast("Rascunho salvo com sucesso!", "success");
+      }
+      
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
         if (isFromSim) {
-          router.push('/simulacao/recomendacoes');
+          setShowReturnModal(true);
         } else {
           router.push('/propostas');
         }
-      }, 2000);
+      }, 1500);
     } catch (error) {
       console.error('Error saving draft:', error);
+      showToast("Erro ao salvar rascunho.", "error");
       setError('Erro ao salvar rascunho. Verifique sua conexão.');
     } finally {
       setSaving(false);
@@ -403,9 +425,11 @@ function ProposalDetailPageContent() {
     setDeleting(true);
     try {
       await deleteProposal(proposalId as string);
+      showToast("Proposta excluída com sucesso!", "success");
       router.push('/propostas');
     } catch (error) {
       console.error('Error deleting proposal:', error);
+      showToast("Erro ao excluir proposta.", "error");
       setError('Erro ao excluir proposta.');
     } finally {
       setDeleting(false);
@@ -582,6 +606,51 @@ function ProposalDetailPageContent() {
               <CheckCircle className="w-5 h-5" />
               <span className="font-bold">Alterações salvas com sucesso!</span>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Return to Offers Confirmation Modal */}
+        <AnimatePresence>
+          {showReturnModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => router.push('/propostas')}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-2xl max-w-sm w-full border border-slate-200 dark:border-slate-800"
+              >
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white text-center mb-2 uppercase tracking-tight">
+                  Proposta Salva!
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 text-center mb-8 font-medium">
+                  Deseja retornar à página com as demais ofertas deste cliente?
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => router.push('/propostas')}
+                    className="py-3 px-4 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all uppercase tracking-tight"
+                  >
+                    Ver Propostas
+                  </button>
+                  <button
+                    onClick={() => router.push('/simulacao/recomendacoes')}
+                    className="py-3 px-4 rounded-xl text-sm font-bold bg-primary text-white hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 uppercase tracking-tight"
+                  >
+                    Ir para Ofertas
+                  </button>
+                </div>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 
