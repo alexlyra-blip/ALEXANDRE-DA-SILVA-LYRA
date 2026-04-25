@@ -550,6 +550,26 @@ export default function PropostasPage() {
                               {proposal.isLinkedRefin ? `REFIN DA PORTABILIDADE` : proposal.loanType}
                             </span>
                           )}
+                          {proposal.convenio && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border uppercase tracking-wider text-white shadow-sm ${
+                              proposal.convenio === 'SIAPE' 
+                                ? 'bg-[#f59e0b] border-[#f59e0b]' 
+                                : proposal.convenio === 'GOVERNO'
+                                ? 'bg-[#FF0000] border-[#FF0000]'
+                                : proposal.convenio === 'FORÇAS ARMADAS'
+                                ? 'bg-[#47953D] border-[#47953D]'
+                                : proposal.convenio === 'CLT PRIVADO'
+                                ? 'bg-slate-800 border-slate-800'
+                                : 'bg-[#1152d4] border-[#1152d4]'
+                            }`}>
+                              {proposal.convenio}
+                            </span>
+                          )}
+                          {proposal.subConvenio && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-500 text-white border border-slate-500 uppercase tracking-wider shadow-sm">
+                              {proposal.subConvenio}
+                            </span>
+                          )}
                           {proposal.corretor && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary/10 text-primary border border-primary/20">
                               Corretor/Vendedor: {proposal.corretor} {proposal.corretorId ? `(${proposal.corretorId})` : ''}

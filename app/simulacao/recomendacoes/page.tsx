@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard, ShieldCheck, CheckCircle2, History, DollarSign, Star, Landmark, ClipboardList } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard, ShieldCheck, CheckCircle2, History, DollarSign, Star, Landmark } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -10,8 +10,6 @@ import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from '@/lib/data-service';
-import BottomNav from '@/components/BottomNav';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -84,7 +82,7 @@ export default function Recomendacoes() {
 
   const handleSelectOffer = async (offer: Offer) => {
     try {
-      const simulationId = simData?.id || crypto.randomUUID();
+      const simulationId = simData?.id || savedSimulationId.current || crypto.randomUUID();
       const docRef = doc(db, 'simulations', simulationId);
       
       // Prepare a clean, lightweight version of simData to avoid document size issues
@@ -136,7 +134,7 @@ export default function Recomendacoes() {
       }, { merge: true });
 
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `simulations/${simData?.id || 'new'}`);
+      console.error('Error updating selected offer in simulations:', err);
     }
 
     const stored = sessionStorage.getItem('selectedOffers');
@@ -145,7 +143,7 @@ export default function Recomendacoes() {
     sessionStorage.setItem('selectedOffers', safeStringify(selected));
     
     // Redirect to new proposal page
-    const baseUrl = `/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}&bancoPortado=${encodeURIComponent(simData?.bancoAtual || '')}&fromSim=true`;
+    const baseUrl = `/propostas/nova?bank=${encodeURIComponent(offer.name)}&tabela=${encodeURIComponent(offer.tabela)}&valor=${offer.valorContrato}&troco=${offer.valorTroco}&parcela=${simData?.valorParcela || 0}&saldoDevedor=${offer.saldoDevedor}&bancoPortado=${encodeURIComponent(simData?.bancoAtual || '')}&convenio=${encodeURIComponent(simData?.convenio || '')}&subConvenio=${encodeURIComponent(simData?.subConvenio || '')}&fromSim=true`;
     const namePart = simData?.nomeCliente ? `&nomeCliente=${encodeURIComponent(simData.nomeCliente)}` : '';
     const cpfPart = simData?.cpfCliente ? `&cpfCliente=${encodeURIComponent(simData.cpfCliente)}` : '';
     
@@ -228,11 +226,10 @@ export default function Recomendacoes() {
   }, [isSimulatorOpen, activeSimulationIndex]); // Re-check when simulator closes/opens or active index changes
 
   // 2. Calculate offers when data or rules change
-  const { isAuthReady } = useAuth();
   const calculationsCount = useRef<number>(0);
 
   useEffect(() => {
-    if (!isLoaded || !allSimulations.length || !banks.length || !profile?.uid || !isAuthReady) {
+    if (!isLoaded || !allSimulations.length || !banks.length) {
       return;
     }
 
@@ -482,9 +479,7 @@ export default function Recomendacoes() {
           topOfferPrazo: topOffer.prazoRefinPort || (currentSim.subConvenio === 'Marinha' ? 72 : (currentSim.prazoTotal || 96)),
           createdAt: serverTimestamp()
         };
-        setDoc(doc(db, 'simulations', simulationId), simulationRecord, { merge: true }).catch(err => {
-          handleFirestoreError(err, OperationType.WRITE, `simulations/${simulationId}`);
-        });
+        setDoc(doc(db, 'simulations', simulationId), simulationRecord, { merge: true }).catch(err => console.error("Error saving simulation:", err));
       }
     });
 
@@ -525,12 +520,26 @@ export default function Recomendacoes() {
       } else {
         const currentBest = bestOfferPerBank[offer.name];
         let isBetter = false;
-        if (sortBy === 'valor_troco') {
-          isBetter = offer.valorTroco > currentBest.valorTroco;
-        } else if (sortBy === 'valor_contrato') {
-          isBetter = offer.valorContrato > currentBest.valorContrato;
-        } else if (sortBy === 'menor_troco') {
-          isBetter = offer.valorTroco < currentBest.valorTroco;
+
+        if (offer.convenio === 'SIAPE' && offer.name.toUpperCase() === 'BRB') {
+          const isTabela2Offer = offer.tabela.toLowerCase().includes('tabela 2') || offer.tabela.split(' ').includes('2') || offer.tabela === '2';
+          const isTabela2Best = currentBest.tabela.toLowerCase().includes('tabela 2') || currentBest.tabela.split(' ').includes('2') || currentBest.tabela === '2';
+          
+          if (!isTabela2Offer && isTabela2Best) {
+            isBetter = true;
+          } else if (isTabela2Offer && !isTabela2Best) {
+            isBetter = false;
+          } else {
+            isBetter = offer.valorTroco > currentBest.valorTroco;
+          }
+        } else {
+          if (sortBy === 'valor_troco') {
+            isBetter = offer.valorTroco > currentBest.valorTroco;
+          } else if (sortBy === 'valor_contrato') {
+            isBetter = offer.valorContrato > currentBest.valorContrato;
+          } else if (sortBy === 'menor_troco') {
+            isBetter = offer.valorTroco < currentBest.valorTroco;
+          }
         }
         
         if (isBetter) {
@@ -890,9 +899,7 @@ export default function Recomendacoes() {
               <span>{isSimulatorOpen ? 'Fechar Simulador' : 'Nova Simulação'}</span>
             </button>
             
-            <Link href="/propostas" className="text-slate-900 dark:text-slate-100 flex size-8 shrink-0 items-center justify-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-              <ClipboardList className="w-5 h-5" />
-            </Link>
+            <div className="w-8 md:hidden" /> {/* Spacer for mobile centering */}
           </div>
 
           {/* Summary Section */}
@@ -1132,6 +1139,14 @@ export default function Recomendacoes() {
             const bankOffers = allCalculatedOffers
               .filter(o => o.name === bank.name)
               .sort((a, b) => {
+                if (bank.convenio === 'SIAPE' && bank.name.toUpperCase() === 'BRB') {
+                  const isTabela2A = a.tabela.toLowerCase().includes('tabela 2') || a.tabela.includes('2');
+                  const isTabela2B = b.tabela.toLowerCase().includes('tabela 2') || b.tabela.includes('2');
+                  if (isTabela2A && !isTabela2B) return 1;
+                  if (!isTabela2A && isTabela2B) return -1;
+                  return b.valorTroco - a.valorTroco;
+                }
+
                 if (sortBy === 'menor_troco') return a.valorTroco - b.valorTroco;
                 if (sortBy === 'valor_troco') return b.valorTroco - a.valorTroco;
                 if (sortBy === 'valor_contrato') return b.valorContrato - a.valorContrato;
@@ -1498,7 +1513,6 @@ export default function Recomendacoes() {
         </button>
       ) : null}
 
-      <BottomNav activeTab="ofertas" />
     </div>
   );
 }

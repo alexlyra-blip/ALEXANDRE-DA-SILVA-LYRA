@@ -147,7 +147,7 @@ export default function DashboardPropostasPage() {
       name: u.name,
       value: u.count,
       avatar: u.avatar
-    })).sort((a, b) => b.count - a.count);
+    })).sort((a, b) => b.value - a.value);
 
     // Daily count for line chart
     const dailyCounts = filteredProposals.reduce((acc, p) => {

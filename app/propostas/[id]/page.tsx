@@ -129,6 +129,8 @@ function ProposalDetailPageContent() {
     proposalNumber: '',
     status: 'PENDENTE',
     loanType: 'PORTABILIDADE',
+    convenio: searchParams.get('convenio') || '',
+    subConvenio: searchParams.get('subConvenio') || '',
     cipSentDate: '',
     cipReturnDate: '',
     bank: searchParams.get('bank') || '',
@@ -252,6 +254,8 @@ function ProposalDetailPageContent() {
           proposalNumber: proposal.proposalNumber || '',
           status: proposal.status || 'PENDENTE',
           loanType: proposal.loanType || 'PORTABILIDADE',
+          convenio: proposal.convenio || '',
+          subConvenio: proposal.subConvenio || '',
           cipSentDate: cipSent,
           cipReturnDate: cipRetDate,
           bank: proposal.bank || '',
@@ -676,6 +680,40 @@ function ProposalDetailPageContent() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5" />
+              Convênio
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {['INSS', 'SIAPE', 'GOVERNO', 'FORÇAS ARMADAS', 'CLT PRIVADO'].map((conv) => (
+                <button
+                  key={conv}
+                  onClick={() => setFormData({ ...formData, convenio: conv })}
+                  className={`py-2 px-2 rounded-xl text-[9px] font-black uppercase tracking-tight transition-all border-2 ${
+                    formData.convenio === conv 
+                      ? 'bg-indigo-500 text-white border-transparent shadow-lg shadow-indigo-500/30' 
+                      : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-600 border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700'
+                  }`}
+                >
+                  {conv}
+                </button>
+              ))}
+            </div>
+            {formData.convenio && (
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Sub-convênio / Órgão</label>
+                <input 
+                  type="text"
+                  value={formData.subConvenio}
+                  onChange={(e) => setFormData({ ...formData, subConvenio: e.target.value })}
+                  placeholder="Ex: Marinha, Prefeitura..."
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                />
+              </div>
+            )}
           </div>
 
           {/* Status Seals (Farol) */}
