@@ -20,7 +20,7 @@ import {
 import { motion } from 'motion/react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { collection, query, onSnapshot, where, limit, Timestamp, doc, updateDoc } from 'firebase/firestore';                
-import { db } from '@/firebase';
+import { db, auth } from '@/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PromotoraAvatar } from '@/components/PromotoraAvatar';
 import {
@@ -39,12 +39,17 @@ import {
   Legend
 } from 'recharts';
 import BottomNav from '@/components/BottomNav';
+import Sidebar from '@/components/Sidebar';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 
 import { DashboardSkeleton } from '@/components/DashboardSkeleton';
-import { getBrandingSettings } from '@/lib/data-service';
+import { 
+  getBrandingSettings,
+  handleFirestoreError,
+  OperationType
+} from '@/lib/data-service';
 import { useToast } from '@/contexts/ToastContext';
 
 export default function Dashboard() {
@@ -146,6 +151,14 @@ export default function Dashboard() {
     let isFallback = false;
 
     const setupQuery = (useOrderBy: boolean) => {
+      // Safety timeout for simulations loading
+      const simTimer = setTimeout(() => {
+        if (loading) {
+          console.warn("Dashboard: Simulation load timeout. Unblocking UI.");
+          setLoading(false);
+        }
+      }, 4000);
+
       let q;
       // Removed orderBy temporarily to avoid index issues
       if (profile.role === 'admin') {
@@ -157,6 +170,7 @@ export default function Dashboard() {
       }
 
       const listener = onSnapshot(q, (snapshot) => {
+        clearTimeout(simTimer);
         const simsData = snapshot.docs.map(doc => {
           const data = doc.data();
           return {
@@ -172,6 +186,7 @@ export default function Dashboard() {
         setSimulations(simsData);
         setLoading(false);
       }, (error) => {
+        clearTimeout(simTimer);
         console.error("Error fetching simulations:", error);
         setLoading(false);
       });
@@ -179,8 +194,35 @@ export default function Dashboard() {
     };
 
     unsubscribeFn = setupQuery(false);
-    return () => { if (unsubscribeFn) unsubscribeFn(); };
+    return () => { 
+      console.log("Dashboard: Cleanup simulations listener");
+      if (unsubscribeFn) unsubscribeFn(); 
+    };
   }, [profile, dateRange, setQuotaExceeded]);
+
+  const [whatsappSessions, setWhatsappSessions] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!profile) {
+      console.log("Dashboard: Profile not ready, skipping whatsappSessions");
+      return;
+    }
+    if (profile.role !== 'admin') {
+      console.log("Dashboard: User is not admin, skipping whatsappSessions. Role:", profile.role);
+      return;
+    }
+
+    console.log("Dashboard: Setting up whatsappSessions listener for admin:", profile.email);
+    const q = query(collection(db, 'whatsappSessions'), limit(10));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setWhatsappSessions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.warn("Dashboard: Could not load whatsappSessions (possibly missing permissions or empty)", error);
+      setWhatsappSessions([]);
+    });
+
+    return () => unsubscribe();
+  }, [profile]);
 
   // Filter simulations based on role and filters
   const filteredSimulations = useMemo(() => {
@@ -318,11 +360,13 @@ export default function Dashboard() {
 
     const chartData = Object.values(dailyData);
     
-    const donutData = Object.entries(convenioCounts).map(([name, value]) => ({
-      name,
-      value,
-      color: CONVENIO_COLORS[name] || '#94a3b8'
-    }));
+    const donutData = Object.entries(convenioCounts)
+      .map(([name, value]) => ({
+        name,
+        value: Number(value),
+        color: CONVENIO_COLORS[name] || '#94a3b8'
+      }))
+      .filter(item => item.value > 0);
 
     return { 
       totalSimulations, 
@@ -492,7 +536,27 @@ export default function Dashboard() {
   }
 
   if (loading || !profile) {
-    return <DashboardSkeleton />;
+    console.log("Dashboard: Still loading or profile missing.", { loading, isAuthReady, profile: !!profile });
+    return (
+      <div className="flex flex-col min-h-screen bg-background">
+        <DashboardSkeleton />
+        {(!profile && isAuthReady) && (
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">
+              <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+              <h2 className="text-xl font-bold mb-2">Quase lá...</h2>
+              <p className="text-slate-500 text-sm">Estamos preparando o seu acesso. Se demorar muito, tente atualizar a página.</p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="mt-6 w-full bg-primary text-white font-bold py-3 rounded-xl"
+              >
+                Atualizar Página
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -605,7 +669,7 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
           {/* Chart Section */}
           <div className="lg:col-span-2 space-y-6">
             <div className="professional-card p-6 dark:bg-slate-800">
@@ -772,45 +836,91 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* WhatsApp Sessions - Admin Only */}
+            {profile.role === 'admin' && whatsappSessions.length > 0 && (
+              <div className="professional-card p-6 dark:bg-slate-800">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-black text-lg flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-emerald-500" />
+                    Leads WhatsApp
+                  </h3>
+                  <Link href="/admin/simulador-whatsapp" className="size-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all">
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+                <div className="space-y-4">
+                  {whatsappSessions.map((session, idx) => (
+                    <div key={session.id} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 group hover:border-emerald-500/30 transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black uppercase text-emerald-600">{session.data?.convenio || 'Iniciando...'}</span>
+                        <span className="text-[9px] font-bold text-slate-400">PASSO: {session.step}</span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        {session.id.startsWith('_') ? session.id.substring(1).replace(/[^a-zA-Z0-9]/g, '') : session.id}
+                      </p>
+                      {session.data?.valorParcela && (
+                        <p className="text-[10px] text-slate-500">Parcela: <span className="font-bold text-emerald-600">R$ {session.data.valorParcela}</span></p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Donut Chart - Mix por Convênio */}
-            <div className="professional-card p-6 dark:bg-slate-800">
+            <div className="professional-card p-6 dark:bg-slate-800 flex flex-col min-h-[450px]">
               <h3 className="font-black text-lg mb-6 flex items-center gap-2">
                 <PieChartIcon className="w-5 h-5 text-pink-500" />
                 Mix por Convênio
               </h3>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={stats.donutData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {stats.donutData.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ 
-                        borderRadius: '16px', 
-                        border: 'none', 
-                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' 
-                      }} 
-                    />
-                    <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="flex-1 w-full relative min-h-[350px]">
+                {stats.donutData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={stats.donutData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={90}
+                        paddingAngle={5}
+                        dataKey="value"
+                        nameKey="name"
+                        isAnimationActive={false}
+                      >
+                        {stats.donutData.map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          borderRadius: '16px', 
+                          border: 'none', 
+                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' 
+                        }} 
+                      />
+                      <Legend 
+                        verticalAlign="bottom" 
+                        align="center"
+                        layout="horizontal"
+                        iconType="circle"
+                        wrapperStyle={{ paddingTop: '20px' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 italic text-sm">
+                    <PieChartIcon className="w-12 h-12 mb-2 opacity-20" />
+                    Sem dados para exibir
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
 
         {/* Recent Simulations - Full Width at Bottom */}
-        <div className="professional-card overflow-hidden mb-8 dark:bg-slate-800">
+        <div className="professional-card overflow-hidden mb-12 dark:bg-slate-800 clear-both">
           <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <h3 className="font-black text-lg">Simulações Recentes</h3>
             <Link href="/simulacao/nova" className="text-primary text-sm font-bold hover:underline flex items-center gap-1">
@@ -957,8 +1067,6 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
-
-      <BottomNav activeTab="dashboard" />
     </div>
   );
 }

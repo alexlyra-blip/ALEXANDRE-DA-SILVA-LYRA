@@ -105,7 +105,7 @@ function ProposalDetailPageContent() {
   const proposalId = Array.isArray(params.id) ? params.id[0] : params.id;
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { profile, loading: authLoading } = useAuth();
+  const { profile, isAuthReady } = useAuth();
   const { showToast } = useToast();
   
   const isNew = proposalId === 'nova';
@@ -520,7 +520,7 @@ function ProposalDetailPageContent() {
     rose: { bg: 'bg-rose-500/5', border: 'border-rose-500/10', text: 'text-rose-700 dark:text-rose-400', icon: 'text-rose-500' },
   };
 
-  if (authLoading || loading) {
+  if (!isAuthReady || loading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
@@ -529,10 +529,8 @@ function ProposalDetailPageContent() {
   }
 
   return (
-    <div className={`min-h-screen ${getSoftBackgroundColor(formData.status)} dark:bg-background flex flex-col md:flex-row`}>
-      <Sidebar />
-      
-      <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-0">
+    <div className="flex flex-col min-h-screen bg-background pb-20 md:pb-0">
+      <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-10">
           <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -1207,9 +1205,6 @@ function ProposalDetailPageContent() {
           )}
         </main>
       </div>
-
-      <BottomNav activeTab="propostas" />
-
       <AnimatePresence>
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">

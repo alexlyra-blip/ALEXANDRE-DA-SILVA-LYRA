@@ -1,4 +1,5 @@
 import Sidebar from '@/components/Sidebar';
+import BottomNav from '@/components/BottomNav';
 
 export default function SimulacaoLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -7,6 +8,7 @@ export default function SimulacaoLayout({ children }: { children: React.ReactNod
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden relative">
         {children}
       </div>
+      <BottomNav />
     </div>
   );
 }

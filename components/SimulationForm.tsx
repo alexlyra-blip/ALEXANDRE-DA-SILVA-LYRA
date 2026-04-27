@@ -491,10 +491,21 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   };
 
   const onAnimationComplete = () => {
+    if (!profile?.uid) {
+      showToast("Usuário não autenticado. Faça login novamente.", "error");
+      return;
+    }
+
     const simulations = contracts.map(c => {
       const rate = calculateInterestRate(c.saldoDevedor, c.valorParcela, c.parcelasRestantes);
       return {
         id: c.id,
+        userId: profile.uid,
+        userName: profile?.name || '',
+        userAvatar: profile?.avatarUrl || profile?.photoUrl || null,
+        promotoraId: profile?.role === 'promotora'
+          ? profile.uid
+          : profile?.promotoraId || profile?.createdBy || profile.uid,
         nomeCliente,
         cpfCliente,
         convenio,

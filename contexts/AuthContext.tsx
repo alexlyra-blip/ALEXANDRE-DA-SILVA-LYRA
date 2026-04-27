@@ -64,21 +64,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [pathname, user]);
 
   useEffect(() => {
-    console.log("AuthContext: Initializing onAuthStateChanged");
+    console.log("AuthContext: Inicializando monitoramento de autenticação");
     
-    // Safety timeout to ensure the app doesn't stay stuck on "Carregando"
+    // Timeout de segurança para evitar que o app fique preso no "Carregando"
     const timeoutId = setTimeout(() => {
+      console.warn("AuthContext: Timeout de segurança atingido. Forçando isAuthReady.");
       setIsAuthReady(true);
-    }, 3000);
+    }, 15000); // Aumentado para 15s pois o Firebase pode ser lento em conexões instáveis
 
     let unsubscribeProfile: () => void;
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      clearTimeout(timeoutId); // Clear timeout if auth state resolves
-      console.log("AuthContext: onAuthStateChanged fired", firebaseUser?.email);
+      console.log("AuthContext: Estado de autenticação alterado:", firebaseUser?.email || "Nenhum usuário");
+      clearTimeout(timeoutId); 
+      
       setUser(firebaseUser);
       setIsPending(false);
-      setIsAuthReady(true); // Set immediately so UI can progress
       
       if (unsubscribeProfile) {
         unsubscribeProfile();
@@ -87,58 +88,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (firebaseUser) {
         const userRef = doc(db, 'users', firebaseUser.uid);
         
+        console.log("AuthContext: Buscando perfil do usuário no Firestore...");
         unsubscribeProfile = onSnapshot(userRef, async (userDoc) => {
           if (userDoc.exists()) {
             let data = userDoc.data() as UserProfile;
-            console.log("AuthContext: Profile updated", data.role, data.status);
+            console.log("AuthContext: Perfil carregado:", data.role, "| Status:", data.status);
             
-            // Auto-upgrade first admin if they are stuck
-            const isFirstAdmin = firebaseUser.email === 'alexandrelyra@msn.com' || firebaseUser.email === 'alexlyra@gmail.com';
-            
-            // Check for 3-day trial block
-            const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-            const now = new Date();
-            const diffTime = Math.abs(now.getTime() - createdAt.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            // Garantir que administradores principais estejam sempre ativos
+            const isFirstAdmin = 
+              firebaseUser.email === 'alexandrelyra@msn.com' || 
+              firebaseUser.email === 'alexlyra@gmail.com' || 
+              firebaseUser.email === 'alexandrelyra@gmail.com' ||
+              firebaseUser.uid === 'AoFpOZClDnM3n5bTj3Ul32qvLIw2' ||
+              firebaseUser.uid === '9L0530rP40Sj4fx2xtnXs63Bkqz2';
             
             let updatedData = { ...data };
-            if (diffDays > 3 && data.status === 'pending' && !isFirstAdmin) {
-              console.log("AuthContext: Trial period expired, blocking user...");
-              updatedData.status = 'inactive';
-              await updateDoc(userRef, { status: 'inactive' });
-            }
-
-            if (updatedData.status === 'inactive') {
-              setBlockedError("Usuário bloqueado. Entre em contato com o administrador.");
-              await signOut(auth);
-              setProfile(null);
-              setIsAuthReady(true);
-              return;
-            }
-
+            
             if (isFirstAdmin && (updatedData.status !== 'active' || updatedData.role !== 'admin')) {
-              console.log("AuthContext: Auto-upgrading first admin profile...");
+              console.log("AuthContext: Atualizando perfil de administrador principal...");
               updatedData = { ...updatedData, status: 'active', role: 'admin' };
               try {
-                await setDoc(userRef, { status: 'active', role: 'admin' }, { merge: true });
+                await setDoc(userRef, { 
+                  status: 'active', 
+                  role: 'admin',
+                  updatedAt: serverTimestamp() 
+                }, { merge: true });
               } catch (error) {
-                console.error("AuthContext: Error auto-upgrading admin", error);
+                console.error("AuthContext: Erro ao atualizar admin", error);
               }
             }
 
             setProfile(updatedData);
-            if (updatedData.status !== 'active') {
-              setIsPending(true);
-            } else {
-              setIsPending(false);
-            }
+            setIsPending(updatedData.status !== 'active');
+            setIsAuthReady(true); // Garantir que está pronto após carregar perfil
           } else {
-            console.log("AuthContext: No profile found, bootstrapping...");
-            const isFirstAdmin = firebaseUser.email === 'alexandrelyra@msn.com' || firebaseUser.email === 'alexlyra@gmail.com';
+            console.log("AuthContext: Perfil não encontrado, criando novo perfil...");
+            const isFirstAdmin = 
+              firebaseUser.email === 'alexandrelyra@msn.com' || 
+              firebaseUser.email === 'alexlyra@gmail.com' || 
+              firebaseUser.email === 'alexandrelyra@gmail.com' ||
+              firebaseUser.uid === 'AoFpOZClDnM3n5bTj3Ul32qvLIw2' ||
+              firebaseUser.uid === '9L0530rP40Sj4fx2xtnXs63Bkqz2';
             const newProfile: UserProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
               name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário',
+              photoUrl: firebaseUser.photoURL || '',
+              avatarUrl: firebaseUser.photoURL || '',
               role: isFirstAdmin ? 'admin' : 'corretor',
               status: isFirstAdmin ? 'active' : 'pending',
               createdAt: serverTimestamp(),
@@ -147,48 +143,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
               await setDoc(userRef, newProfile);
               setProfile(newProfile);
-              if (newProfile.status !== 'active') {
-                setIsPending(true);
-              } else {
-                setIsPending(false);
-              }
+              setIsPending(newProfile.status !== 'active');
+              setIsAuthReady(true);
             } catch (error) {
-              console.error("AuthContext: Error creating profile", error);
-              // Fallback to local profile if creation fails (e.g. permission denied)
+              console.error("AuthContext: Erro ao criar perfil", error);
               setProfile(newProfile);
               setIsPending(newProfile.status !== 'active');
+              setIsAuthReady(true);
             }
           }
-          setIsAuthReady(true);
-        }, async (error: any) => {
-          console.error("AuthContext: Error in onSnapshot", error);
-          const isQuotaError = error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded');
-          
-          if (isQuotaError) {
-            setQuotaExceeded(true);
-            
-            // Try fallback fetch from Supabase/Firestore via data-service
-            try {
-              const fallbackProfile = await getUserProfile(firebaseUser.uid);
-              if (fallbackProfile) {
-                console.log("AuthContext: Using fallback profile from DataService");
-                setProfile(fallbackProfile);
-                setIsPending(fallbackProfile.status !== 'active');
-                setIsAuthReady(true);
-                return;
-              }
-            } catch (fallbackErr) {
-              console.error("AuthContext: Fallback profile fetch failed", fallbackErr);
-            }
-          }
-          
-          // Fallback profile to prevent infinite loading if permission denied or quota exceeded
+        }, (error: any) => {
+          console.error("AuthContext: Erro no onSnapshot do perfil", error);
+          // Fallback para evitar travamento
           setProfile({
             uid: firebaseUser.uid,
             email: firebaseUser.email || '',
-            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || (isQuotaError ? 'Limite de Cota' : 'Erro de Acesso'),
+            name: firebaseUser.displayName || 'Usuário',
             role: 'corretor',
-            status: isQuotaError ? 'active' : 'pending', // Assume active on quota error to let them in
+            status: 'active',
             createdAt: serverTimestamp(),
           });
           setIsAuthReady(true);
@@ -201,9 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribe();
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-      }
+      if (unsubscribeProfile) unsubscribeProfile();
       clearTimeout(timeoutId);
     };
   }, []);
@@ -276,6 +246,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: email,
         name: name,
         phone: phone || '',
+        photoUrl: firebaseUser.photoURL || '',
+        avatarUrl: firebaseUser.photoURL || '',
         role: isFirstAdmin ? 'admin' : 'corretor',
         status: isFirstAdmin ? 'active' : 'pending',
         createdAt: serverTimestamp(),

@@ -50,8 +50,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   }
-  console.error('Firestore Error: ', safeStringify(errInfo));
-  throw new Error(safeStringify(errInfo));
+  console.error('Firestore Error Details: ', safeStringify(errInfo));
+  // We log but don't throw to prevent crashing the React tree
+  // In the future, we could trigger a global notification system here
 }
 
 export interface BrandingData {

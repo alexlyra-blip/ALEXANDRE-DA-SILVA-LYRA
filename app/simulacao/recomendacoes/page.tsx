@@ -16,6 +16,8 @@ import autoTable from 'jspdf-autotable';
 import { GoogleGenAI } from "@google/genai";
 import { safeStringify } from '@/lib/utils';
 import { useToast } from '@/contexts/ToastContext';
+import Sidebar from '@/components/Sidebar';
+import BottomNav from '@/components/BottomNav';
 
 const getAI = () => {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
@@ -82,7 +84,7 @@ export default function Recomendacoes() {
 
   const handleSelectOffer = async (offer: Offer) => {
     try {
-      const simulationId = simData?.id || savedSimulationId.current || crypto.randomUUID();
+      const simulationId = simData?.id || crypto.randomUUID();
       const docRef = doc(db, 'simulations', simulationId);
       
       // Prepare a clean, lightweight version of simData to avoid document size issues
@@ -105,12 +107,13 @@ export default function Recomendacoes() {
 
       // Comprehensive save to ensure it appears correctly in Dashboard
       await setDoc(docRef, {
-        userId: simData?.userId || profile?.uid,
+        userId: profile?.uid,
         userName: simData?.userName || profile?.name,
-        userAvatar: safeAvatarUrl,
-        promotoraId: simData?.promotoraId || profile?.promotoraId || profile?.uid,
-        corretorId: profile?.role === 'corretor' || profile?.role === 'vendedor' ? profile?.uid : null,
-        createdBy: profile?.createdBy || null,
+        userAvatar: simData?.userAvatar || safeAvatarUrl,
+        userRole: simData?.userRole || profile?.role,
+        corretorId: simData?.corretorId || (profile?.role === 'corretor' || profile?.role === 'vendedor' ? profile?.uid : null),
+        createdBy: simData?.createdBy || profile?.createdBy || null,
+        promotoraId: simData?.promotoraId || (profile?.role === 'promotora' ? profile?.uid : (profile?.promotoraId || profile?.createdBy || 'admin')),
         createdAt: simData?.createdAt || new Date().toISOString(),
         simData: cleanSimData,
         offers: allCalculatedOffers.slice(0, 5).map(o => ({
@@ -316,7 +319,6 @@ export default function Recomendacoes() {
           }
         }
 
-        if (bank.minInstallmentValue && valorParcela < bank.minInstallmentValue) return;
         const bSumSaldoTrocoGlobal = !!(bank.sumBalanceAndTroco || bank.sumSaldoTroco);
         if (!bSumSaldoTrocoGlobal && bank.minBalance && saldoDevedor < bank.minBalance) return;
 
@@ -378,7 +380,13 @@ export default function Recomendacoes() {
             const effectiveMinTicket = tableMinTicket > 0 ? tableMinTicket : bankMinTroco;
 
             if (effectiveMinTicket > 0 && valorAValidar < effectiveMinTicket) return;
-            if (bank.minInstallmentValue && valorParcela < bank.minInstallmentValue) return;
+            
+            const tableMinInst = parseRate(tabela.minInstallmentValue);
+            const tableMaxInst = parseRate(tabela.maxInstallmentValue);
+            const effectiveMinInst = tableMinInst > 0 ? tableMinInst : (parseRate(bank.minInstallmentValue) || 0);
+
+            if (effectiveMinInst > 0 && valorParcela < effectiveMinInst) return;
+            if (tableMaxInst > 0 && valorParcela > tableMaxInst) return;
 
             const taxaTabelaValida = parseRate(tabela.taxaTabela) > 0 ? parseRate(tabela.taxaTabela) : parseRate(bank.refinRate);
             const bankAdjustment = parseRate(bank.ajusteTaxa);
@@ -464,12 +472,12 @@ export default function Recomendacoes() {
         const simulationRecord = {
           ...cleanCurrentSim,
           userId: profile?.uid,
-          userName: profile?.name,
-          userAvatar: safeAvatarUrl,
-          userRole: profile?.role,
-          corretorId: (profile?.role === 'corretor' || profile?.role === 'vendedor') ? profile?.uid : null,
-          createdBy: profile?.createdBy || null,
-          promotoraId: profile?.role === 'promotora' ? profile?.uid : (profile?.promotoraId || profile?.createdBy || 'admin'),
+          userName: currentSim.userName || profile?.name,
+          userAvatar: currentSim.userAvatar || safeAvatarUrl,
+          userRole: currentSim.userRole || profile?.role,
+          corretorId: currentSim.corretorId || ((profile?.role === 'corretor' || profile?.role === 'vendedor') ? profile?.uid : null),
+          createdBy: currentSim.createdBy || profile?.createdBy || null,
+          promotoraId: currentSim.promotoraId || (profile?.role === 'promotora' ? profile?.uid : (profile?.promotoraId || profile?.createdBy || 'admin')),
           recommendedBanks: calculatedOffers.slice(0, 3).map(o => o.name),
           topOffer: topOffer?.name || null,
           topOfferTabela: topOffer?.tabela || null,
@@ -477,7 +485,8 @@ export default function Recomendacoes() {
           topOfferTroco: topOffer?.valorTroco || 0,
           topOfferTaxa: topOffer?.novaTaxaPortabilidade || 0,
           topOfferPrazo: topOffer.prazoRefinPort || (currentSim.subConvenio === 'Marinha' ? 72 : (currentSim.prazoTotal || 96)),
-          createdAt: serverTimestamp()
+          createdAt: currentSim.createdAt || serverTimestamp(),
+          updatedAt: serverTimestamp()
         };
         setDoc(doc(db, 'simulations', simulationId), simulationRecord, { merge: true }).catch(err => console.error("Error saving simulation:", err));
       }
@@ -955,24 +964,24 @@ export default function Recomendacoes() {
               </div>
 
               {(simData.nomeCliente || simData.cpfCliente) && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-white/5">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-white/5">
                   {simData.nomeCliente && (
-                    <div className="flex flex-col">
+                    <div className="flex flex-col sm:col-span-3">
                       <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Cliente</span>
-                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{simData.nomeCliente}</span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-white">{simData.nomeCliente}</span>
                     </div>
                   )}
                   {simData.cpfCliente && (
-                    <div className="flex flex-col">
+                    <div className="flex flex-col sm:col-span-1">
                       <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest">CPF</span>
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">{simData.cpfCliente}</span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-white">{simData.cpfCliente}</span>
                     </div>
                   )}
                 </div>
               )}
 
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
-                <div className="space-y-1 col-span-2 sm:col-span-3">
+                <div className="space-y-1 col-span-2 sm:col-span-2">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Banco Atual</p>
                   <div className="flex items-center gap-2">
                     <div className="size-6 rounded-lg bg-slate-100 dark:bg-white/5 text-slate-400 flex items-center justify-center shrink-0">
@@ -980,6 +989,10 @@ export default function Recomendacoes() {
                     </div>
                     <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{simData.bancoAtual}</p>
                   </div>
+                </div>
+                <div className="space-y-1 col-span-1">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Saldo Devedor</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(simData.saldoDevedor)}</p>
                 </div>
                 <div className="space-y-1 col-span-1">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Parcela</p>

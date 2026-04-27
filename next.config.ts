@@ -1,13 +1,19 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
   reactStrictMode: true,
+  serverExternalPackages: ['firebase-admin', 'twilio', 'nodemailer', 'jspdf', 'html2canvas'],
   eslint: {
     ignoreDuringBuilds: true,
   },
   typescript: {
     ignoreBuildErrors: true,
+  },
+  productionBrowserSourceMaps: false,
+  staticPageGenerationTimeout: 600,
+  experimental: {
+    cpus: 1,
+    workerThreads: false,
   },
   images: {
     remotePatterns: [
@@ -47,10 +53,6 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
-  },
-  devIndicators: {
-    appIsrStatus: false,
-    buildActivity: false,
   },
 };
 

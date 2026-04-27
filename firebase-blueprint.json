@@ -94,6 +94,31 @@
         "installments": { "type": "number" }
       },
       "required": ["userId", "clientName", "clientCpf", "status", "createdAt"]
+    },
+    "WhatsAppSession": {
+      "title": "WhatsAppSession",
+      "description": "Interactive simulation session over WhatsApp",
+      "type": "object",
+      "properties": {
+        "step": { "type": "string" },
+        "updatedAt": { "type": "timestamp" },
+        "data": { "type": "object" },
+        "lastMessage": { "type": "string" }
+      },
+      "required": ["step", "updatedAt"]
+    },
+    "WhatsAppLog": {
+      "title": "WhatsAppLog",
+      "description": "Log of WhatsApp messages and attempts",
+      "type": "object",
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "body": { "type": "string" },
+        "timestamp": { "type": "timestamp" },
+        "status": { "type": "string" }
+      },
+      "required": ["from", "body", "timestamp"]
     }
   },
   "firestore": {
@@ -112,6 +137,18 @@
     "/proposals/{proposalId}": {
       "schema": { "$ref": "Proposal" },
       "description": "Proposal records"
+    },
+    "/whatsappSessions/{sessionId}": {
+      "schema": { "$ref": "WhatsAppSession" },
+      "description": "WhatsApp simulation sessions"
+    },
+    "/whatsappLogs/{logId}": {
+      "schema": { "$ref": "WhatsAppLog" },
+      "description": "WhatsApp communication logs"
+    },
+    "/banks/{bankId}": {
+      "schema": { "type": "object" },
+      "description": "Bank list for calculations"
     },
     "/simulations/{simulationId}": {
       "schema": {

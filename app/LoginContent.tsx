@@ -88,10 +88,10 @@ export default function LoginContent() {
   }, [setQuotaExceeded, slug]);
 
   useEffect(() => {
-    console.log("LoginContent: isAuthReady:", isAuthReady, "user:", user?.email);
     if (isAuthReady && user) {
-      console.log("LoginContent: Redirecting to dashboard...");
-      router.push('/dashboard');
+      console.log("LoginContent: Usuário detectado, redirecionando para dashboard...");
+      // Forçar redirecionamento imediato
+      router.replace('/dashboard');
     }
   }, [user, isAuthReady, router]);
 

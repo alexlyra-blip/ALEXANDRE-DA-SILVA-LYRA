@@ -29,7 +29,7 @@ import autoTable from 'jspdf-autotable';
 import { useToast } from '@/contexts/ToastContext';
 
 export default function PropostasPage() {
-  const { profile, loading: authLoading } = useAuth();
+  const { profile, isAuthReady } = useAuth();
   const { showToast } = useToast();
   const [proposals, setProposals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -310,7 +310,7 @@ export default function PropostasPage() {
     }).format(value || 0);
   };
 
-  if (authLoading || loading) {
+  if (!isAuthReady || loading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
@@ -319,10 +319,7 @@ export default function PropostasPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row">
-      <Sidebar />
-      
-      <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-0">
+    <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-0">
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-30 shadow-sm">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -778,8 +775,5 @@ export default function PropostasPage() {
           </div>
         )}
       </div>
-
-      <BottomNav activeTab="propostas" />
-    </div>
-  );
+    );
 }

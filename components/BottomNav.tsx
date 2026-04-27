@@ -6,10 +6,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PromotoraAvatar } from './PromotoraAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
 
-export default function BottomNav({ activeTab }: { activeTab: string }) {
+export default function BottomNav() {
   const pathname = usePathname();
   const { profile } = useAuth();
   const { theme, toggleTheme } = useTheme();
+
+  // Determine active tab from pathname
+  const activeTab = 
+    pathname === '/dashboard' ? 'inicio' :
+    pathname.startsWith('/simulacao/nova') ? 'nova' :
+    pathname.startsWith('/simulacao/recomendacoes') ? 'ofertas' :
+    pathname.startsWith('/propostas') ? 'propostas' :
+    pathname.startsWith('/regras') ? 'regras' :
+    pathname.startsWith('/perfil') ? 'perfil' : '';
 
   // Hide on Login (/), Cadastro (/cadastro), Promotora Login (/p/[slug])
   if (pathname === '/' || pathname === '/cadastro' || pathname.startsWith('/p/')) {

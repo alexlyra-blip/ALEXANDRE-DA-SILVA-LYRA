@@ -63,6 +63,11 @@ export default function Sidebar() {
     menuItems.push({ name: 'Usuários', icon: Users, path: '/admin/usuarios' });
   }
 
+  // Apenas Admin por enquanto
+  if (profile?.role === 'admin') {
+    menuItems.push({ name: 'Simulador WhatsApp', icon: FileText, path: '/admin/simulador-whatsapp' });
+  }
+
   return (
     <aside className="hidden md:flex flex-col w-64 shrink-0 bg-[var(--sidebar-bg)] dark:bg-black text-white h-screen sticky top-0 shadow-2xl z-50 border-r border-white/5 dark:border-white/10 overflow-hidden">
       {/* Decorative elements to match dashboard header pattern */}
