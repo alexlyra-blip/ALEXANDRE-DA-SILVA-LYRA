@@ -873,9 +873,9 @@ export default function Dashboard() {
                 <PieChartIcon className="w-5 h-5 text-pink-500" />
                 Mix por Convênio
               </h3>
-              <div className="flex-1 w-full relative min-h-[350px]">
+              <div className="flex-1 w-full relative h-[350px]">
                 {stats.donutData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={350}>
                     <PieChart>
                       <Pie
                         data={stats.donutData}
