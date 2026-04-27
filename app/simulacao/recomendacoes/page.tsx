@@ -273,7 +273,7 @@ export default function Recomendacoes() {
         benefitTimeMonths = years * 12 + months;
       }
 
-      const cleanBeneficio = codigoBeneficio.replace(/^0+/, '');
+      const cleanBeneficio = codigoBeneficio ? String(codigoBeneficio).replace(/^0+/, '') : '';
 
       const checkBankMatch = (ruleBank: string, currentBank: string) => {
         if (!ruleBank || !currentBank) return false;
@@ -1459,14 +1459,10 @@ export default function Recomendacoes() {
                     )}
                     
                     {/* Specific dynamic rules */}
-                    {currentOffer.rules && currentOffer.rules.length > 0 && currentOffer.rules.map((ruleGroup: string[], iIdx: number) => (
-                      <div key={`${currentOffer.id}-${iIdx}`} className="flex gap-1">
-                        {ruleGroup.map((rule, jIdx) => (
-                          <div key={`${iIdx}-${jIdx}-${rule}`} className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-slate-200 dark:border-slate-700">
-                            <Sparkles className="w-3.5 h-3.5 text-primary opacity-50" />
-                            <span>{rule}</span>
-                          </div>
-                        ))}
+                    {currentOffer.rules && currentOffer.rules.length > 0 && currentOffer.rules.map((rule: string, iIdx: number) => (
+                      <div key={`${currentOffer.id}-${iIdx}`} className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-slate-200 dark:border-slate-700">
+                        <Sparkles className="w-3.5 h-3.5 text-primary opacity-50" />
+                        <span>{rule}</span>
                       </div>
                     ))}
                   </div>

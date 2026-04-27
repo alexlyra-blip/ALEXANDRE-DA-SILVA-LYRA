@@ -38,13 +38,13 @@ service cloud.firestore {
 
     // Bank Rules
     match /bankRules/{ruleId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdmin();
     }
 
     // General Rules
     match /generalRules/{ruleId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -56,8 +56,8 @@ service cloud.firestore {
 
     // Simulations
     match /simulations/{simulationId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
-      allow write: if isSignedIn();
+      allow read: if true;
+      allow write: if true;
     }
 
     // Settings

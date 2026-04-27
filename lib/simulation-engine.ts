@@ -15,7 +15,7 @@ export interface Offer {
   useTaxaPonderada?: boolean;
   originalRateCalculated?: number;
   priority?: number;
-  rules?: string[][];
+  rules?: string[];
   convenio: string;
   subConvenio?: string;
   tabelasCount: number;
@@ -83,7 +83,7 @@ export function calculateOffers(
   const originalRate = params.taxaJurosMensal ? params.taxaJurosMensal * 100 : 0;
   const calculatedOffers: Offer[] = [];
   
-  const cleanBeneficio = codigoBeneficio.replace(/^0+/, '');
+  const cleanBeneficio = codigoBeneficio ? String(codigoBeneficio).replace(/^0+/, '') : '';
   
   // Calculate benefit time in months
   let benefitTimeMonths = 0;
@@ -205,9 +205,12 @@ export function calculateOffers(
         const valorAValidar = bSumSaldoTroco ? (saldoDevedor + valorTroco) : saldoDevedor;
         const bankMinTroco = parseRate(bank.minTroco);
         const tableMinTicket = (tabela.useMinTicket === true) ? parseRate(tabela.minTicket) : 0;
-        const effectiveMinTicket = tableMinTicket > 0 ? tableMinTicket : bankMinTroco;
-
-        if (effectiveMinTicket > 0 && valorAValidar < effectiveMinTicket) return;
+        
+        // Check Ticket
+        if (tableMinTicket > 0 && valorAValidar < tableMinTicket) return;
+        
+        // Check Min Troco
+        if (bankMinTroco > 0 && valorTroco < bankMinTroco) return;
 
         // Rates and Validations
         const tDiferencial = parseRate(tabela.taxaDiferencial);
@@ -237,13 +240,13 @@ export function calculateOffers(
 
         if (valorTroco <= 0) return;
 
-        const rules: string[][] = [];
-        if (bank.acceptsLOAS) rules.push(['Aceita LOAS']);
-        if (bank.acceptsIlliterate && params.isAnalfabeto) rules.push(['Aceita Analfabeto']);
-        if (bank.acceptsInvalidez !== false && isInvalidity) rules.push(['Aceita Invalidez']);
-        if (bank.accepts60Mais && (idade >= 60 || params.isCliente60Mais)) rules.push(['Aceita 60+']);
-        if (bSumSaldoTroco) rules.push(['Soma Saldo+Troco']);
-        if (bUseTaxaPonderada) rules.push(['Taxa Ponderada Mesa']);
+        const rules: string[] = [];
+        if (bank.acceptsLOAS) rules.push('Aceita LOAS');
+        if (bank.acceptsIlliterate && params.isAnalfabeto) rules.push('Aceita Analfabeto');
+        if (bank.acceptsInvalidez !== false && isInvalidity) rules.push('Aceita Invalidez');
+        if (bank.accepts60Mais && (idade >= 60 || params.isCliente60Mais)) rules.push('Aceita 60+');
+        if (bSumSaldoTroco) rules.push('Soma Saldo+Troco');
+        if (bUseTaxaPonderada) rules.push('Taxa Ponderada Mesa');
 
         calculatedOffers.push({
           id: `${bank.id}-${tabela.nome}`,

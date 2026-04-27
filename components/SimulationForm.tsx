@@ -335,7 +335,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [isCliente60Mais, setIsCliente60Mais] = useState<boolean | null>(null);
 
   const effectiveIs60MaisForUI = isCliente60Mais !== null ? isCliente60Mais : (parseInt(idade) >= 60);
-  const isInvalidityBenefit = ['04', '05', '11', '30', '32', '33', '34', '92'].includes(codigoBeneficio);
+  const isInvalidityBenefit = ['4', '04', '5', '05', '11', '30', '32', '33', '34', '92'].includes(codigoBeneficio);
   const showDataConcessao = convenio === 'INSS' && isInvalidityBenefit && parseInt(idade) < 60;
   const show60Mais = parseInt(idade) >= 60;
 
