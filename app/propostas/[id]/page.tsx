@@ -22,8 +22,6 @@ import {
   Hash
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import Sidebar from '@/components/Sidebar';
-import BottomNav from '@/components/BottomNav';
 import { saveProposal, deleteProposal, getProposals } from '@/lib/data-service';
 import { format, addBusinessDays, differenceInBusinessDays, isAfter, startOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';

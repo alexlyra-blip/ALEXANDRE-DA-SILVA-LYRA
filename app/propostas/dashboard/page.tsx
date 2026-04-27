@@ -4,8 +4,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/firebase';
 import { collection, query, where, orderBy, limit, or, onSnapshot } from 'firebase/firestore';
-import Sidebar from '@/components/Sidebar';
-import BottomNav from '@/components/BottomNav';
 import { ArrowLeft, TrendingUp, DollarSign, Users, Clock, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
@@ -171,17 +169,15 @@ export default function DashboardPropostasPage() {
   if (loading) return <div className="flex items-center justify-center h-screen">Carregando...</div>;
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-4">
-          <Link href="/propostas" className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">
-            <ArrowLeft className="w-6 h-6" />
-          </Link>
-          <h1 className="text-2xl font-bold">Dashboard de Propostas</h1>
-        </header>
-        
-        <main className="p-6 space-y-6">
+    <>
+      <header className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-4">
+        <Link href="/propostas" className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">
+          <ArrowLeft className="w-6 h-6" />
+        </Link>
+        <h1 className="text-2xl font-bold">Dashboard de Propostas</h1>
+      </header>
+      
+      <main className="p-6 space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex items-center gap-4 mb-4">
@@ -373,9 +369,7 @@ export default function DashboardPropostasPage() {
               </div>
             </div>
           </div>
-        </main>
-      </div>
-      <BottomNav />
-    </div>
+      </main>
+    </>
   );
 }

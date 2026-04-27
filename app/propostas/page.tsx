@@ -18,8 +18,6 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import Sidebar from '@/components/Sidebar';
-import BottomNav from '@/components/BottomNav';
 import { getProposals, deleteProposal } from '@/lib/data-service';
 import Link from 'next/link';
 import { format, startOfDay, isAfter, addBusinessDays, subDays, isWithinInterval, parseISO } from 'date-fns';
