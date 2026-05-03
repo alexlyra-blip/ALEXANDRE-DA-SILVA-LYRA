@@ -93,43 +93,55 @@ export default function Dashboard() {
       brandingId = 'admin';
     }
 
-    const settingsRef = doc(db, 'settings', brandingId);
-    const unsubscribe = onSnapshot(settingsRef, async (snapshot) => {
-      let data: any = null;
+    let isUnmounted = false;
+    let unsubscribe: (() => void) | undefined;
+    
+    const timeoutId = setTimeout(() => {
+      if (isUnmounted) return;
       
-      if (snapshot.exists()) {
-        data = snapshot.data();
-      } else if (brandingId !== 'admin') {
-        try {
-          let fallbackData = null;
-          
-          if (profile.role === 'vendedor' || profile.role === 'corretor') {
-            const creatorId = profile.promotoraId || profile.createdBy;
-            if (creatorId && creatorId !== 'admin') {
-              fallbackData = await getBrandingSettings(creatorId);
+      const settingsRef = doc(db, 'settings', brandingId);
+      unsubscribe = onSnapshot(settingsRef, async (snapshot) => {
+        if (isUnmounted) return;
+        let data: any = null;
+        
+        if (snapshot.exists()) {
+          data = snapshot.data();
+        } else if (brandingId !== 'admin') {
+          try {
+            let fallbackData = null;
+            
+            if (profile.role === 'vendedor' || profile.role === 'corretor') {
+              const creatorId = profile.promotoraId || profile.createdBy;
+              if (creatorId && creatorId !== 'admin') {
+                fallbackData = await getBrandingSettings(creatorId);
+              }
             }
+            
+            if (!fallbackData) {
+              fallbackData = await getBrandingSettings('admin');
+            }
+            
+            if (fallbackData) data = fallbackData;
+          } catch (e) {
+            console.error("Failed to fetch fallback settings:", e);
           }
-          
-          if (!fallbackData) {
-            fallbackData = await getBrandingSettings('admin');
-          }
-          
-          if (fallbackData) data = fallbackData;
-        } catch (e) {
-          console.error("Failed to fetch fallback settings:", e);
         }
-      }
 
-      if (data) {
-        setPromotoraSettings({ logoUrl: data.loginImageUrl || '', name: data.promoterName || profile.name });
-      } else {
-        setPromotoraSettings({ logoUrl: '', name: profile.name });
-      }
-    }, (error) => {
-      console.error("Error fetching settings:", error);
-    });
+        if (data) {
+          setPromotoraSettings({ logoUrl: data.loginImageUrl || '', name: data.promoterName || profile.name });
+        } else {
+          setPromotoraSettings({ logoUrl: '', name: profile.name });
+        }
+      }, (error) => {
+        console.error("Error fetching settings:", error);
+      });
+    }, 100);
 
-    return () => unsubscribe();
+    return () => {
+      isUnmounted = true;
+      clearTimeout(timeoutId);
+      if (unsubscribe) unsubscribe();
+    };
   }, [profile]);
 
   useEffect(() => {
@@ -193,8 +205,16 @@ export default function Dashboard() {
       return listener;
     };
 
-    unsubscribeFn = setupQuery(false);
+    let isUnmounted = false;
+    
+    const timeoutId = setTimeout(() => {
+      if (isUnmounted) return;
+      unsubscribeFn = setupQuery(false);
+    }, 100);
+
     return () => { 
+      isUnmounted = true;
+      clearTimeout(timeoutId);
       console.log("Dashboard: Cleanup simulations listener");
       if (unsubscribeFn) unsubscribeFn(); 
     };
@@ -214,14 +234,25 @@ export default function Dashboard() {
 
     console.log("Dashboard: Setting up whatsappSessions listener for admin:", profile.email);
     const q = query(collection(db, 'whatsappSessions'), limit(10));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setWhatsappSessions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
-      console.warn("Dashboard: Could not load whatsappSessions (possibly missing permissions or empty)", error);
-      setWhatsappSessions([]);
-    });
+    
+    let isUnmounted = false;
+    let unsubscribe: (() => void) | undefined;
+    
+    const timeoutId = setTimeout(() => {
+      if (isUnmounted) return;
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        setWhatsappSessions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, (error) => {
+        console.warn("Dashboard: Could not load whatsappSessions (possibly missing permissions or empty)", error);
+        setWhatsappSessions([]);
+      });
+    }, 100);
 
-    return () => unsubscribe();
+    return () => {
+      isUnmounted = true;
+      clearTimeout(timeoutId);
+      if (unsubscribe) unsubscribe();
+    }
   }, [profile]);
 
   // Filter simulations based on role and filters

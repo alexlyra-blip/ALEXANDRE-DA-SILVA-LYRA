@@ -423,7 +423,8 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       const ai = getAI();
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Extraia os dados de simulação de portabilidade do seguinte texto: "${aiInput}".`,
+        contents: `Extraia os dados de simulação de portabilidade do seguinte texto em Português: "${aiInput}".
+        Obrigatório identificar: Idade, Convênio, Banco Atual, Valor da Parcela, Prazo Total, Parcelas Restantes e Saldo Devedor.`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {

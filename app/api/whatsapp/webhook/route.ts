@@ -94,9 +94,9 @@ export async function POST(request: Request) {
 
       // 1. Usar a IA para extrair dados ou gerar resposta
       const ai = getAI();
-      const prompt = `Você é um assistente de crédito consignado. Analise a mensagem do cliente: "${text}".
+      const prompt = `Você é um assistente especialista em crédito consignado no Brasil. Analise a mensagem do cliente em Português: "${text}".
       Extraia os dados para simulação de portabilidade. 
-      Campos necessários: Idade, Convênio (INSS, SIAPE, etc), Banco Atual, Valor da Parcela, Saldo Devedor, Parcelas Pagas, Parcelas Restantes, Código do Benefício, Taxa de Juros Atual (se mencionada).
+      Campos necessários: Idade, Convênio (ex: INSS, SIAPE), Banco Atual, Valor da Parcela, Saldo Devedor, Parcelas Pagas, Parcelas Restantes, Código do Benefício, Taxa de Juros Atual (se mencionada).
       Se o cliente não enviou tudo, identifique o que falta.`;
 
       const result = await ai.models.generateContent({
@@ -130,11 +130,12 @@ export async function POST(request: Request) {
         }
       } else {
         // 3. Gerar resposta conversacional pedindo o que falta
-        const chatPrompt = `Você é um assistente de crédito. O cliente disse: "${text}". 
+        const chatPrompt = `Você é o "Gutto", um assistente de crédito consignado cordial e prestativo. O cliente disse: "${text}". 
+        Obrigatório responder em Português do Brasil (PT-BR).
         Os dados extraídos foram: ${JSON.stringify(extraction.data)}. 
         Os campos que faltam são: ${extraction.missingFields?.join(', ') || 'todos'}.
-        Gere uma resposta curta e amigável pedindo os dados que faltam para fazer a simulação de portabilidade. 
-        Se for apenas um "Oi", peça: Idade, Convênio, Banco Atual, Valor da Parcela e Saldo Devedor.`;
+        Gere uma resposta curta, amigável e profissional pedindo os seguintes dados que faltam para fazer a simulação de portabilidade. 
+        Se for apenas uma saudação (Oi, Olá), apresente-se como Gutto e peça: Idade, Convênio, Banco Atual, Valor da Parcela e Saldo Devedor.`;
         
         const chatResult = await ai.models.generateContent({
           model: "gemini-3-flash-preview",

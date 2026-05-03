@@ -75,27 +75,36 @@ export default function Sidebar() {
       <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary/10 rounded-full -ml-12 -mb-12 blur-xl pointer-events-none" />
       
       <div className="p-4 relative z-10">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex flex-col items-center gap-2 mb-4 pt-4 pb-1 px-1 relative">
+          <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/10 to-transparent -mt-4 pointer-events-none" />
           <motion.div
             animate={{ y: [0, -2, 0] }}
-            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="relative"
           >
-            <motion.div animate={avatarControls}>
+            <div className="absolute inset-0 bg-secondary/30 blur-xl rounded-full scale-125 animate-pulse" />
+            <motion.div animate={avatarControls} className="relative z-10">
               <PromotoraAvatar 
                 logoUrl={profile?.avatarUrl || profile?.photoUrl} 
                 name={profile?.name} 
-                className="size-12 border-2 border-white/30 shadow-xl" 
+                className="size-24 border-2 border-white/30 shadow-[0_10px_30px_rgba(0,0,0,0.3)] ring-2 ring-white/5" 
               />
             </motion.div>
           </motion.div>
-          <div className="overflow-hidden">
-            <p className="font-black text-sm truncate leading-tight">{profile?.name || 'Usuário'}</p>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">{profile?.role || 'Corretor'}</p>
+          <div className="text-center w-full px-2 relative z-10">
+            <h2 className="font-black text-xl break-words leading-tight tracking-tight text-white mb-1 drop-shadow-md">
+              {profile?.name || 'Usuário'}
+            </h2>
+            <div className="inline-block px-3 py-1 bg-secondary/20 rounded-full border border-secondary/30">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-secondary">
+                {profile?.role || 'Corretor'}
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between bg-white/5 rounded-lg p-1.5 py-2">
-          <div className="flex items-center gap-1.5 text-white/60 font-mono text-[10px]">
+        <div className="flex items-center justify-between bg-white/5 rounded-lg p-1 px-1.5">
+          <div className="flex items-center gap-1 text-white/60 font-mono text-[9px]">
             <Clock className="w-3 h-3" />
             <span className="font-bold">{formatTime(inactivityTimeLeft)}</span>
             <span className="text-[7px] font-black tracking-tight text-white/40 uppercase ml-0.5">DESLOGAR</span>
@@ -112,7 +121,7 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <div className="mt-4 px-2 py-1.5 bg-white/5 rounded-lg border border-white/5 flex items-center justify-between">
+        <div className="mt-2 px-2 py-1 bg-white/5 rounded-lg border border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/40">
             <Calendar className="w-3 h-3" />
             <span>{currentTime.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
@@ -123,18 +132,18 @@ export default function Sidebar() {
           </div>
         </div>
         
-        <div className="h-px bg-white/10 w-full my-6 opacity-50" />
+        <div className="h-px bg-white/10 w-full my-3 opacity-30" />
 
-        <nav className="space-y-2">
+        <nav className="space-y-1">
           {menuItems.map((item) => {
             const isActive = pathname === item.path;
             return (
               <Link 
                 key={item.path} 
                 href={item.path} 
-                className={`flex items-center gap-3 p-4 rounded-2xl transition-all group relative ${
+                className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all group relative ${
                   isActive 
-                    ? 'bg-white text-primary shadow-xl shadow-black/10 font-bold' 
+                    ? 'bg-white text-primary shadow-lg shadow-black/5 font-bold' 
                     : 'hover:bg-white/10 dark:hover:bg-input text-white/80 hover:text-white'
                 }`}
               >
@@ -152,10 +161,10 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      <div className="mt-auto p-8 space-y-2">
+      <div className="mt-auto p-4 space-y-1">
         <button 
           onClick={toggleTheme}
-          className="flex items-center gap-3 p-4 rounded-2xl w-full text-left hover:bg-white/10 dark:hover:bg-input text-white/80 transition-all"
+          className="flex items-center gap-2.5 p-2.5 rounded-xl w-full text-left hover:bg-white/10 dark:hover:bg-input text-white/80 transition-all"
         >
           {theme === 'light' ? (
             <>
@@ -171,7 +180,7 @@ export default function Sidebar() {
         </button>
         <Link 
           href="/perfil" 
-          className={`flex items-center gap-3 p-4 rounded-2xl transition-all ${
+          className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
             pathname === '/perfil' 
               ? 'bg-white text-primary font-bold' 
               : 'hover:bg-white/10 dark:hover:bg-input text-white/80'

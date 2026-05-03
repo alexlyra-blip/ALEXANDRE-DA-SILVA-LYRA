@@ -137,55 +137,66 @@ function BrandingWrapper({ children }: { children: React.ReactNode }) {
     console.log(`BrandingWrapper: Listening for branding for ${profile.role} using ID: ${brandingId}`);
 
     const settingsRef = doc(db, 'settings', brandingId);
-    const unsubscribe = onSnapshot(settingsRef, async (snapshot) => {
-      let data: any = null;
-      
-      if (snapshot.exists()) {
-        data = snapshot.data();
-      } else if (brandingId !== 'admin') {
-        // Fallback to creator's branding or admin if specific branding not found
-        console.log("BrandingWrapper: Specific branding not found, checking fallbacks");
-        try {
-          let fallbackData = null;
-          
-          // If user is corretor/vendedor, try their creator's branding first
-          if (profile.role === 'vendedor' || profile.role === 'corretor') {
-            const creatorId = profile.promotoraId || profile.createdBy;
-            if (creatorId && creatorId !== 'admin') {
-              fallbackData = await getBrandingSettings(creatorId);
+    let isUnmounted = false;
+    let unsubscribe: (() => void) | undefined;
+    
+    const timeoutId = setTimeout(() => {
+      if (isUnmounted) return;
+      unsubscribe = onSnapshot(settingsRef, async (snapshot) => {
+        if (isUnmounted) return;
+        let data: any = null;
+        
+        if (snapshot.exists()) {
+          data = snapshot.data();
+        } else if (brandingId !== 'admin') {
+          // Fallback to creator's branding or admin if specific branding not found
+          console.log("BrandingWrapper: Specific branding not found, checking fallbacks");
+          try {
+            let fallbackData = null;
+            
+            // If user is corretor/vendedor, try their creator's branding first
+            if (profile.role === 'vendedor' || profile.role === 'corretor') {
+              const creatorId = profile.promotoraId || profile.createdBy;
+              if (creatorId && creatorId !== 'admin') {
+                fallbackData = await getBrandingSettings(creatorId);
+              }
             }
+            
+            // If still no data, fallback to admin
+            if (!fallbackData) {
+              fallbackData = await getBrandingSettings('admin');
+            }
+            
+            if (fallbackData) data = fallbackData;
+          } catch (e) {
+            console.error("Failed to fetch fallback branding", e);
           }
-          
-          // If still no data, fallback to admin
-          if (!fallbackData) {
-            fallbackData = await getBrandingSettings('admin');
-          }
-          
-          if (fallbackData) data = fallbackData;
-        } catch (e) {
-          console.error("Failed to fetch fallback branding", e);
         }
-      }
 
-      if (data) {
-        const newBranding = {
-          primaryColor: data.primaryColor || '#1152d4',
-          loginImageUrl: data.loginImageUrl || '',
-          promoterName: data.promoterName || ''
-        };
-        setBranding(newBranding);
-        safeLocalStorageSet(CACHE_KEY, JSON.stringify({
-          data: newBranding,
-          timestamp: Date.now()
-        }));
-      } else {
-        setBranding({ primaryColor: '#1152d4', loginImageUrl: '', promoterName: '' });
-      }
-    }, (error) => {
-      console.error("BrandingWrapper: Error listening to branding:", error);
-    });
+        if (data) {
+          const newBranding = {
+            primaryColor: data.primaryColor || '#1152d4',
+            loginImageUrl: data.loginImageUrl || '',
+            promoterName: data.promoterName || ''
+          };
+          setBranding(newBranding);
+          safeLocalStorageSet(CACHE_KEY, JSON.stringify({
+            data: newBranding,
+            timestamp: Date.now()
+          }));
+        } else {
+          setBranding({ primaryColor: '#1152d4', loginImageUrl: '', promoterName: '' });
+        }
+      }, (error) => {
+        console.error("BrandingWrapper: Error listening to branding:", error);
+      });
+    }, 100);
 
-    return () => unsubscribe();
+    return () => {
+      isUnmounted = true;
+      clearTimeout(timeoutId);
+      if (unsubscribe) unsubscribe();
+    };
   }, [profile]);
 
   const primaryDark = darkenColor(branding.primaryColor, 30);

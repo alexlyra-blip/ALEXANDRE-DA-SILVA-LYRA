@@ -72,11 +72,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsAuthReady(true);
     }, 15000); // Aumentado para 15s pois o Firebase pode ser lento em conexões instáveis
 
-    let unsubscribeProfile: () => void;
+    let unsubscribeProfile: (() => void) | undefined;
+    let timeoutSnapId: NodeJS.Timeout;
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("AuthContext: Estado de autenticação alterado:", firebaseUser?.email || "Nenhum usuário");
       clearTimeout(timeoutId); 
+      clearTimeout(timeoutSnapId);
       
       setUser(firebaseUser);
       setIsPending(false);
@@ -89,82 +91,86 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userRef = doc(db, 'users', firebaseUser.uid);
         
         console.log("AuthContext: Buscando perfil do usuário no Firestore...");
-        unsubscribeProfile = onSnapshot(userRef, async (userDoc) => {
-          if (userDoc.exists()) {
-            let data = userDoc.data() as UserProfile;
-            console.log("AuthContext: Perfil carregado:", data.role, "| Status:", data.status);
-            
-            // Garantir que administradores principais estejam sempre ativos
-            const isFirstAdmin = 
-              firebaseUser.email === 'alexandrelyra@msn.com' || 
-              firebaseUser.email === 'alexlyra@gmail.com' || 
-              firebaseUser.email === 'alexandrelyra@gmail.com' ||
-              firebaseUser.uid === 'AoFpOZClDnM3n5bTj3Ul32qvLIw2' ||
-              firebaseUser.uid === '9L0530rP40Sj4fx2xtnXs63Bkqz2';
-            
-            let updatedData = { ...data };
-            
-            if (isFirstAdmin && (updatedData.status !== 'active' || updatedData.role !== 'admin')) {
-              console.log("AuthContext: Atualizando perfil de administrador principal...");
-              updatedData = { ...updatedData, status: 'active', role: 'admin' };
+        timeoutSnapId = setTimeout(() => {
+          // If we immediately changed user or unmounted, don't subscribe.
+          // Because unsubscribeProfile is function scoped to the effect, if it got cleared, it means we don't need to run.
+          unsubscribeProfile = onSnapshot(userRef, async (userDoc) => {
+            if (userDoc.exists()) {
+              let data = userDoc.data() as UserProfile;
+              console.log("AuthContext: Perfil carregado:", data.role, "| Status:", data.status);
+              
+              // Garantir que administradores principais estejam sempre ativos
+              const isFirstAdmin = 
+                firebaseUser.email === 'alexandrelyra@msn.com' || 
+                firebaseUser.email === 'alexlyra@gmail.com' || 
+                firebaseUser.email === 'alexandrelyra@gmail.com' ||
+                firebaseUser.uid === 'AoFpOZClDnM3n5bTj3Ul32qvLIw2' ||
+                firebaseUser.uid === '9L0530rP40Sj4fx2xtnXs63Bkqz2';
+              
+              let updatedData = { ...data };
+              
+              if (isFirstAdmin && (updatedData.status !== 'active' || updatedData.role !== 'admin')) {
+                console.log("AuthContext: Atualizando perfil de administrador principal...");
+                updatedData = { ...updatedData, status: 'active', role: 'admin' };
+                try {
+                  await setDoc(userRef, { 
+                    status: 'active', 
+                    role: 'admin',
+                    updatedAt: serverTimestamp() 
+                  }, { merge: true });
+                } catch (error) {
+                  console.error("AuthContext: Erro ao atualizar admin", error);
+                }
+              }
+
+              setProfile(updatedData);
+              setIsPending(updatedData.status !== 'active');
+              setIsAuthReady(true); // Garantir que está pronto após carregar perfil
+            } else {
+              console.log("AuthContext: Perfil não encontrado, criando novo perfil...");
+              const isFirstAdmin = 
+                firebaseUser.email === 'alexandrelyra@msn.com' || 
+                firebaseUser.email === 'alexlyra@gmail.com' || 
+                firebaseUser.email === 'alexandrelyra@gmail.com' ||
+                firebaseUser.uid === 'AoFpOZClDnM3n5bTj3Ul32qvLIw2' ||
+                firebaseUser.uid === '9L0530rP40Sj4fx2xtnXs63Bkqz2';
+              const newProfile: UserProfile = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || '',
+                name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário',
+                photoUrl: firebaseUser.photoURL || '',
+                avatarUrl: firebaseUser.photoURL || '',
+                role: isFirstAdmin ? 'admin' : 'corretor',
+                status: isFirstAdmin ? 'active' : 'pending',
+                createdAt: serverTimestamp(),
+              };
+              
               try {
-                await setDoc(userRef, { 
-                  status: 'active', 
-                  role: 'admin',
-                  updatedAt: serverTimestamp() 
-                }, { merge: true });
+                await setDoc(userRef, newProfile);
+                setProfile(newProfile);
+                setIsPending(newProfile.status !== 'active');
+                setIsAuthReady(true);
               } catch (error) {
-                console.error("AuthContext: Erro ao atualizar admin", error);
+                console.error("AuthContext: Erro ao criar perfil", error);
+                setProfile(newProfile);
+                setIsPending(newProfile.status !== 'active');
+                setIsAuthReady(true);
               }
             }
-
-            setProfile(updatedData);
-            setIsPending(updatedData.status !== 'active');
-            setIsAuthReady(true); // Garantir que está pronto após carregar perfil
-          } else {
-            console.log("AuthContext: Perfil não encontrado, criando novo perfil...");
-            const isFirstAdmin = 
-              firebaseUser.email === 'alexandrelyra@msn.com' || 
-              firebaseUser.email === 'alexlyra@gmail.com' || 
-              firebaseUser.email === 'alexandrelyra@gmail.com' ||
-              firebaseUser.uid === 'AoFpOZClDnM3n5bTj3Ul32qvLIw2' ||
-              firebaseUser.uid === '9L0530rP40Sj4fx2xtnXs63Bkqz2';
-            const newProfile: UserProfile = {
+          }, (error: any) => {
+            console.error("AuthContext: Erro no onSnapshot do perfil", error);
+            // Fallback para evitar travamento
+            setProfile({
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
-              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário',
-              photoUrl: firebaseUser.photoURL || '',
-              avatarUrl: firebaseUser.photoURL || '',
-              role: isFirstAdmin ? 'admin' : 'corretor',
-              status: isFirstAdmin ? 'active' : 'pending',
+              name: firebaseUser.displayName || 'Usuário',
+              role: 'corretor',
+              status: 'active',
               createdAt: serverTimestamp(),
-            };
-            
-            try {
-              await setDoc(userRef, newProfile);
-              setProfile(newProfile);
-              setIsPending(newProfile.status !== 'active');
-              setIsAuthReady(true);
-            } catch (error) {
-              console.error("AuthContext: Erro ao criar perfil", error);
-              setProfile(newProfile);
-              setIsPending(newProfile.status !== 'active');
-              setIsAuthReady(true);
-            }
-          }
-        }, (error: any) => {
-          console.error("AuthContext: Erro no onSnapshot do perfil", error);
-          // Fallback para evitar travamento
-          setProfile({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            name: firebaseUser.displayName || 'Usuário',
-            role: 'corretor',
-            status: 'active',
-            createdAt: serverTimestamp(),
+            });
+            setIsAuthReady(true);
           });
-          setIsAuthReady(true);
-        });
+        }, 100);
       } else {
         setProfile(null);
         setIsAuthReady(true);
@@ -175,6 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unsubscribe();
       if (unsubscribeProfile) unsubscribeProfile();
       clearTimeout(timeoutId);
+      clearTimeout(timeoutSnapId);
     };
   }, []);
 

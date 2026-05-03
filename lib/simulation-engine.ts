@@ -39,19 +39,51 @@ export interface SimulationParams {
   isAnalfabeto?: boolean;
 }
 
+const BANK_ALIASES: Record<string, string[]> = {
+  "237": ["bradesco"],
+  "341": ["itau", "itaú"],
+  "033": ["santander"],
+  "001": ["bb", "banco do brasil"],
+  "104": ["caixa"],
+  "623": ["pan", "banco pan"],
+  "311": ["bmg"],
+  "422": ["safra"],
+  "626": ["c6", "c6 consig", "c6 bank"],
+  "707": ["daycoval"],
+  "041": ["banrisul"],
+  "012": ["inbursa"],
+  "069": ["crefisa"],
+  "121": ["agibank"],
+  "079": ["picpay"],
+  "336": ["c6"],
+  "003": ["amazonia", "bas"],
+  "004": ["nordeste", "bnb"],
+  "070": ["brb"],
+};
+
 const checkBankMatch = (ruleBank: string, currentBank: string) => {
   if (!ruleBank || !currentBank) return false;
   const rule = ruleBank.trim().toLowerCase();
   const current = currentBank.trim().toLowerCase();
   
   if (current === rule) return true;
-  
+
+  const ruleCodeMatch = rule.match(/^\d{1,4}/);
+  const currentCodeMatch = current.match(/^\d{1,4}/);
+  const ruleCode = ruleCodeMatch ? ruleCodeMatch[0].padStart(3, '0') : null;
+  const currentCode = currentCodeMatch ? currentCodeMatch[0].padStart(3, '0') : null;
+
+  if (ruleCode && currentCode && ruleCode === currentCode) return true;
+
+  for (const [code, aliases] of Object.entries(BANK_ALIASES)) {
+    const ruleHasCode = ruleCode === code || aliases.some(a => rule.includes(a));
+    const currentHasCode = currentCode === code || aliases.some(a => current.includes(a));
+    if (ruleHasCode && currentHasCode) return true;
+  }
+
   const parts = current.split('-');
   if (parts.length >= 2) {
-    const code = parts[0].trim();
     const name = parts.slice(1).join('-').trim();
-    if (rule === code) return true;
-    if (rule === name) return true;
     if (rule.length >= 2 && name.includes(rule)) return true;
   }
   
@@ -271,7 +303,7 @@ export function calculateOffers(
     }
   });
 
-  // Final sort by Priority then Troco
+  // Final sort by Priority then Troco (Lowest Troco first for best broker profitability)
   return calculatedOffers.sort((a, b) => {
     const bankIdA = a.id.split('-')[0];
     const bankIdB = b.id.split('-')[0];
@@ -280,6 +312,6 @@ export function calculateOffers(
     const finalPA = pA === 0 ? 999 : pA;
     const finalPB = pB === 0 ? 999 : pB;
     if (finalPA !== finalPB) return finalPA - finalPB;
-    return b.valorTroco - a.valorTroco;
+    return a.valorTroco - b.valorTroco; // Menor troco primeiro (melhor rentabilidade)
   });
 }

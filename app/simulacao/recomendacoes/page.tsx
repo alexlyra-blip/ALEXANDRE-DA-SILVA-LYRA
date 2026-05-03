@@ -181,14 +181,27 @@ export default function Recomendacoes() {
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Crie uma mensagem profissional e persuasiva para WhatsApp enviando os resultados de uma simulação de portabilidade de crédito consignado para um cliente.
+        contents: `Você é um assistente técnico especializado para corretores de crédito consignado. 
+        Sua tarefa é gerar um resumo técnico e persuasivo de uma simulação de portabilidade para que o corretor envie ao seu parceiro ou cliente final, mas com foco na clareza PROFISSIONAL.
+
+        REQUISITOS OBRIGATÓRIOS:
+        - Responda em Português do Brasil (PT-BR).
+        - Use uma linguagem técnica e consultiva: "Troco", "Tabelas", "Nova Taxa", "Portabilidade".
+        - Destaque o banco que liberou a melhor oferta e a tabela utilizada.
+        - Informe a quantidade total de tabelas disponíveis para aquele banco.
+        - Destaque o VALOR LIBERADO (Troco) em **negrito**.
+        - Informe o novo prazo e a economia na taxa de juros.
+        - Mencione o banco com o MAIOR TROCO e o banco com a MENOR TAXA de juros encontrada.
+        - Mencione os demais bancos que também apresentaram ofertas para este contrato.
+        - No final, convide o corretor a baixar o relatório PDF completo das propostas.
+
         Dados da simulação:
         Parcela atual: ${formatCurrency(simData?.valorParcela || 0)}
         
-        Principais Ofertas encontradas:
+        Ofertas encontradas:
         ${offersText}
         
-        A mensagem deve ser amigável, destacar o valor do troco e convidar o cliente para escolher a melhor opção. Use emojis e negrito para destacar valores.`
+        Crie a mensagem de forma organizada, usando emojis discretos e profissionais.`
       });
 
       const message = response.text;
@@ -275,16 +288,51 @@ export default function Recomendacoes() {
 
       const cleanBeneficio = codigoBeneficio ? String(codigoBeneficio).replace(/^0+/, '') : '';
 
+      const BANK_ALIASES: Record<string, string[]> = {
+        "237": ["bradesco"],
+        "341": ["itau", "itaú"],
+        "033": ["santander"],
+        "001": ["bb", "banco do brasil"],
+        "104": ["caixa"],
+        "623": ["pan", "banco pan"],
+        "311": ["bmg"],
+        "422": ["safra"],
+        "626": ["c6", "c6 consig", "c6 bank"],
+        "707": ["daycoval"],
+        "041": ["banrisul"],
+        "012": ["inbursa"],
+        "069": ["crefisa"],
+        "121": ["agibank"],
+        "079": ["picpay"],
+        "336": ["c6"],
+        "003": ["amazonia", "bas"],
+        "004": ["nordeste", "bnb"],
+        "070": ["brb"],
+      };
+
       const checkBankMatch = (ruleBank: string, currentBank: string) => {
         if (!ruleBank || !currentBank) return false;
         const rule = ruleBank.trim().toLowerCase();
         const current = currentBank.trim().toLowerCase();
         if (current === rule) return true;
+
+        const ruleCodeMatch = rule.match(/^\d{1,4}/);
+        const currentCodeMatch = current.match(/^\d{1,4}/);
+        const ruleCode = ruleCodeMatch ? ruleCodeMatch[0].padStart(3, '0') : null;
+        const currentCode = currentCodeMatch ? currentCodeMatch[0].padStart(3, '0') : null;
+
+        if (ruleCode && currentCode && ruleCode === currentCode) return true;
+
+        for (const [code, aliases] of Object.entries(BANK_ALIASES)) {
+          const ruleHasCode = ruleCode === code || aliases.some(a => rule.includes(a));
+          const currentHasCode = currentCode === code || aliases.some(a => current.includes(a));
+          if (ruleHasCode && currentHasCode) return true;
+        }
+
         const parts = current.split('-');
         if (parts.length >= 2) {
-          const code = parts[0].trim();
           const name = parts.slice(1).join('-').trim();
-          if (rule === code || rule === name || (rule.length >= 2 && name.includes(rule))) return true;
+          if (rule.length >= 2 && name.includes(rule)) return true;
         }
         return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
       };
@@ -679,7 +727,7 @@ export default function Recomendacoes() {
       ['Tabela', offer.tabela],
       ['Valor do Contrato', formatCurrency(offer.valorContrato)],
       ['Valor do Troco', formatCurrency(offer.valorTroco)],
-      ['Nova Taxa Port.', `${(offer.novaTaxaPortabilidade !== undefined && offer.novaTaxaPortabilidade > 1.85 ? 1.85 : (offer.novaTaxaPortabilidade || 0)).toFixed(2)}%`],
+      ['Taxa do Refinanciamento', `${(offer.taxaBase !== undefined ? offer.taxaBase : (offer.novaTaxaPortabilidade || 0)).toFixed(2)}%`],
       ['Taxa Ponderada', `${offer.taxaPonderada?.toFixed(2)}%`],
     ];
 

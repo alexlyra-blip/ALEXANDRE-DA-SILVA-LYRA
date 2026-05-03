@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { calculateOffers, SimulationParams } from '@/lib/simulation-engine';
-import { GoogleGenAI } from "@google/genai";
 import { normalizePhone, validateWhatsAppUser, logWhatsAppAttempt } from '@/lib/whatsapp-utils';
-
-// Função para obter o AI de forma preguiçosa
-function getAI() {
-  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-  
-  return new GoogleGenAI({ apiKey });
-}
 
 // Handler para GET (Verificação de Webhook do WhatsApp/Meta + Diagnóstico)
 export async function GET(req: Request) {
@@ -68,16 +58,12 @@ export async function GET(req: Request) {
 export async function POST(req: NextRequest) {
   try {
     const adminDb = getAdminDb();
-    const ai = getAI();
 
     if (!adminDb) {
-      return NextResponse.json({ error: 'Database connection failed' }, { status: 500 });
-    }
-
-    if (!ai) {
-      console.error("Gemini AI not initialized. Missing API Key.");
-      // Tentar enviar uma mensagem de erro para o usuário se possível, ou apenas logar
-      return NextResponse.json({ error: 'AI not configured' }, { status: 500 });
+      const { getInitializationError } = await import('@/lib/firebase-admin');
+      const initErr = getInitializationError() || 'Unknown initialization error';
+      console.error(`WhatsApp Webhook: Admin DB not initialized: ${initErr}`);
+      return NextResponse.json({ error: 'Internal database error', details: initErr }, { status: 500 });
     }
 
     const body = await req.json();
@@ -140,100 +126,27 @@ export async function POST(req: NextRequest) {
     console.log(`WhatsApp message from ${senderNumber} (Authorized as ${auth.user?.name || 'User'}): ${messageText}`);
     // --- FIM DA CAMADA DE AUTORIZAÇÃO ---
 
-    // 1. Usar Gemini para extrair parâmetros da simulação
-    const prompt = `Analise a seguinte mensagem de WhatsApp de um cliente interessado em simulação de crédito consignado:
-    "${messageText}"
-    
-    Extraia os seguintes parâmetros no formato JSON:
-    - idade (número)
-    - convenio (um de: "INSS", "SIAPE", "GOVERNO", "FORÇAS ARMADAS")
-    - codigoBeneficio (string)
-    - dataConcessao (string no formato YYYY-MM-DD)
-    - bancoAtual (string, ex: "ITAU", "BRADESCO")
-    - valorParcela (número)
-    - saldoDevedor (número)
-    - prazoTotal (número, padrão 96)
-    - parcelasPagas (número)
-    
-    Se algum parâmetro não puder ser extraído, deixe o campo como null.
-    Retorne APENAS o JSON, sem explicações.`;
+    const sessionId = senderNumber.replace(/[^a-zA-Z0-9]/g, '_');
+    const sessionRef = adminDb.collection('whatsappSessions').doc(sessionId);
+    let sessionSnap = await sessionRef.get();
+    let sessionData = sessionSnap.exists ? sessionSnap.data() : { history: [] };
+    if (!sessionData?.history) sessionData = { ...sessionData, history: [] };
 
-    const result = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt
-    });
-    const textExtraido = result.text.trim();
-    
-    let simParams: Partial<SimulationParams> = {};
+    // 1. Usar o Agente de IA consolidado
+    const { processWhatsAppMessage } = await import('@/lib/whatsapp-agent');
+    const responseText = await processWhatsAppMessage(messageText, sessionData.history || []);
+
+    // 2. Atualizar histórico
+    const updatedHistory = [
+      ...(sessionData.history || []).slice(-10),
+      { role: 'user', content: messageText },
+      { role: 'model', content: responseText }
+    ];
+
     try {
-      // Limpar possível markdown do Gemini
-      const jsonStr = textExtraido.replace(/```json|```/g, '');
-      simParams = JSON.parse(jsonStr);
-    } catch (e) {
-      console.error("Erro ao processar JSON do Gemini:", e);
-      return NextResponse.json({ status: 'ai_parse_error' });
-    }
-
-    // 2. Verificar se temos o básico para uma simulação inicial
-    const REQUIRED_FIELDS = ['idade', 'valorParcela', 'saldoDevedor', 'bancoAtual'];
-    const missingFields = REQUIRED_FIELDS.filter(f => !(simParams as any)[f]);
-
-    if (missingFields.length > 0) {
-      const responseMsg = `Recebi sua solicitação, mas preciso de mais alguns dados para fazer a simulação completa:
-      
-${missingFields.map(f => `- ${f === 'idade' ? 'Sua Idade' : f === 'valorParcela' ? 'Valor da Parcela' : f === 'saldoDevedor' ? 'Saldo Devedor Aproximado' : 'Nome do Banco Atual'}`).join('\n')}
-
-Por favor, informe esses dados para eu calcular as melhores ofertas para você!`;
-
-      await sendWhatsAppMessage(senderNumber, responseMsg);
-      return NextResponse.json({ status: 'params_requested' });
-    }
-
-    // 3. Buscar Regras e Bancos do Firestore
-    const banksSnap = await adminDb.collection('bankRules').get();
-    const banks = banksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    const generalRulesSnap = await adminDb.collection('generalRules').get();
-    const generalRules = generalRulesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    // 4. Executar Simulação
-    // Definimos valores padrão para campos opcionais
-    const finalParams: SimulationParams = {
-      idade: Number(simParams.idade),
-      convenio: simParams.convenio || 'INSS',
-      subConvenio: (simParams as any).subConvenio || 'Aposentadoria / Pensao',
-      codigoBeneficio: simParams.codigoBeneficio || '31', // Default 31
-      dataConcessao: simParams.dataConcessao || '2020-01-01',
-      bancoAtual: simParams.bancoAtual || '',
-      valorParcela: Number(simParams.valorParcela),
-      saldoDevedor: Number(simParams.saldoDevedor),
-      prazoTotal: Number(simParams.prazoTotal || 96),
-      parcelasPagas: Number(simParams.parcelasPagas || 12),
-      taxaJurosMensal: (simParams as any).taxaJurosMensal || 0.0180,
-      isCliente60Mais: Number(simParams.idade) >= 60
-    };
-
-    const offers = calculateOffers(finalParams, banks, generalRules);
-
-    // 5. Formatar Resposta
-    let responseText = '';
-    if (offers.length > 0) {
-      const best = offers[0];
-      responseText = `🎉 *Simulação Realizada com Sucesso!*
-
-Encontrei a melhor oferta para você no *${best.name}*:
-
-💰 *Troco Estimado:* ${formatCurrency(best.valorTroco)}
-📑 *Tabela:* ${best.tabela}
-🏦 *Novo Contrato:* ${formatCurrency(best.valorContrato)}
-📉 *Taxa:* ${best.novaTaxaPortabilidade?.toFixed(2)}%
-
-Você pode economizar portando seu contrato! 🚀
-Para seguir com a proposta, acesse nosso portal ou responda aqui "QUERO ESSA".`;
-    } else {
-      responseText = `Infelizmente não encontramos ofertas disponíveis para o seu perfil no momento com base nos dados informados. 
-
-Isso pode ocorrer por conta do banco atual, do saldo devedor ou da idade. Gostaria de tentar com outros valores?`;
+      await sessionRef.set({ ...sessionData, history: updatedHistory, lastUpdate: new Date() });
+    } catch (e: any) {
+      console.error("Erro ao salvar sessão:", e.message);
     }
 
     await sendWhatsAppMessage(senderNumber, responseText);

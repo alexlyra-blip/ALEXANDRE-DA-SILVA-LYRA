@@ -124,64 +124,77 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
 
       // Fetch rules function
       const fetchFromFirestore = () => {
-        const banksQuery = query(collection(db, 'bankRules'));
-        const unsubscribeBanks = onSnapshot(banksQuery, (snapshot) => {
-          const banksData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BankRule));
+        let isUnmounted = false;
+        let unsubscribeBanks: (() => void) | undefined;
+        let unsubscribeGeneral: (() => void) | undefined;
+        let unsubscribeSettings: (() => void) | undefined;
+
+        const timeoutId = setTimeout(() => {
+          if (isUnmounted) return;
           
-          // Aggressive deduplication
-          const seenKeys = new Map<string, BankRule>();
-          banksData.forEach(bank => {
-            const key = `${bank.name}-${bank.convenio}-${bank.subConvenio || ''}`.toUpperCase();
-            const existing = seenKeys.get(key);
-            if (!existing || ((bank as any).updatedAt || 0) > ((existing as any).updatedAt || 0) || (!(bank as any).updatedAt && !(existing as any).updatedAt && bank.id.localeCompare(existing.id) > 0)) {
-              seenKeys.set(key, bank);
+          const banksQuery = query(collection(db, 'bankRules'));
+          unsubscribeBanks = onSnapshot(banksQuery, (snapshot) => {
+            if (isUnmounted) return;
+            const banksData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BankRule));
+            
+            // Aggressive deduplication
+            const seenKeys = new Map<string, BankRule>();
+            banksData.forEach(bank => {
+              const key = `${bank.name}-${bank.convenio}-${bank.subConvenio || ''}`.toUpperCase();
+              const existing = seenKeys.get(key);
+              if (!existing || ((bank as any).updatedAt || 0) > ((existing as any).updatedAt || 0) || (!(bank as any).updatedAt && !(existing as any).updatedAt && bank.id.localeCompare(existing.id) > 0)) {
+                seenKeys.set(key, bank);
+              }
+            });
+
+            const uniqueBanks = Array.from(seenKeys.values());
+            setBanks(uniqueBanks);
+            safeLocalStorageSet('rules_banks', JSON.stringify({
+              data: uniqueBanks,
+              timestamp: Date.now()
+            }));
+            setIsLoaded(true);
+          }, (error) => {
+            console.error("RuleContext: Error fetching banks:", error);
+            if (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded')) {
+              setQuotaExceeded(true);
             }
           });
 
-          const uniqueBanks = Array.from(seenKeys.values());
-          setBanks(uniqueBanks);
-          safeLocalStorageSet('rules_banks', JSON.stringify({
-            data: uniqueBanks,
-            timestamp: Date.now()
-          }));
-          setIsLoaded(true);
-        }, (error) => {
-          console.error("RuleContext: Error fetching banks:", error);
-          if (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded')) {
-            setQuotaExceeded(true);
+          const generalQuery = query(collection(db, 'generalRules'));
+          unsubscribeGeneral = onSnapshot(generalQuery, (snapshot) => {
+            if (isUnmounted) return;
+            const generalData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GeneralRule));
+            setGeneralRules(generalData);
+            safeLocalStorageSet('rules_general', JSON.stringify({
+              data: generalData,
+              timestamp: Date.now()
+            }));
+          }, (error) => {
+            console.error("RuleContext: Error fetching general rules:", error);
+          });
+
+          // FETCH SCOPED SETTINGS
+          const promotoraId = profile?.role === 'admin' ? 'admin' : (profile?.role === 'promotora' ? profile?.uid : profile?.createdBy);
+          
+          if (promotoraId) {
+            unsubscribeSettings = onSnapshot(doc(db, 'settings', promotoraId), (docSnap) => {
+              if (isUnmounted) return;
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.bankPriorities) setPromotoraPriorities(data.bankPriorities);
+                if (data.bankInstallments) setPromotoraInstallments(data.bankInstallments);
+              }
+            });
           }
-        });
-
-        const generalQuery = query(collection(db, 'generalRules'));
-        const unsubscribeGeneral = onSnapshot(generalQuery, (snapshot) => {
-          const generalData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GeneralRule));
-          setGeneralRules(generalData);
-          safeLocalStorageSet('rules_general', JSON.stringify({
-            data: generalData,
-            timestamp: Date.now()
-          }));
-        }, (error) => {
-          console.error("RuleContext: Error fetching general rules:", error);
-        });
-
-        // FETCH SCOPED SETTINGS
-        const promotoraId = profile?.role === 'admin' ? 'admin' : (profile?.role === 'promotora' ? profile?.uid : profile?.createdBy);
-        let unsubscribeSettings = () => {};
-        
-        if (promotoraId) {
-          unsubscribeSettings = onSnapshot(doc(db, 'settings', promotoraId), (docSnap) => {
-            if (docSnap.exists()) {
-              const data = docSnap.data();
-              if (data.bankPriorities) setPromotoraPriorities(data.bankPriorities);
-              if (data.bankInstallments) setPromotoraInstallments(data.bankInstallments);
-            }
-          });
-        }
+        }, 100);
 
         return () => {
-          unsubscribeBanks();
-          unsubscribeGeneral();
-          unsubscribeSettings();
+          isUnmounted = true;
+          clearTimeout(timeoutId);
+          if (unsubscribeBanks) unsubscribeBanks();
+          if (unsubscribeGeneral) unsubscribeGeneral();
+          if (unsubscribeSettings) unsubscribeSettings();
         };
       };
 
