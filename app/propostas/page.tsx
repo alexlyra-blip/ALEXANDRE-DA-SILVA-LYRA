@@ -253,6 +253,7 @@ export default function PropostasPage() {
       p.proposalDate ? format(parseISO(p.proposalDate), 'dd/MM/yyyy') : '---',
       p.clientName || '---',
       p.clientCpf || '---',
+      p.isLinkedRefin ? 'REFIN PORT' : (p.loanType || '---'),
       p.bank || '---',
       p.tabela || '---',
       formatCurrency(p.parcela || 0),
@@ -264,11 +265,11 @@ export default function PropostasPage() {
 
     autoTable(doc, {
       startY: 30,
-      head: [['Data', 'Cliente', 'CPF', 'Banco', 'Tabela', 'Parcela', 'Saldo Dev.', 'Contrato', 'Troco', 'Status']],
+      head: [['Data', 'Cliente', 'CPF', 'Tipo', 'Banco', 'Tabela', 'Parcela', 'Saldo Dev.', 'Contrato', 'Troco', 'Status']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [17, 82, 212], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-      bodyStyles: { fontSize: 8 },
+      headStyles: { fillColor: [17, 82, 212], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+      bodyStyles: { fontSize: 7 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
     });
 

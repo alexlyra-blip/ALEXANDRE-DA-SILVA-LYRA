@@ -630,6 +630,7 @@ function UsuariosAdminContent() {
     }
 
     setUploadingUserIds(prev => new Set(prev).add(user.id));
+    setUserUploadProgress(prev => ({ ...prev, [user.id]: 0 }));
 
     try {
       // Delete old avatar if exists to save space
@@ -1388,14 +1389,17 @@ function UsuariosAdminContent() {
                       <input
                         type="text"
                         value={slug}
-                        onChange={(e) => setSlug(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                          setSlug(val);
+                        }}
                         placeholder="minha-promotora"
                         className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-3 px-4 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
                       />
                     </div>
                     {slug && (
                       <p className="text-[10px] text-slate-400 ml-1 mt-1">
-                        Seu link será: <span className="text-primary font-bold">{window.location.origin}/p/{slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')}</span>
+                        Seu link será: <span className="text-primary font-bold">{window.location.origin}/p/{slug}</span>
                       </p>
                     )}
                   </div>

@@ -48,8 +48,8 @@ export const uploadFileWithTimeout = async (
   const storageRef = ref(storage, path);
 
   // If file is relatively small or useResumable is false, use simple uploadBytes
-  // Increased threshold to 1MB for more robust simple uploads
-  if (!useResumable || file.size < 1024 * 1024) {
+  // Increased threshold to 1MB for more robust simple uploads unless onProgress is requested
+  if (!useResumable || (!onProgress && file.size < 1024 * 1024)) {
     console.log(`[StorageService] Using simple uploadBytes for "${path}"`);
     
     const performUpload = async (attempt = 1): Promise<string> => {

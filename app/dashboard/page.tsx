@@ -654,18 +654,22 @@ export default function Dashboard() {
 
       <main className="flex-1 px-6 -mt-8 relative z-20 pb-12">
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="professional-card p-6 flex items-center gap-4 border-l-4 border-l-primary dark:bg-slate-800"
+            className="professional-card p-6 relative overflow-hidden group dark:bg-slate-800 border border-slate-100 dark:border-slate-800"
           >
-            <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-              <FileText className="w-6 h-6" />
+            <div className="absolute -right-6 -top-6 size-24 bg-primary/5 rounded-full group-hover:scale-150 transition-transform duration-500" />
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                <FileText className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full">+12%</span>
             </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Total Simulações</p>
-              <p className="text-2xl font-black text-foreground">{stats.totalSimulations}</p>
+            <div className="relative z-10">
+              <p className="text-xl font-black text-foreground">{stats.totalSimulations}</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">Total Simulações</p>
             </div>
           </motion.div>
 
@@ -673,14 +677,18 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="professional-card p-6 flex items-center gap-4 border-l-4 border-l-secondary dark:bg-slate-800"
+            className="professional-card p-6 relative overflow-hidden group dark:bg-slate-800 border border-slate-100 dark:border-slate-800"
           >
-            <div className="size-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary">
-              <TrendingUp className="w-6 h-6" />
+            <div className="absolute -right-6 -top-6 size-24 bg-secondary/5 rounded-full group-hover:scale-150 transition-transform duration-500" />
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <div className="size-10 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded-full">Ativo</span>
             </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Hoje</p>
-              <p className="text-2xl font-black text-foreground">{stats.simulationsToday}</p>
+            <div className="relative z-10">
+              <p className="text-xl font-black text-foreground">{stats.simulationsToday}</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">Simulações Hoje</p>
             </div>
           </motion.div>
 
@@ -688,14 +696,18 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="professional-card p-6 flex items-center gap-4 border-l-4 border-l-emerald-500 dark:bg-slate-800"
+            className="professional-card p-6 relative overflow-hidden group dark:bg-slate-800 border border-slate-100 dark:border-slate-800 sm:col-span-2 lg:col-span-1"
           >
-            <div className="size-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-              <Building2 className="w-6 h-6" />
+            <div className="absolute -right-6 -top-6 size-24 bg-emerald-500/5 rounded-full group-hover:scale-150 transition-transform duration-500" />
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <div className="size-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-1 rounded-full">Destaque</span>
             </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Banco Favorito</p>
-              <p className="text-lg font-black text-foreground truncate max-w-[120px]">{stats.mostRecommendedBank}</p>
+            <div className="relative z-10">
+              <p className="text-xl font-black text-foreground truncate">{stats.mostRecommendedBank}</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">Banco Favorito</p>
             </div>
           </motion.div>
         </div>
@@ -950,151 +962,84 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Recent Simulations - Full Width at Bottom */}
-        <div className="professional-card overflow-hidden mb-12 dark:bg-slate-800 clear-both">
-          <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <h3 className="font-black text-lg">Simulações Recentes</h3>
+        {/* Recent Simulations - Grid View */}
+        <div className="mb-12 clear-both">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-black text-xl flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Simulações Recentes
+            </h3>
             <Link href="/simulacao/nova" className="text-primary text-sm font-bold hover:underline flex items-center gap-1">
               Nova Simulação <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
           
-          {/* Mobile List View */}
-          <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800">
-            {filteredSimulations.slice(0, 10).map((sim) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredSimulations.slice(0, 15).map((sim) => {
               const conv = (sim.convenio || 'INSS').toUpperCase();
               const badgeColor = stats.CONVENIO_COLORS[conv] || '#94a3b8';
+              
               return (
                 <div 
                   key={sim.id} 
-                  className="p-4 flex flex-col gap-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  className="professional-card p-5 flex flex-col gap-4 cursor-pointer hover:border-primary/30 transition-all group dark:bg-slate-800"
                   onClick={() => loadSimulation(sim)}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/50 pb-4">
                     <div className="flex items-center gap-3">
-                      <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-8" />
-                      <span className="font-bold text-sm text-slate-700 dark:text-slate-300 dark:selection:bg-slate-700 dark:selection:text-white">{sim.userName || 'N/A'}</span>
+                      <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-10 border-2 border-white dark:border-slate-800 shadow-sm" />
+                       <div className="flex flex-col">
+                         <span className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors">{sim.userName || 'N/A'}</span>
+                         <span 
+                           className="text-[10px] font-bold text-white px-2 py-0.5 rounded-full w-fit mt-1 shadow-sm"
+                           style={{ backgroundColor: badgeColor }}
+                         >
+                           {conv}
+                         </span>
+                       </div>
                     </div>
-                    <span 
-                      className="px-2 py-1 rounded-md text-[10px] font-bold text-white shadow-sm"
-                      style={{ backgroundColor: badgeColor }}
-                    >
-                      {conv}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <p className="text-slate-400 uppercase font-black text-[9px] tracking-widest">Banco</p>
-                      <p className="font-bold text-slate-700 dark:text-slate-300 dark:selection:bg-slate-700 dark:selection:text-white">{sim.topOffer || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 uppercase font-black text-[9px] tracking-widest">Parcela</p>
-                      <p className="font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.valorParcela)}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 uppercase font-black text-[9px] tracking-widest">Troco</p>
-                      <p className="font-bold text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.topOfferTroco || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 uppercase font-black text-[9px] tracking-widest">Contrato</p>
-                      <p className="font-bold text-blue-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.topOfferContrato || 0)}</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); generateSimulationPDF(sim); }}
-                      className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      <Download className="w-4 h-4" /> Baixar PDF
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                <tr>
-                  <th className="px-6 py-4">Usuário</th>
-                  <th className="px-6 py-4">Banco Aceito</th>
-                  <th className="px-6 py-4">Convênio</th>
-                  <th className="px-6 py-4">Parcela</th>
-                  <th className="px-6 py-4">Prazo</th>
-                  <th className="px-6 py-4">Valor do Troco</th>
-                  <th className="px-6 py-4">Valor do Contrato</th>
-                  <th className="px-6 py-4 text-right">PDF</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredSimulations.slice(0, 10).map((sim) => {
-                  const conv = (sim.convenio || 'INSS').toUpperCase();
-                  const badgeColor = stats.CONVENIO_COLORS[conv] || '#94a3b8';
-                  
-                  return (
-                    <tr 
-                      key={sim.id} 
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
-                      onClick={() => loadSimulation(sim)}
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-8" />
-                          <span className="font-bold text-sm truncate max-w-[150px] text-slate-700 dark:text-slate-300 dark:selection:bg-slate-700 dark:selection:text-white">{sim.userName || 'N/A'}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:selection:bg-slate-700 dark:selection:text-white">{sim.topOffer || 'N/A'}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span 
-                          className="px-2 py-1 rounded-md text-[10px] font-bold text-white shadow-sm"
-                          style={{ backgroundColor: badgeColor }}
-                        >
-                          {conv}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.valorParcela)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{sim.topOfferPrazo || (sim.subConvenio === 'Marinha' ? '72' : '96')}x</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-bold text-emerald-600">
-                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.topOfferTroco || 0)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-black text-blue-600">
-                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.topOfferContrato || 0)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); console.log("Salvar proposta", sim); /* Implementar lógica de salvar aqui */ }}
-                          className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-400 hover:text-blue-600 transition-colors"
-                          title="Salvar Proposta"
-                        >
-                          <Save className="w-4 h-4" />
-                        </button>
-                        <button 
+                    <div className="flex bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-xl p-2 items-center gap-2">
+                         <button 
                           onClick={(e) => { e.stopPropagation(); generateSimulationPDF(sim); }}
-                          className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-400 hover:text-primary transition-colors"
+                          className="text-slate-400 hover:text-primary transition-colors"
                           title="Baixar PDF"
                         >
                           <Download className="w-4 h-4" />
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] uppercase font-black text-slate-400 mb-1">Oferta Aceita</p>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">{sim.topOffer || 'N/A'}</p>
+                      <p className="text-[10px] font-medium text-slate-500 mt-0.5">{sim.topOfferPrazo || (sim.subConvenio === 'Marinha' ? '72' : '96')}x Parcela</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] uppercase font-black text-slate-400 mb-1">Parcela Atual</p>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.valorParcela || 0)}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <p className="text-[10px] uppercase font-black text-slate-400 mb-1">Valor Contrato</p>
+                      <p className="text-base font-black text-blue-600">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.topOfferContrato || 0)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-black text-slate-400 mb-1">Valor Liberado</p>
+                      <p className="text-base font-black text-emerald-600">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.topOfferTroco || 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </main>
