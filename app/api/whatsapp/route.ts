@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const challenge = url.searchParams.get('hub.challenge');
 
   const adminDb = getAdminDb();
-  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
   // Token esperado
   const EXPECTED_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'simulador_token_123';

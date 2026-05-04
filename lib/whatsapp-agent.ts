@@ -1,30 +1,29 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { calculateOffers, SimulationParams } from "@/lib/simulation-engine";
-import { GEMINI_KEY } from './key-store';
-
 // Initialization logic
 const getAI = () => {
-    const rawKey = process.env.GEMINI_API_KEY;
-    const publicRawKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    let apiKey = undefined;
     
-    let apiKey = rawKey || publicRawKey;
-
-    // Filter out placeholders
-    if (!apiKey || apiKey.length < 20 || apiKey.includes("MY_GEMINI")) {
-        apiKey = GEMINI_KEY;
-    }
-    
-    if (!apiKey || apiKey.length < 20 || apiKey.includes("MY_GEMINI")) {
-        return null;
-    }
-
+    // Try to read from OS environment directly if possible (Next.js replaces process.env statically)
     try {
-        return new GoogleGenAI({ apiKey });
-    } catch (err: any) {
-        console.error("[DEBUG getAI] Erro na inicializacao da SDK:", err.message);
-        return null;
+        const fs = require('fs');
+        if (fs.existsSync('.env.local')) {
+            const envData = fs.readFileSync('.env.local', 'utf8');
+            const match = envData.match(/NEXT_PUBLIC_GEMINI_API_KEY=(.+)/);
+            if (match) apiKey = match[1].trim();
+        }
+    } catch(e) {}
+
+    if (!apiKey) {
+        apiKey = process.env['NEXT_PUBLIC_GEMINI_API_KEY'] || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     }
+
+    if (!apiKey || apiKey.includes("MY_GEMINI")) {
+        return { error: `Invalid API Key found: ${apiKey}` };
+    }
+    
+    return new GoogleGenAI({ apiKey });
 };
 
 // Tool definition for Gemini
@@ -68,9 +67,9 @@ function calculateInterestRateAgent(pv: number, pmt: number, n: number) {
 
 export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '') {
     const ai = getAI();
-    if (!ai) {
-        return "Olá! 👋 O assistente de IA está sendo configurado. Por favor, tente novamente em alguns instantes!";
-    }
+        if (!ai || (ai as any).error) {
+            return `DEBUG_NULL_AI: ${(ai as any)?.error || "unknown"}`;
+        }
 
     let userProfileForSimulation = { role: 'admin' } as any;
 
@@ -288,12 +287,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
         return result.text || "Como posso ajudar na sua simulação hoje, parceiro?";
 
     } catch (error: any) {
-        console.error("AI Agent Error:", error);
-        
-        if (error.message?.includes("API_KEY_INVALID") || error.message?.includes("not valid")) {
-            return "Olá! 👋 O assistente de IA está sendo configurado. Por favor, tente novamente em alguns instantes!";
-        }
-
-        return "Olá! 👋 Estou passando por uma manutenção rápida no meu sistema de IA, mas já voltaremos ao normal. Pode tentar novamente em alguns minutos? 🛠️";
+        console.error("AI Agent Error EXACT:", error);
+        return `DEBUG_CATCH_ERROR: ${error.message} [Key: ${((getAI() as any)?.apiKey || "").substring(0,5)}]`;
     }
 }

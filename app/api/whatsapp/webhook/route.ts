@@ -5,7 +5,18 @@ import { runSimulation, SimulationInput } from '@/lib/simulation-service';
 export const dynamic = 'force-dynamic';
 
 const getAI = () => {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+    let apiKey = undefined;
+    try {
+        const fs = require('fs');
+        if (fs.existsSync('.env.local')) {
+            const envData = fs.readFileSync('.env.local', 'utf8');
+            const match = envData.match(/NEXT_PUBLIC_GEMINI_API_KEY=(.+)/);
+            if (match) apiKey = match[1].trim();
+        }
+    } catch(e) {}
+    if (!apiKey) {
+        apiKey = process.env['NEXT_PUBLIC_GEMINI_API_KEY'] || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+    }
   return new GoogleGenAI({ apiKey });
 };
 
@@ -88,8 +99,8 @@ export async function POST(request: Request) {
 
       console.log(`Processando mensagem de ${from}: ${text}`);
 
-      if (!process.env.GEMINI_API_KEY && !process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
-        console.error('ERRO: GEMINI_API_KEY não configurada nos Secrets!');
+      if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+        console.error('ERRO: NEXT_PUBLIC_GEMINI_API_KEY não configurada nos Secrets!');
       }
 
       // 1. Usar a IA para extrair dados ou gerar resposta

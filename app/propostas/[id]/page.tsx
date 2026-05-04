@@ -116,7 +116,16 @@ function ProposalDetailPageContent() {
   const [bankSuggestions, setBankSuggestions] = useState<string[]>([]);
   const [showBankSuggestions, setShowBankSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showCopySuccess, setShowCopySuccess] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopy = (text: string, fieldId: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldId);
+    setTimeout(() => {
+      setCopiedField(current => current === fieldId ? null : current);
+    }, 2000);
+  };
   
   const [showReturnModal, setShowReturnModal] = useState(false);
   
@@ -890,10 +899,10 @@ function ProposalDetailPageContent() {
                     className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                   />
                   <button 
-                    onClick={() => { navigator.clipboard.writeText(formData.clientName); setShowCopySuccess(true); setTimeout(() => setShowCopySuccess(false), 2000); }}
+                    onClick={() => handleCopy(formData.clientName, 'clientName')}
                     className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 text-slate-400 hover:text-primary transition-all"
                   >
-                    <Copy className="w-4 h-4" />
+                    {copiedField === 'clientName' ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -911,10 +920,10 @@ function ProposalDetailPageContent() {
                     className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                   />
                   <button 
-                    onClick={() => { navigator.clipboard.writeText(formData.clientCpf); setShowCopySuccess(true); setTimeout(() => setShowCopySuccess(false), 2000); }}
+                    onClick={() => handleCopy(formData.clientCpf, 'clientCpf')}
                     className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 text-slate-400 hover:text-primary transition-all"
                   >
-                    <Copy className="w-4 h-4" />
+                    {copiedField === 'clientCpf' ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -935,10 +944,10 @@ function ProposalDetailPageContent() {
                     className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                   />
                   <button 
-                    onClick={() => { navigator.clipboard.writeText(formData.proposalNumber); setShowCopySuccess(true); setTimeout(() => setShowCopySuccess(false), 2000); }}
+                    onClick={() => handleCopy(formData.proposalNumber, 'proposalNumber')}
                     className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 text-slate-400 hover:text-primary transition-all"
                   >
-                    <Copy className="w-4 h-4" />
+                    {copiedField === 'proposalNumber' ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
               </div>

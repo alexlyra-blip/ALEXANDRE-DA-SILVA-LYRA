@@ -20,7 +20,10 @@ import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 
 const getAI = () => {
-  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+  let apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+  if (apiKey.includes("MY_GEMINI") || !apiKey) {
+      apiKey = "AIzaSyBLQXgN8KtlZclzEqFeXk7wYAUzkbtcs80"; 
+  }
   return new GoogleGenAI({ apiKey });
 };
 
