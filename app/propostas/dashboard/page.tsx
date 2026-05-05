@@ -184,7 +184,7 @@ export default function DashboardPropostasPage() {
                 <div className="p-3 bg-primary/10 text-primary rounded-xl"><TrendingUp className="w-6 h-6" /></div>
                 <h3 className="font-bold text-slate-500">Total</h3>
               </div>
-              <p className="text-2xl xl:text-3xl font-black text-slate-900 truncate" title={stats.total.toString()}>{stats.total}</p>
+              <p className="text-xl lg:text-2xl font-black text-slate-900 truncate" title={stats.total.toString()}>{stats.total}</p>
             </div>
             
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -192,7 +192,7 @@ export default function DashboardPropostasPage() {
                 <div className="p-3 bg-blue-500/10 text-blue-600 rounded-xl"><DollarSign className="w-6 h-6" /></div>
                 <h3 className="font-bold text-slate-500">Contratado</h3>
               </div>
-              <p className="text-2xl xl:text-3xl font-black text-slate-900 truncate" title={formatCurrency(stats.totalValue)}>{formatCurrency(stats.totalValue)}</p>
+              <p className="text-xl lg:text-2xl font-black text-slate-900 truncate" title={formatCurrency(stats.totalValue)}>{formatCurrency(stats.totalValue)}</p>
             </div>
 
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -200,7 +200,7 @@ export default function DashboardPropostasPage() {
                 <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-xl"><DollarSign className="w-6 h-6" /></div>
                 <h3 className="font-bold text-slate-500">Pago</h3>
               </div>
-              <p className="text-2xl xl:text-3xl font-black text-slate-900 truncate" title={formatCurrency(stats.totalPago)}>{formatCurrency(stats.totalPago)}</p>
+              <p className="text-xl lg:text-2xl font-black text-slate-900 truncate" title={formatCurrency(stats.totalPago)}>{formatCurrency(stats.totalPago)}</p>
             </div>
             
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -208,7 +208,7 @@ export default function DashboardPropostasPage() {
                 <div className="p-3 bg-rose-500/10 text-rose-600 rounded-xl"><DollarSign className="w-6 h-6" /></div>
                 <h3 className="font-bold text-slate-500">Reprovado</h3>
               </div>
-              <p className="text-2xl xl:text-3xl font-black text-slate-900 truncate" title={formatCurrency(stats.totalReprovado)}>{formatCurrency(stats.totalReprovado)}</p>
+              <p className="text-xl lg:text-2xl font-black text-slate-900 truncate" title={formatCurrency(stats.totalReprovado)}>{formatCurrency(stats.totalReprovado)}</p>
             </div>
           </div>
 
