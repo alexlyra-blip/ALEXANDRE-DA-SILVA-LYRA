@@ -85,6 +85,16 @@ export default function Recomendacoes() {
     [filterReasonsMap, simData?.id]
   );
 
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      useGrouping: true
+    }).format(value || 0);
+  };
+
   const handleSelectOffer = async (offer: Offer) => {
     try {
       const simulationId = simData?.id || crypto.randomUUID();
@@ -428,9 +438,12 @@ export default function Recomendacoes() {
             const valorAValidar = bSumSaldoTroco ? (saldoDevedor + valorTroco) : saldoDevedor;
             const bankMinTroco = parseRate(bank.minTroco);
             const tableMinTicket = (tabela.useMinTicket === true) ? parseRate(tabela.minTicket) : 0;
-            const effectiveMinTicket = tableMinTicket > 0 ? tableMinTicket : bankMinTroco;
+            const effectiveMinTicket = tableMinTicket; // Decoupled from bankMinTroco
 
-            if (effectiveMinTicket > 0 && valorAValidar < effectiveMinTicket) return;
+            if (effectiveMinTicket > 0 && valorAValidar < effectiveMinTicket) {
+              log(`Ticket insuficiente: ${formatCurrency(valorAValidar)} (Mínimo: ${formatCurrency(effectiveMinTicket)})`, tabela.nome);
+              return;
+            }
             
             const tableMinInst = parseRate(tabela.minInstallmentValue);
             const tableMaxInst = parseRate(tabela.maxInstallmentValue);
@@ -456,6 +469,11 @@ export default function Recomendacoes() {
             }
 
             if (valorTroco <= 0) return;
+
+            if (bankMinTroco > 0 && valorTroco < bankMinTroco) {
+              log(`Troco insuficiente: ${formatCurrency(valorTroco)} (Mínimo: ${formatCurrency(bankMinTroco)})`, tabela.nome);
+              return;
+            }
 
             calculatedOffers.push({
               id: `${bank.id}-${tabela.nome}`,
@@ -672,16 +690,6 @@ export default function Recomendacoes() {
     }
     return 0;
   });
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-      useGrouping: true
-    }).format(value || 0);
-  };
 
   const handleGeneratePDF = (offer: Offer) => {
     if (!simData) return;
