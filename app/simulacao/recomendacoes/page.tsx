@@ -50,6 +50,11 @@ interface Offer {
   subConvenio?: string;
   tabelasCount: number;
   prazoRefinPort?: number;
+  isAnalfabeto?: boolean;
+  is60Mais?: boolean;
+  isInvalidity?: boolean;
+  hasMinBalanceRule?: boolean;
+  minBalanceValue?: number;
 }
 
 import SimulationForm from '@/components/SimulationForm';
@@ -356,50 +361,103 @@ export default function Recomendacoes() {
         };
 
         const effectiveIs60Mais = isCliente60Mais != null ? isCliente60Mais : (idade >= 60);
-        if (bank.isActive === false) return;
-        if (profile?.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) return;
+        if (bank.isActive === false) {
+          log("Banco inativo");
+          return;
+        }
+        if (profile?.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) {
+          log("Sem permissão para este banco");
+          return;
+        }
         
-        const bankConvenio = bank.convenio || 'INSS';
-        const simConvenio = currentSim.convenio || 'INSS';
-        if (bankConvenio !== simConvenio) return;
-        if (bank.subConvenio && bank.subConvenio !== currentSim.subConvenio) return;
+        const bankConvenio = (bank.convenio || 'INSS').trim().toUpperCase();
+        const simConvenio = (currentSim.convenio || 'INSS').trim().toUpperCase();
+        if (bankConvenio !== simConvenio) {
+          return;
+        }
+        if (bank.subConvenio && bank.subConvenio !== currentSim.subConvenio) {
+          return;
+        }
 
         const isInvalidity = ['4', '04', '5', '05', '11', '30', '32', '33', '34', '92'].includes(cleanBeneficio);
         const isLOAS = ['87', '88'].includes(cleanBeneficio);
 
         if (isInvalidity) {
-          if (bank.acceptsInvalidez === false) return;
+          if (bank.acceptsInvalidez === false) {
+            log("Não aceita espécie 32/92 (Invalidez)");
+            return;
+          }
           const isActuallyOver60 = idade >= 60;
           if (isActuallyOver60) {
-            if (!bank.acceptsOver60Invalidez) return;
+            if (!bank.acceptsOver60Invalidez) {
+              log("Invalidez: O banco não aceita espécie 32/92 para clientes acima de 60 anos.");
+              return;
+            }
           } else {
             const minAgeDisability = bank.invalidezAgeYears || 0;
-            if (minAgeDisability === 0 || idade < minAgeDisability) return;
+            if (minAgeDisability > 0 && idade < minAgeDisability) {
+              log(`Invalidez: Idade mínima de ${minAgeDisability} anos exigida para espécie 32/92 (Cliente tem ${idade}).`);
+              return;
+            }
             const requiredMonths = (bank.minBenefitTimeYears || 0) * 12 + (bank.minBenefitTimeMonths || 0);
-            if (requiredMonths > 0 && benefitTimeMonths < requiredMonths) return;
+            if (requiredMonths > 0 && benefitTimeMonths < requiredMonths) {
+              log(`Invalidez: Tempo de benefício insuficiente (${benefitTimeMonths}/${requiredMonths} meses).`);
+              return;
+            }
           }
         }
 
         const bSumSaldoTrocoGlobal = !!(bank.sumBalanceAndTroco || bank.sumSaldoTroco);
-        if (!bSumSaldoTrocoGlobal && bank.minBalance && saldoDevedor < bank.minBalance) return;
+        if (!bSumSaldoTrocoGlobal && bank.minBalance && saldoDevedor < bank.minBalance) {
+          log(`Saldo devedor abaixo do permitido: ${formatCurrency(saldoDevedor)} (O banco exige saldo mínimo de ${formatCurrency(bank.minBalance)}).`);
+          return;
+        }
 
         if (!isInvalidity) {
-          if ((bank.minAge > 0 && idade < bank.minAge) || (bank.maxAge > 0 && idade > bank.maxAge)) return;
+          if (bank.minAge > 0 && idade < bank.minAge) {
+            log(`Idade do cliente (${idade} anos) é inferior ao mínimo permitido pelo banco (${bank.minAge} anos).`);
+            return;
+          }
+          if (bank.maxAge > 0 && idade > bank.maxAge) {
+            log(`Idade do cliente (${idade} anos) excede o limite máximo do banco (${bank.maxAge} anos).`);
+            return;
+          }
         } else {
           const ageLimit = bank.invalidezAgeYears || 0;
-          if (ageLimit === 0 && bank.maxAge > 0 && idade > bank.maxAge) return;
-          if (ageLimit > 0 && idade > ageLimit) return;
+          if (ageLimit === 0 && bank.maxAge > 0 && idade > bank.maxAge) {
+            log(`Idade excede o limite máximo para invalidez (${bank.maxAge} anos).`);
+            return;
+          }
+          if (ageLimit > 0 && idade > ageLimit) {
+            log(`Invalidez: Idade excede o limite específico (${ageLimit} anos).`);
+            return;
+          }
         }
 
-        if (effectiveIs60Mais && bank.accepts60Mais === false) return;
-        if (isLOAS) {
-          if (!bank.acceptsLOAS) return;
-          if (currentSim.isAnalfabeto && !bank.acceptsIlliterate) return;
+        if (effectiveIs60Mais && bank.accepts60Mais === false) {
+          log("Cliente 60+: O banco não aceita propostas para clientes com 60 anos ou mais.");
+          return;
         }
-        if (currentSim.isAnalfabeto && !bank.acceptsIlliterate) return;
+        if (isLOAS) {
+          if (!bank.acceptsLOAS) {
+            log("O banco não aceita espécie 87/88 (LOAS/BPC).");
+            return;
+          }
+          if (currentSim.isAnalfabeto && !bank.acceptsIlliterate) {
+            log("Analfabeto: O banco não aceita contratação para clientes analfabetos.");
+            return;
+          }
+        }
+        if (currentSim.isAnalfabeto && !bank.acceptsIlliterate) {
+          log("Analfabeto: O banco não aceita propostas para clientes analfabetos.");
+          return;
+        }
 
         const targetGeneralRule = generalRules.find((r: any) => checkBankMatch(r.banco, bank.name));
-        if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) return;
+        if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) {
+          log(`Não aceita portabilidade do banco ${bancoAtual}`);
+          return;
+        }
 
         let requiredInstallments = 0;
         const effectiveParcelasPagas = parcelasPagas !== undefined ? parcelasPagas : (parseInt(prazoTotal || 0) - parseInt(parcelasRestantes || 0));
@@ -418,7 +476,15 @@ export default function Recomendacoes() {
           requiredInstallments = Math.max(requiredInstallments, bankGeneralLimit);
         }
 
-        if (requiredInstallments > 0 && effectiveParcelasPagas < requiredInstallments) return;
+        if (requiredInstallments > 0 && effectiveParcelasPagas < requiredInstallments) {
+          log(`Parcelas pagas insuficientes: ${effectiveParcelasPagas} (Mínimo: ${requiredInstallments} para ${bancoAtual})`);
+          return;
+        }
+
+        if (!bank.tabelas || bank.tabelas.length === 0) {
+          log("Sem tabelas cadastradas para simulação");
+          return;
+        }
 
         if (bank.tabelas && bank.tabelas.length > 0) {
           bank.tabelas.forEach((tabela: any) => {
@@ -429,19 +495,25 @@ export default function Recomendacoes() {
             };
 
             const coef = tabela.coeficiente;
-            if (!coef || coef <= 0) return;
+            if (!coef || coef <= 0) {
+              log("Coeficiente da tabela inválido ou zero", tabela.nome);
+              return;
+            }
             const valorContrato = valorParcela / coef;
             const valorTroco = valorContrato - saldoDevedor;
             const bSumSaldoTroco = bSumSaldoTrocoGlobal || !!tabela.somaSaldoTroco;
-            if (bSumSaldoTroco && bank.minBalance && (saldoDevedor + valorTroco) < bank.minBalance) return;
+            if (bSumSaldoTroco && bank.minBalance && (saldoDevedor + valorTroco) < bank.minBalance) {
+              log(`Ticket total insuficiente: ${formatCurrency(saldoDevedor + valorTroco)} (Mínimo: ${formatCurrency(bank.minBalance)})`, tabela.nome);
+              return;
+            }
 
-            const valorAValidar = bSumSaldoTroco ? (saldoDevedor + valorTroco) : saldoDevedor;
+            const valorAValidar = saldoDevedor + valorTroco;
             const bankMinTroco = parseRate(bank.minTroco);
             const tableMinTicket = (tabela.useMinTicket === true) ? parseRate(tabela.minTicket) : 0;
             const effectiveMinTicket = tableMinTicket; // Decoupled from bankMinTroco
 
             if (effectiveMinTicket > 0 && valorAValidar < effectiveMinTicket) {
-              log(`Ticket insuficiente: ${formatCurrency(valorAValidar)} (Mínimo: ${formatCurrency(effectiveMinTicket)})`, tabela.nome);
+              log(`Ticket total insuficiente: ${formatCurrency(valorAValidar)} (Mínimo da tabela: ${formatCurrency(effectiveMinTicket)})`, tabela.nome);
               return;
             }
             
@@ -449,14 +521,23 @@ export default function Recomendacoes() {
             const tableMaxInst = parseRate(tabela.maxInstallmentValue);
             const effectiveMinInst = tableMinInst > 0 ? tableMinInst : (parseRate(bank.minInstallmentValue) || 0);
 
-            if (effectiveMinInst > 0 && valorParcela < effectiveMinInst) return;
-            if (tableMaxInst > 0 && valorParcela > tableMaxInst) return;
+            if (effectiveMinInst > 0 && valorParcela < effectiveMinInst) {
+              log(`Valor da parcela insuficiente: ${formatCurrency(valorParcela)} (Mínimo: ${formatCurrency(effectiveMinInst)})`, tabela.nome);
+              return;
+            }
+            if (tableMaxInst > 0 && valorParcela > tableMaxInst) {
+              log(`Valor da parcela excedente: ${formatCurrency(valorParcela)} (Máximo: ${formatCurrency(tableMaxInst)})`, tabela.nome);
+              return;
+            }
 
             const taxaTabelaValida = parseRate(tabela.taxaTabela) > 0 ? parseRate(tabela.taxaTabela) : parseRate(bank.refinRate);
             const bankAdjustment = parseRate(bank.ajusteTaxa);
             const bankPortRate = parseRate(bank.portabilityRate);
             const novaTaxaPort = Number((originalRate + bankAdjustment).toFixed(2));
-            if (bankPortRate > 0 && novaTaxaPort < bankPortRate) return;
+            if (bankPortRate > 0 && novaTaxaPort < bankPortRate) {
+              log(`Taxa portabilidade insuficiente: ${novaTaxaPort}% (Mínimo banco: ${bankPortRate}%)`, tabela.nome);
+              return;
+            }
 
             const orig = Number(originalRate.toFixed(2));
             const taxaPonderadaBase = Math.round(((orig + novaTaxaPort) / 2) * 100) / 100;
@@ -465,13 +546,19 @@ export default function Recomendacoes() {
             const bUseTaxaPonderada = Boolean(tabela.useTaxaPonderada);
 
             if (bUseTaxaPonderada === true) {
-              if (taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) return;
+              if (taxaTabelaValida > 0 && taxaTabelaValida > taxaPonderadaFinal) {
+                log(`Taxa ponderada insuficiente: ${taxaPonderadaFinal}% (Tabela exige: ${taxaTabelaValida}%)`, tabela.nome);
+                return;
+              }
             }
 
-            if (valorTroco <= 0) return;
+            if (valorTroco <= 0) {
+              log(`Troco negativo ou zero: ${formatCurrency(valorTroco)}`, tabela.nome);
+              return;
+            }
 
             if (bankMinTroco > 0 && valorTroco < bankMinTroco) {
-              log(`Troco insuficiente: ${formatCurrency(valorTroco)} (Mínimo: ${formatCurrency(bankMinTroco)})`, tabela.nome);
+              log(`Troco insuficiente: ${formatCurrency(valorTroco)} (Mínimo banco: ${formatCurrency(bankMinTroco)})`, tabela.nome);
               return;
             }
 
@@ -495,7 +582,13 @@ export default function Recomendacoes() {
               tabelasCount: bank.tabelas.length,
               prazoRefinPort: tabela.prazoRefinPort,
               ajusteTaxaPonderada: ajusteTabela,
-              useTaxaPonderada: bUseTaxaPonderada
+              useTaxaPonderada: bUseTaxaPonderada,
+              // Validation flags for UI seals
+              isAnalfabeto: !!currentSim.isAnalfabeto,
+              is60Mais: !!effectiveIs60Mais,
+              isInvalidity: !!isInvalidity,
+              hasMinBalanceRule: !!bank.minBalance,
+              minBalanceValue: bank.minBalance || 0
             });
           });
         }
@@ -1206,7 +1299,8 @@ export default function Recomendacoes() {
             </Link>
           </div>
         ) : (
-          sortedBanks.map((bank, index) => {
+        <>
+          {sortedBanks.map((bank, index) => {
             // Get all offers for this specific bank
             const bankOffers = allCalculatedOffers
               .filter(o => o.name === bank.name)
@@ -1506,14 +1600,41 @@ export default function Recomendacoes() {
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Idade OK</span>
                     </div>
+
+                    {/* New Seal: 60 Mais */}
+                    {currentOffer.is60Mais && (
+                      <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-amber-500/20 shadow-sm animate-pulse">
+                        <Star className="w-3.5 h-3.5 fill-amber-500" />
+                        <span>Cliente 60+ OK</span>
+                      </div>
+                    )}
+
+                    {/* New Seal: Analfabeto */}
+                    {currentOffer.isAnalfabeto && (
+                      <div className="flex items-center gap-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-indigo-500/20">
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Analfabeto OK</span>
+                      </div>
+                    )}
+
+                    {/* New Seal: Invalidez (Espécie 32/92) */}
+                    {currentOffer.isInvalidity && (
+                      <div className="flex items-center gap-1 bg-red-500/10 text-red-600 dark:text-red-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-red-500/20">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Espécie Invalidez OK</span>
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-blue-500/20">
                       <History className="w-3.5 h-3.5" />
                       <span>{parcelasPagas !== undefined ? parcelasPagas : (simData ? (parseInt(simData.prazoTotal || 0) - parseInt(simData.parcelasRestantes || 0)) : 0)} Parc. Pagas</span>
                     </div>
-                    {currentOffer.minTicket && (
-                      <div className="flex items-center gap-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-purple-500/20">
+
+                    {/* Saldo Devedor Validation Seal */}
+                    {(currentOffer.hasMinBalanceRule) && (
+                      <div className="flex items-center gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border border-emerald-500/20">
                         <DollarSign className="w-3.5 h-3.5" />
-                        <span>Saldo OK</span>
+                        <span>Saldo Validado</span>
                       </div>
                     )}
                     
@@ -1536,7 +1657,88 @@ export default function Recomendacoes() {
                 </button>
               </motion.div>
             );
-          })
+          })}
+          
+          {(() => {
+            const validBanksNames = new Set(allCalculatedOffers.map(o => o.name.trim()));
+            const currentSimConvenio = (simData?.convenio || 'INSS').trim().toUpperCase();
+            
+            // Filter by convention and exclusion
+            const excludedBanks = banks.filter(bank => {
+              const bConv = (bank.convenio || 'INSS').trim().toUpperCase();
+              const bConvs = Array.isArray(bank.convenios) ? bank.convenios.map(c => String(c).trim().toUpperCase()) : [bConv];
+              
+              const sameConvenio = bConvs.includes(currentSimConvenio);
+              const notAlreadyValid = !validBanksNames.has(bank.name.trim());
+              
+              return notAlreadyValid && sameConvenio;
+            });
+            
+            // Unique by name to avoid repetitions
+            const uniqueExcludedBanks: any[] = [];
+            const seenNames = new Set();
+            excludedBanks.forEach(b => {
+              const normalizedName = b.name.trim().toLowerCase();
+              if (!seenNames.has(normalizedName)) {
+                seenNames.add(normalizedName);
+                uniqueExcludedBanks.push(b);
+              }
+            });
+            
+            if (uniqueExcludedBanks.length === 0) return null;
+            
+            return (
+              <div className="mt-8 mb-4">
+                 <h3 className="text-sm font-bold text-slate-500 mb-3 px-4 uppercase tracking-wider">Outros Bancos Indisponíveis ({currentSimConvenio})</h3>
+                 {uniqueExcludedBanks.map(bank => {
+                   const reasons = filterReasons.filter(r => r.bankName.trim().toLowerCase() === bank.name.trim().toLowerCase());
+                   
+                   let mainReason = "Banco indisponível para esta configuração.";
+                   if (reasons.length > 0) {
+                     // Prioritize specific rejection reasons like Analfabeto, 60+, Invalidez, Saldo
+                     const priorityRejections = reasons.filter(r => 
+                        r.reason.includes("Analfabeto") || 
+                        r.reason.includes("60+") || 
+                        r.reason.includes("Invalidez") || 
+                        r.reason.includes("Saldo devedor")
+                     );
+
+                     // Also check weighted rate failures
+                     const rateFailures = reasons.filter(r => r.reason.includes("Taxa ponderada"));
+                     
+                     if (priorityRejections.length > 0) {
+                       mainReason = priorityRejections[0].reason;
+                     } else if (rateFailures.length > 0) {
+                       rateFailures.sort((a, b) => {
+                         const aVal = parseFloat(a.reason.match(/Tabela exige: ([\d,.]+)/)?.[1].replace(',', '.') || '999');
+                         const bVal = parseFloat(b.reason.match(/Tabela exige: ([\d,.]+)/)?.[1].replace(',', '.') || '999');
+                         return aVal - bVal;
+                       });
+                       mainReason = rateFailures[0].reason;
+                     } else {
+                       mainReason = reasons[0].reason;
+                     }
+                   }
+
+                   return (
+                     <div key={bank.id} className="p-3 bg-slate-100 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-white/5 opacity-60 grayscale mx-4 mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-white dark:bg-slate-700 relative overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800 shadow-sm">
+                            <Image src={bank.logoUrl || '/placeholder.png'} alt={bank.name} fill className="object-cover" unoptimized />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-tighter">{bank.name}</h4>
+                            <p className="text-[11px] font-bold text-amber-600 dark:text-amber-500 leading-tight mt-0.5">{mainReason}</p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] uppercase font-black text-slate-500 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-lg">Indisponível</span>
+                     </div>
+                   );
+                 })}
+              </div>
+            );
+          })()}
+        </>
         )}
       </div>
         </div>

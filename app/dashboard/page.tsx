@@ -38,8 +38,6 @@ import {
   Cell,
   Legend
 } from 'recharts';
-import BottomNav from '@/components/BottomNav';
-import Sidebar from '@/components/Sidebar';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
@@ -639,14 +637,22 @@ export default function Dashboard() {
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <button 
               onClick={generateDashboardReport}
               disabled={generatingReport}
-              className="flex items-center gap-2 px-5 py-3 bg-secondary hover:bg-secondary/90 text-white font-bold rounded-xl shadow-lg shadow-secondary/20 transition-all active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/90 text-white text-sm font-bold rounded-xl shadow-lg shadow-secondary/20 transition-all active:scale-95 disabled:opacity-50"
             >
-              {generatingReport ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-              <span>Relatório PDF</span>
+              {generatingReport ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span className="hidden sm:inline">Relatório PDF</span>
+              <span className="sm:hidden">PDF</span>
+            </button>
+            <button 
+              onClick={logout}
+              className="md:hidden flex items-center justify-center size-10 bg-red-500 hover:bg-red-600 text-white rounded-xl shadow-lg shadow-red-500/20 transition-all active:scale-95"
+              title="Sair"
+            >
+              <LogOut className="w-5 h-5" />
             </button>
           </div>
         </div>

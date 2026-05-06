@@ -1,14 +1,14 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, LayoutDashboard, Calculator, Settings, Sun, Moon, ClipboardList } from 'lucide-react';
+import { Home, LayoutDashboard, Calculator, Settings, Sun, Moon, ClipboardList, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { PromotoraAvatar } from './PromotoraAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { profile } = useAuth();
+  const { profile, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   // Determine active tab from pathname
@@ -62,6 +62,10 @@ export default function BottomNav() {
           />
           <p className="text-[10px] font-black uppercase tracking-tighter">Perfil</p>
         </Link>
+        <button onClick={() => logout()} className="flex flex-col items-center gap-1 text-red-400 hover:text-red-300 transition-all">
+          <LogOut className="w-6 h-6" />
+          <p className="text-[10px] font-black uppercase tracking-tighter">Sair</p>
+        </button>
       </div>
     </nav>
   );
