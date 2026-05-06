@@ -3,24 +3,10 @@ import { getAdminDb } from "@/lib/firebase-admin";
 import { calculateOffers, SimulationParams } from "@/lib/simulation-engine";
 // Initialization logic
 const getAI = () => {
-    let apiKey = undefined;
+    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
     
-    // Try to read from OS environment directly if possible (Next.js replaces process.env statically)
-    try {
-        const fs = require('fs');
-        if (fs.existsSync('.env.local')) {
-            const envData = fs.readFileSync('.env.local', 'utf8');
-            const match = envData.match(/NEXT_PUBLIC_GEMINI_API_KEY=(.+)/);
-            if (match) apiKey = match[1].trim();
-        }
-    } catch(e) {}
-
-    if (!apiKey) {
-        apiKey = process.env['NEXT_PUBLIC_GEMINI_API_KEY'] || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    }
-
     if (!apiKey || apiKey.includes("MY_GEMINI")) {
-        return { error: `Invalid API Key found: ${apiKey}` };
+        console.warn("Invalid or missing API Key for Gemini");
     }
     
     return new GoogleGenAI({ apiKey });

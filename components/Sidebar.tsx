@@ -63,8 +63,8 @@ export default function Sidebar() {
     menuItems.push({ name: 'Usuários', icon: Users, path: '/admin/usuarios' });
   }
 
-  // Apenas Admin por enquanto
-  if (profile?.role === 'admin') {
+  // Acesso para Admin e Promotora
+  if (profile?.role === 'admin' || profile?.role === 'promotora') {
     menuItems.push({ name: 'Simulador WhatsApp', icon: FileText, path: '/admin/simulador-whatsapp' });
   }
 

@@ -60,6 +60,7 @@ export default function LoginContent() {
 
   useEffect(() => {
     const fetchBranding = async () => {
+      setIsLoadingBranding(true);
       try {
         console.log("LoginContent: Fetching branding settings...", slug ? `Slug: ${slug}` : "Global");
         const data = slug ? await getBrandingBySlug(slug) : await getBrandingSettings();
@@ -75,7 +76,7 @@ export default function LoginContent() {
           console.log("LoginContent: No branding settings found, using defaults.");
         }
       } catch (error: any) {
-        console.error("LoginContent: Error fetching branding settings:", error);
+        console.warn("LoginContent: Error fetching branding, using defaults", error);
         if (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded')) {
           setQuotaExceeded(true);
         }
@@ -88,12 +89,12 @@ export default function LoginContent() {
   }, [setQuotaExceeded, slug]);
 
   useEffect(() => {
-    if (isAuthReady && user) {
-      console.log("LoginContent: Usuário detectado, redirecionando para dashboard...");
-      // Forçar redirecionamento imediato
+    // Only redirect if auth is ready, user is logged in, and NOT pending/blocked
+    if (isAuthReady && user && !blockedError) {
+      console.log("LoginContent: Usuário ativo detectado, redirecionando para dashboard...");
       router.replace('/dashboard');
     }
-  }, [user, isAuthReady, router]);
+  }, [user, isAuthReady, router, blockedError]);
 
   const validateForm = () => {
     const errors: {email?: string, password?: string} = {};
@@ -227,12 +228,19 @@ export default function LoginContent() {
         {!isLoadingBranding ? (
           <Image 
             src={branding.loginImageUrl || "https://picsum.photos/seed/portabilidade/800/400"} 
-            alt="Portabilidade PRO" 
+            alt={branding.promoterName} 
             fill
             priority
             unoptimized
             className="object-cover"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              // Fallback if the image URL fails
+              const target = e.target as HTMLImageElement;
+              if (!target.src.includes('picsum.photos')) {
+                target.src = "https://picsum.photos/seed/portabilidade/800/400";
+              }
+            }}
           />
         ) : (
           <div className="w-full h-full bg-slate-800 animate-pulse flex items-center justify-center">

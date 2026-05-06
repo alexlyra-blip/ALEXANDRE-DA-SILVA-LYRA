@@ -5,19 +5,8 @@ import { runSimulation, SimulationInput } from '@/lib/simulation-service';
 export const dynamic = 'force-dynamic';
 
 const getAI = () => {
-    let apiKey = undefined;
-    try {
-        const fs = require('fs');
-        if (fs.existsSync('.env.local')) {
-            const envData = fs.readFileSync('.env.local', 'utf8');
-            const match = envData.match(/NEXT_PUBLIC_GEMINI_API_KEY=(.+)/);
-            if (match) apiKey = match[1].trim();
-        }
-    } catch(e) {}
-    if (!apiKey) {
-        apiKey = process.env['NEXT_PUBLIC_GEMINI_API_KEY'] || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-    }
-  return new GoogleGenAI({ apiKey });
+    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+    return new GoogleGenAI({ apiKey });
 };
 
 // Tokens de configuração

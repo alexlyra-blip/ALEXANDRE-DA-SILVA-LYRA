@@ -24,8 +24,8 @@ export default function WhatsappSimulator() {
   useEffect(() => {
     // Only redirect if auth is ready AND we have a profile AND that profile is NOT an admin
     // If profile is still null but isAuthReady is true, we wait for profile to arrive (or timeout fallback)
-    if (isAuthReady && profile && profile.role !== 'admin') {
-      console.log("WhatsappSimulator: Non-admin detected, redirecting to dashboard");
+    if (isAuthReady && profile && profile.role !== 'admin' && profile.role !== 'promotora') {
+      console.log("WhatsappSimulator: Unauthorized role detected (" + profile.role + "), redirecting to dashboard");
       router.push('/dashboard');
     }
   }, [profile, isAuthReady, router]);
@@ -56,7 +56,7 @@ export default function WhatsappSimulator() {
     );
   }
 
-  if (profile.role !== 'admin') {
+  if (profile.role !== 'admin' && profile.role !== 'promotora') {
     return null; // The useEffect will handle redirect
   }
 

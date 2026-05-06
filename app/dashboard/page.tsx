@@ -225,12 +225,12 @@ export default function Dashboard() {
       console.log("Dashboard: Profile not ready, skipping whatsappSessions");
       return;
     }
-    if (profile.role !== 'admin') {
-      console.log("Dashboard: User is not admin, skipping whatsappSessions. Role:", profile.role);
+    if (profile.role !== 'admin' && profile.role !== 'promotora') {
+      console.log("Dashboard: User is not admin or promotora, skipping whatsappSessions. Role:", profile.role);
       return;
     }
 
-    console.log("Dashboard: Setting up whatsappSessions listener for admin:", profile.email);
+    console.log("Dashboard: Setting up whatsappSessions listener for " + profile.role + ":", profile.email);
     const q = query(collection(db, 'whatsappSessions'), limit(10));
     
     let isUnmounted = false;
@@ -885,8 +885,8 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* WhatsApp Sessions - Admin Only */}
-            {profile.role === 'admin' && whatsappSessions.length > 0 && (
+            {/* WhatsApp Sessions - Admin & Promotora */}
+            {(profile.role === 'admin' || profile.role === 'promotora') && whatsappSessions.length > 0 && (
               <div className="professional-card p-6 dark:bg-slate-800">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="font-black text-lg flex items-center gap-2">

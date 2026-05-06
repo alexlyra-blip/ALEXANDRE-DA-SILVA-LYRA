@@ -143,6 +143,8 @@ function UsuariosAdminContent() {
   const [newPhone, setNewPhone] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
+  const [newTrialDays, setNewTrialDays] = useState('7');
+  const [newMaxUsers, setNewMaxUsers] = useState('0');
   const [newRole, setNewRole] = useState<UserRole>('corretor');
   const [newLogoFile, setNewLogoFile] = useState<File | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -181,6 +183,8 @@ function UsuariosAdminContent() {
   const [editEmail, setEditEmail] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editRole, setEditRole] = useState<UserRole>('corretor');
+  const [editTrialDays, setEditTrialDays] = useState('0');
+  const [editMaxUsers, setEditMaxUsers] = useState('0');
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
 
   const AVAILABLE_PERMISSIONS = [
@@ -528,6 +532,19 @@ function UsuariosAdminContent() {
     setEditEmail(user.email || '');
     setEditPhone(user.phone || '');
     setEditRole(user.role || 'corretor');
+    setEditMaxUsers(user.maxUsers?.toString() || '0');
+    
+    // Calculate trial days from expiresAt if it exists
+    if (user.expiresAt) {
+      const expiresAt = user.expiresAt.toDate ? user.expiresAt.toDate() : new Date(user.expiresAt);
+      const createdAt = user.createdAt?.toDate ? user.createdAt.toDate() : (user.createdAt ? new Date(user.createdAt) : new Date());
+      const diffTime = Math.abs(expiresAt.getTime() - createdAt.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      setEditTrialDays(diffDays.toString());
+    } else {
+      setEditTrialDays('0');
+    }
+    
     setShowEditModal(true);
   };
 
@@ -559,11 +576,23 @@ function UsuariosAdminContent() {
       }
 
       const userRef = doc(db, 'users', editingUser.id);
+      
+      // Update expiresAt based on trial days
+      const days = parseInt(editTrialDays || '0');
+      let expiresAt = null;
+      if (days > 0) {
+        const createdAt = editingUser.createdAt?.toDate ? editingUser.createdAt.toDate() : (editingUser.createdAt ? new Date(editingUser.createdAt) : new Date());
+        expiresAt = new Date(createdAt);
+        expiresAt.setDate(expiresAt.getDate() + days);
+      }
+
       await updateDoc(userRef, {
         name: editName,
         email: editEmail,
         phone: editPhone,
-        role: editRole
+        role: editRole,
+        expiresAt: expiresAt,
+        maxUsers: parseInt(editMaxUsers || '0')
       });
       
       await logAuditAction('UPDATE_USER', editingUser.id, `Nome: ${editName}, Email: ${editEmail}, Perfil: ${editRole}`);
@@ -1033,8 +1062,11 @@ function UsuariosAdminContent() {
       }
 
       // Create profile in Firestore
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 3);
+      const trialDaysValue = parseInt(newTrialDays || '7');
+      const expiresAt = trialDaysValue > 0 ? new Date() : null;
+      if (expiresAt && trialDaysValue > 0) {
+        expiresAt.setDate(expiresAt.getDate() + trialDaysValue);
+      }
 
       const userProfileData = {
         uid: newUser.uid,
@@ -1049,7 +1081,9 @@ function UsuariosAdminContent() {
         expiresAt: expiresAt,
         createdBy: profile?.uid || null,
         promotoraId: profile?.role === 'promotora' ? profile.uid : (profile?.promotoraId || profile?.createdBy || 'admin'),
-        allowedBanks: []
+        allowedBanks: [],
+        maxUsers: parseInt(newMaxUsers || '0'),
+        permissions: newRole === 'admin' ? ['*'] : [],
       };
 
       try {
@@ -1878,6 +1912,18 @@ function UsuariosAdminContent() {
                       </button>
                     );
                   })()}
+                  {user.role === 'promotora' && (
+                    <div className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${
+                      (user.maxUsers > 0 && users.filter(u => u.promotoraId === user.id).length >= user.maxUsers)
+                        ? 'bg-red-500/10 border-red-500/20 text-red-600' 
+                        : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-3 h-3" />
+                        <span>{users.filter(u => u.promotoraId === user.id).length} / {user.maxUsers || '∞'}</span>
+                      </div>
+                    </div>
+                  )}
                   <button
                     onClick={() => {
                       setEditingAllowedBanksUser(user);
@@ -2169,15 +2215,15 @@ function UsuariosAdminContent() {
       )}
       {isAddingUser && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
               <h2 className="font-bold text-lg">Novo Usuário</h2>
               <button onClick={() => setIsAddingUser(false)} className="text-slate-400 hover:text-slate-600">
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
             
-            <form onSubmit={handleCreateUser} className="p-6 flex flex-col gap-4">
+            <form onSubmit={handleCreateUser} className="p-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
               {createError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs text-center">
                   {createError}
@@ -2314,6 +2360,42 @@ function UsuariosAdminContent() {
                 </select>
               </div>
 
+              {profile?.role === 'admin' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Dias de Teste</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={newTrialDays}
+                      onChange={(e) => setNewTrialDays(e.target.value)}
+                      placeholder="Ex: 7"
+                      min="0"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">Dias</div>
+                  </div>
+                  <p className="text-[9px] text-slate-400 ml-1 mt-0.5">O acesso será bloqueado após este período.</p>
+                </div>
+              )}
+
+              {profile?.role === 'admin' && (newRole === 'promotora') && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Limite de Usuários</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={newMaxUsers}
+                      onChange={(e) => setNewMaxUsers(e.target.value)}
+                      placeholder="Ex: 10"
+                      min="0"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">Users</div>
+                  </div>
+                  <p className="text-[9px] text-slate-400 ml-1 mt-0.5">Define quantos usuários esta promotora pode cadastrar.</p>
+                </div>
+              )}
+
               <button 
                 type="submit"
                 disabled={isCreating}
@@ -2329,8 +2411,8 @@ function UsuariosAdminContent() {
       {/* Edit User Modal */}
       {showEditModal && editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200 dark:border-slate-800">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-800 shrink-0">
               <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Editar Usuário</h2>
               <button 
                 onClick={() => {
@@ -2343,7 +2425,7 @@ function UsuariosAdminContent() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Nome Completo</label>
                 <input
@@ -2392,6 +2474,50 @@ function UsuariosAdminContent() {
                   )}
                 </select>
               </div>
+
+              {profile?.role === 'admin' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Dias de Teste</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editTrialDays}
+                      onChange={(e) => setEditTrialDays(e.target.value)}
+                      placeholder="Ex: 7"
+                      min="0"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">Dias</div>
+                  </div>
+                  <p className="text-[9px] text-slate-400 ml-1 mt-0.5">Defina 0 para acesso ilimitado.</p>
+                </div>
+              )}
+
+              {profile?.role === 'admin' && editRole === 'promotora' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Limite de Usuários</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editMaxUsers}
+                      onChange={(e) => setEditMaxUsers(e.target.value)}
+                      placeholder="Ex: 10"
+                      min="0"
+                      className={`w-full border rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                        (parseInt(editMaxUsers) > 0 && users.filter(u => u.promotoraId === editingUser.id).length >= parseInt(editMaxUsers))
+                          ? 'bg-red-50 border-red-200 dark:bg-red-500/10 dark:border-red-500/30 text-red-600'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                      }`}
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">Users</div>
+                  </div>
+                  <p className="text-[9px] text-slate-400 ml-1 mt-0.5">
+                    {parseInt(editMaxUsers) > 0 && users.filter(u => u.promotoraId === editingUser.id).length >= parseInt(editMaxUsers) 
+                      ? "Atenção: Limite atingido ou excedido!" 
+                      : "0 = Ilimitado"}
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button
