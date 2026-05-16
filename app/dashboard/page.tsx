@@ -997,6 +997,9 @@ export default function Dashboard() {
                       <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-10 border-2 border-white dark:border-slate-800 shadow-sm" />
                        <div className="flex flex-col">
                          <span className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors">{sim.userName || 'N/A'}</span>
+                         <span className="text-[10px] font-bold text-slate-400 mt-0.5">
+                           {sim.origin === 'whatsapp' ? 'Simulação via WhatsApp' : 'Simulação via Web'}
+                         </span>
                          <span 
                            className="text-[10px] font-bold text-white px-2 py-0.5 rounded-full w-fit mt-1 shadow-sm"
                            style={{ backgroundColor: badgeColor }}

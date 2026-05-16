@@ -76,6 +76,26 @@ import { safeLocalStorageSet } from '@/lib/utils';
 
 import { Suspense } from 'react';
 
+function UserSimulationCounter({ userId }: { userId: string }) {
+  const [count, setCount] = useState<number | null>(null);
+  
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const { getCountFromServer, query, collection, where } = await import('firebase/firestore');
+        const countSnap = await getCountFromServer(query(collection(db, 'simulations'), where('userId', '==', userId)));
+        setCount(countSnap.data().count);
+      } catch (e) {
+        console.error("Erro ao buscar contagem", e);
+      }
+    };
+    fetchCount();
+  }, [userId]);
+
+  if (count === null) return <span className="text-slate-300 text-[10px]">...</span>;
+  return <span className="font-bold text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded-full">{count} simulações</span>;
+}
+
 export default function UsuariosAdmin() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
@@ -795,6 +815,18 @@ function UsuariosAdminContent() {
         next.delete(userId);
         return next;
       });
+    }
+  };
+
+  const handleToggleAutoRenew = async (user: any) => {
+    try {
+      await updateDoc(doc(db, 'users', user.id), {
+        autoRenew: !user.autoRenew
+      });
+      showToast(`Renovação automática ${!user.autoRenew ? 'ativada' : 'desativada'} com sucesso!`, "success");
+    } catch (error) {
+      console.error("Erro ao atualizar renovação", error);
+      showToast("Erro ao atualizar renovação.", "error");
     }
   };
 
@@ -1820,7 +1852,11 @@ function UsuariosAdminContent() {
                         <Phone className="w-3 h-3" /> {user.phone}
                       </p>
                     )}
-                    <p className="text-[10px] text-slate-400">Criado por: {getCreatorName(user.createdBy)}</p>
+                    )}
+                    <div className="flex gap-2 items-center mt-1">
+                      <p className="text-[10px] text-slate-400">Criado por: {getCreatorName(user.createdBy)}</p>
+                      <UserSimulationCounter userId={user.id} />
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1912,6 +1948,21 @@ function UsuariosAdminContent() {
                       </button>
                     );
                   })()}
+                  
+                  {user.role !== 'admin' && (
+                    <button
+                      onClick={() => handleToggleAutoRenew(user)}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                        user.autoRenew 
+                          ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600' 
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                      }`}
+                      title={user.autoRenew ? "Desativar Renovação Automática" : "Ativar Renovação Automática"}
+                    >
+                      {user.autoRenew ? 'Renovação Ativa' : 'Renovação Manual'}
+                    </button>
+                  )}
+
                   {user.role === 'promotora' && (
                     <div className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${
                       (user.maxUsers > 0 && users.filter(u => u.promotoraId === user.id).length >= user.maxUsers)

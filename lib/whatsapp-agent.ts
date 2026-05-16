@@ -163,8 +163,8 @@ Encontramos uma oferta ideal para você no *[NOME DO BANCO]*:
 📈 *Taxa do Refinanciamento:* [taxaBase]%
 
 REGRAS DE BANCO ATUAL (Mapeamento de Códigos):
-Se o usuário disser o nome do banco, use o código se souber:
-Bradesco: 237, Itaú: 341, Santander: 033, Banco do Brasil: 001, Caixa: 104, PAN: 623, BMG: 311, Safra: 422, C6: 626, Daycoval: 707, Banrisul: 041.
+Se o usuário disser o nome do banco, use o código se souber. Segue a lista completa de bancos aceitos na plataforma:
+121 - AGIBANK, 250 - BCV, 025 - BANCO ALFA, 233 - BANCO CIFRA, 001 - BANCO DO BRASIL, 047 - BANCO DO ESTADO DO SERGIPE, 079 - BANCO ORIGINAL, 643 - BANCO PINE, 081 - BANCO SEGURO, 041 - BANRISUL, 268 - BARIGUI, 318 - BMG, 237 - BRADESCO S.A., 070 - BRB, 626 - C6, 320 - CCB BRASIL, 104 - CAIXA, 069 - CREFISA, 707 - DAYCOVAL, 335 - DIGIO, 149 - FACTA, 012 - INBURSA, 029 - ITAÚ CONSIGNADO, 184 - ITAÚ BBA, 341 - ITAÚ UNIBANCO, 389 - MERCANTIL, 386 - NU FINANCEIRA S.A., 753 - NBC BANK, 169 - OLÉ, 290 - PAGBANK, 623 - PAN, 254 - PARANÁ BANCO, 752 - BNP PARIBAS, 326 - PARATI, 611 - PAULISTA, 380 - PICPAY, 329 - QI SOCIEDADE, 966 - SABEMI, 422 - SAFRA, 033 - SANTANDER, 359 - ZEMA, OUTROS.
 
 Também liberamos ofertas para outros bancos (somente se houver 'allBanksWithOffers'):
 - [NOME BANCO 2]
@@ -253,7 +253,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
             try {
                 const simulationData = {
                     userId: userProfileForSimulation.uid || 'whatsapp-bot',
-                    userName: userProfileForSimulation.name || 'WhatsApp Bot',
+                    userName: userProfileForSimulation.name || 'Usuário WhatsApp',
                     userEmail: userProfileForSimulation.email || '',
                     promotoraId: userProfileForSimulation.promotoraId || '',
                     clientName: 'Cliente via WhatsApp',
