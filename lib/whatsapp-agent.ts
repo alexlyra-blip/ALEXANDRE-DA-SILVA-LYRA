@@ -1,14 +1,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { calculateOffers, SimulationParams } from "@/lib/simulation-engine";
+
 // Initialization logic
 const getAI = () => {
     const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-
     if (!apiKey || apiKey.includes("MY_GEMINI")) {
         console.warn("Invalid or missing API Key for Gemini");
     }
-
     return new GoogleGenAI({ apiKey });
 };
 
@@ -62,22 +61,17 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         return `DEBUG_NULL_AI: ${(ai as any)?.error || "unknown"}`;
     }
 
-    // Se for a primeira mensagem (histórico vazio) oferece opções iniciais
+    // Primeira mensagem
     if (history.length === 0) {
-        const welcome = `Olá! Eu sou o *Gutto*, seu especialista em portabilidade de crédito consignado.\n\nVocê pode:
-• *Iniciar uma simulação* – basta dizer "Quero simular" ou "Iniciar simulação".
-• *Consultar regras* – peça o "resumo das regras" ou pergunte sobre um banco específico (ex.: "Qual a idade mínima do Banco do Brasil?").\n\nComo posso ajudar?`;
-        return welcome;
+        return `Olá! Eu sou o *Gutto*, seu especialista em portabilidade de crédito consignado.\n\nVocê pode:\n• *Iniciar uma simulação* – basta dizer "Quero simular".\n• *Consultar regras* – peça o "resumo das regras" ou pergunte sobre um banco.\n\nComo posso ajudar?`;
     }
 
-    // Verificar se a mensagem solicita informações ou resumo das regras dos bancos
+    // Consulta de Regras
     const lowerMsg = message.toLowerCase();
-    const asksForRules = /\b(resumo|regras|informações?|detalhes?)\b/.test(lowerMsg) || /\b(banco|instituição)\b/.test(lowerMsg);
+    const asksForRules = /\b(resumo|regras|informações?|detalhes?)\b/.test(lowerMsg) || (/\b(banco|instituição)\b/.test(lowerMsg) && !history.some(h => h.content.includes("Troco Estimado")));
+    
     if (asksForRules) {
-        // Se ainda não temos o cache, carrega rapidamente (fallback)
         if (!cachedBankRulesText) {
-            // Carrega de forma síncrona rápida – já existe lógica de cache abaixo, então chamamos manualmente
-            // (ignore erros silenciosamente)
             try {
                 const adminDb = getAdminDb();
                 if (adminDb) {
@@ -99,51 +93,14 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
                 }
             } catch (e) { /* ignore */ }
         }
-        const response = `📝 *Resumo das regras dos bancos*:\n${cachedBankRulesText}\nSe quiser detalhes de algum banco específico, basta informar o nome dele.`;
-        return response;
+        return `📝 *Resumo das regras dos bancos*:\n${cachedBankRulesText}\nSe quiser detalhes de algum banco específico, basta informar o nome dele.`;
     }
-    // Carregar e fazer cache das regras dos bancos para o Gutto responder dúvidas (mantém o bloco existente abaixo)
-    if (Date.now() - lastCacheTime > 5 * 60 * 1000) {
-        try {
-            const adminDb = getAdminDb();
-            if (adminDb) {
-                const banksSnap = await adminDb.collection('bankRules').get();
-                let rulesText = 'RESUMO DAS REGRAS DOS BANCOS (Use apenas se o usuário perguntar dúvidas sobre regras):\n';
-                banksSnap.forEach(doc => {
-                    const data = doc.data();
-                    if (data.isActive !== false) {
-                        rulesText += `- ${data.name}: Idade ${data.minAge || 18} a ${data.maxAge || 80} anos. `;
-                        if (data.portabilityRate) rulesText += `Taxa mín. Portabilidade: ${data.portabilityRate}%. `;
-                        if (data.refinRate) rulesText += `Taxa Refin: ${data.refinRate}%. `;
-                        if (data.minBalance) rulesText += `Saldo mín: R$ ${data.minBalance}. `;
-                        if (data.minTroco) rulesText += `Troco mín: R$ ${data.minTroco}. `;
-                        if (data.minInstallmentValue) rulesText += `Parcela mín: R$ ${data.minInstallmentValue}. `;
-                        if (data.nonAcceptedBanks && data.nonAcceptedBanks.length > 0) rulesText += `Bancos que NÃO aceita: ${data.nonAcceptedBanks.join(', ')}. `;
-                        rulesText += '\n';
-                    }
-                });
-                cachedBankRulesText = rulesText;
-                lastCacheTime = now;
-            }
-        } catch (e) {
-            console.error("Erro ao carregar regras para o cache:", e);
-        }
-    }
-
-    const systemInstruction = `Você é o "Gutto", o Agente de IA especialista em Portabilidade de Crédito Consignado da Portabilidade PRO.
-Você não só realiza simulações, mas também tira qualquer dúvida do corretor sobre as regras dos bancos.
-
-${cachedBankRulesText}
-Se o corretor fizer uma pergunta sobre as regras de um banco específico ou pedir um resumo geral, responda de forma consultiva e educada usando os dados acima. Se ele quiser apenas tirar dúvidas, não exija todos os dados do fluxo, apenas responda a dúvida dele de forma prestativa!
-
-O QUE COLETAR DO PARCEIRO PARA SIMULAÇÃO (DIRETO E OBJETIVO):`;
-
 
     let userProfileForSimulation = { role: 'admin' } as any;
 
-    // Validate phone and get profile
+    // Validate phone
     if (currentPhone) {
-        const cleanPhone = currentPhone.replace(/\D/g, ''); // Extract only digits
+        const cleanPhone = currentPhone.replace(/\D/g, ''); 
         const adminDb = getAdminDb();
         if (adminDb) {
             const usersRef = await adminDb.collection('users').get();
@@ -157,23 +114,19 @@ O QUE COLETAR DO PARCEIRO PARA SIMULAÇÃO (DIRETO E OBJETIVO):`;
                     }
                 }
             });
-
-            if (!foundUser) {
-                return "Desculpe, seu número de telefone não está cadastrado no sistema. Por favor, entre em contato com o administrador para solicitar o acesso.";
-            }
-
+            if (!foundUser) return "Desculpe, seu número não está cadastrado.";
             userProfileForSimulation = foundUser;
         }
     }
 
-    // Carregar e fazer cache das regras dos bancos para o Gutto responder dúvidas
+    // Cache de Regras
     const now = Date.now();
     if (now - lastCacheTime > 5 * 60 * 1000) {
         try {
             const adminDb = getAdminDb();
             if (adminDb) {
                 const banksSnap = await adminDb.collection('bankRules').get();
-                let rulesText = 'RESUMO DAS REGRAS DOS BANCOS (Use apenas se o usuário perguntar dúvidas sobre regras):\n';
+                let rulesText = 'RESUMO DAS REGRAS DOS BANCOS:\n';
                 banksSnap.forEach(doc => {
                     const data = doc.data();
                     if (data.isActive !== false) {
@@ -190,106 +143,52 @@ O QUE COLETAR DO PARCEIRO PARA SIMULAÇÃO (DIRETO E OBJETIVO):`;
                 cachedBankRulesText = rulesText;
                 lastCacheTime = now;
             }
-        } catch (e) {
-            console.error("Erro ao carregar regras para o cache:", e);
-        }
+        } catch (e) { console.error(e); }
     }
 
-    const systemInstruction = `Você é o "Gutto", o Agente de IA especialista em Portabilidade de Crédito Consignado da Portabilidade PRO.
-Você não só realiza simulações, mas também tira qualquer dúvida do corretor sobre as regras dos bancos.
+    const systemInstruction = `Você é o "Gutto", Agente de IA da Portabilidade PRO.
 
-${cachedBankRulesText}
-Se o corretor fizer uma pergunta sobre as regras de um banco específico ou pedir um resumo geral, responda de forma consultiva e educada usando os dados acima. Se ele quiser apenas tirar dúvidas, não exija todos os dados do fluxo, apenas responda a dúvida dele de forma prestativa!
+ESTADO DA CONVERSA:
+1. Verifique o histórico para ver o que já foi coletado.
+2. Se você já apresentou o resultado (Troco Estimado) e o usuário pedir "Outro Banco" ou o nome de um banco da lista, VOCÊ DEVE chamar a ferramenta 'calculate_client_loan_offers' novamente, mantendo os dados e trocando apenas o 'bancoAtual'.
+3. Faça apenas UMA pergunta por vez.
 
-O QUE COLETAR DO PARCEIRO PARA SIMULAÇÃO (DIRETO E OBJETIVO):
-Vá pedindo OS DADOS SEGUINDO A ORDEM sem enrolação. Nunca repita perguntas se o usuário já forneceu os dados.
+FLUXO DE COLETA:
+1. Convênio e Idade.
+2. Localidade se 60+.
+3. Sub-convênio/Espécie.
+4. Cartões (apenas INSS).
+5. Analfabeto.
+6. Banco Atual.
+7. Prazo Total.
+8. Prazo Restante.
+9. Valor da Parcela.
+10. Saldo Devedor.
 
-IMPORTANTE: Faça apenas UMA pergunta por vez e espere o usuário responder antes de fazer a próxima. Não junte duas perguntas (ex: analfabeto e 60+) na mesma mensagem.
+REGRAS CRÍTICAS:
+- Assim que tiver o 'Saldo Devedor' ou o usuário pedir outro banco da lista, chame a ferramenta 'calculate_client_loan_offers'.
+- NUNCA invente valores. Use apenas o que a ferramenta retornar.
 
-Fluxo Exato (Siga esta ordem rigorosamente e faça as perguntas UMA POR UMA):
-
-1. COMEÇO (CONVÊNIO E IDADE):
-Bot: "Olá! 🧑🏻‍🦲 Sou o Gutto Especialista em Portabilidade. Vou pedir alguns dados para fazermos a sua simulação, ok? Qual é o seu **Convênio** e a **Idade** do cliente? (Ex: INSS, SIAPE, Governo, Forças Armadas ou CLT Privado)."
-
-2. VALIDAÇÃO LOCALIDADE 60+:
-SE a idade informada for igual ou maior a 60 anos, pergunte OBRIGATORIAMENTE logo em seguida:
-Bot: "Aproveitando, como o cliente tem 60 anos ou mais, ele reside nos estados de **AP, PB, TO ou RR**? (Responda SIM ou NÃO)."
-(Se a idade for inferior a 60, pule direto para o passo 3).
-
-3. SUB-CONVÊNIO / ESPÉCIE / DATA DE CONCESSÃO:
-- SE CONVÊNIO FOR "SIAPE": Pule direto para o passo 5 (Analfabetismo).
-- SE CONVÊNIO FOR "FORÇAS ARMADAS": Pergunte a Força Militar (Exército, Aeronáutica ou Marinha).
-- SE CONVÊNIO FOR "GOVERNO": Pergunte a sigla do Estado.
-- SE CONVÊNIO FOR "INSS": Pergunte: "Qual é a **Espécie do Benefício** do Cliente? (Pode digitar apenas o código)."
-
-4. CONFIRMAÇÃO DA ESPÉCIE E CARTÕES (APENAS INSS):
-Assim que o cliente informar a espécie (ex: 41), VOCÊ DEVE confirmar o nome da espécie na sua próxima mensagem e JÁ fazer a pergunta dos cartões. Exemplo:
-Bot: "Entendido, **Aposentadoria por Idade (41)**! O cliente possui **2 cartões consignados ativos**? (Responda SIM ou NÃO)."
-(Se a espécie for de invalidez e idade < 60, peça a data de concessão antes).
-Se ele responder SIM para os 2 cartões, pergunte em seguida:
-Bot: "Qual o **valor negativo** gerado pelos cartões? (Se não souber, digite apenas OK para abatermos o padrão de R$ 81,05)."
-
-5. ANALFABETISMO:
-Após as etapas anteriores, pergunte SOZINHO:
-Bot: "O Cliente é **Analfabeto**? Responda SIM ou NÃO."
-
-6. BANCO ATUAL E CONFIRMAÇÃO:
-Em seguida, pergunte:
-Bot: "Legal! E qual é o seu **Banco Atual**? (Pode informar o nome ou o código do banco)."
-(MUITO IMPORTANTE: Quando o usuário informar o banco, você DEVE confirmar o nome completo do banco na sua mensagem seguinte).
-
-7. PRAZO TOTAL:
-Exemplo de transição confirmando o banco:
-Bot: "Confirmado o banco **Itaú**! Certo. Qual é o **prazo total** original do seu empréstimo em meses? (Ex: 84)."
-
-8. PRAZO RESTANTE:
-Espere a resposta do prazo total e pergunte:
-Bot: "E qual o **prazo restante** (quantas parcelas faltam pagar)?"
-
-9. VALOR DA PARCELA:
-Espere a resposta do prazo restante e pergunte:
-Bot: "Perfeito! Qual o valor da **parcela**?"
-
-10. SALDO DEVEDOR (FIM):
-Espere a resposta da parcela e pergunte:
-Bot: "E por fim, qual o **saldo devedor** atual?"
-(JAMAIS peça para confirmar o convênio ou benefício nesta etapa final. Use o que foi informado no início).
-
-Atenção: Logo que obtiver todos os dados (até o Saldo Devedor), INVOQUE IMEDIATAMENTE A FERRAMENTA 'calculate_client_loan_offers'.
-
-APÓS A SIMULAÇÃO (FORMATAÇÃO OBRIGATÓRIA EXATA E FIDELIDADE AOS DADOS):
-ATENÇÃO: Você PROIBIDO de inventar ou criar tabelas. Use ESTRITAMENTE as tabelas e os bancos devolvidos no JSON da ferramenta 'calculate_client_loan_offers'.
-MUITO IMPORTANTE: Se o JSON retornar 'banksCount: 0' ou 'bestTroco' for nulo, significa que NÃO há ofertas disponíveis. Neste caso, diga educadamente: "Poxa, infelizmente com os dados informados não encontramos nenhuma oferta viável nos bancos no momento." e OBRIGATORIAMENTE adicione a tag \`[END_SESSION]\`.
-
-Ao ter o resultado com ofertas, use os campos 'name', 'tabela', 'valorTroco', 'valorContrato', 'valorParcela', 'prazoRefinPort', 'taxaBase' e 'tabelasCount' para preencher o layout.
-
-Exiba as informações da melhor oferta usando EXATAMENTE ESTE LAYOUT VISUAL:
-
+LAYOUT DE RESPOSTA (OBRIGATÓRIO):
 Encontramos uma oferta ideal para você no *[NOME DO BANCO]*:
 ⭐ *[tabelasCount] tabelas disponíveis*
 
 📊 *Tabela:* [tabela]
 💰 *Troco Estimado:* R$ [valorTroco]
 📄 *Novo Contrato:* R$ [valorContrato]
-💲 *Valor da Parcela:* R$ [valor da parcela da simulação]
+💲 *Valor da Parcela:* R$ [valor da parcela]
 ⏳ *Prazo do Refin/Port:* [prazoRefinPort] meses
 📈 *Taxa do Refinanciamento:* [taxaBase]%
 
-REGRAS DE BANCO ATUAL (Mapeamento de Códigos):
-Se o usuário disser o nome do banco, use o código se souber. Segue a lista completa de bancos aceitos na plataforma:
-121 - AGIBANK, 250 - BCV, 025 - BANCO ALFA, 233 - BANCO CIFRA, 001 - BANCO DO BRASIL, 047 - BANCO DO ESTADO DO SERGIPE, 079 - BANCO ORIGINAL, 643 - BANCO PINE, 081 - BANCO SEGURO, 041 - BANRISUL, 268 - BARIGUI, 318 - BMG, 237 - BRADESCO S.A., 070 - BRB, 626 - C6, 320 - CCB BRASIL, 104 - CAIXA, 069 - CREFISA, 707 - DAYCOVAL, 335 - DIGIO, 149 - FACTA, 012 - INBURSA, 029 - ITAÚ CONSIGNADO, 184 - ITAÚ BBA, 341 - ITAÚ UNIBANCO, 389 - MERCANTIL, 386 - NU FINANCEIRA S.A., 753 - NBC BANK, 169 - OLÉ, 290 - PAGBANK, 623 - PAN, 254 - PARANÁ BANCO, 752 - BNP PARIBAS, 326 - PARATI, 611 - PAULISTA, 380 - PICPAY, 329 - QI SOCIEDADE, 966 - SABEMI, 422 - SAFRA, 033 - SANTANDER, 359 - ZEMA, OUTROS.
+Outros Bancos: [BANCO 2], [BANCO 3]
 
-Também liberamos ofertas para outros bancos (somente se houver 'allBanksWithOffers', exiba-os lado a lado separados por vírgula):
-Outros Bancos Disponíveis: [BANCO 2], [BANCO 3], [BANCO 4]
+OPÇÕES:
+- Digite *Tabelas* para ver outras opções deste banco.
+- Digite o *Nome de outro Banco* para ver detalhes dele.
 
-Sempre encerre a sua mensagem listando as duas opções abaixo para o cliente de forma natural:
-Para ver as outras tabelas disponíveis deste banco, digite *Tabelas*.
-Caso queira ver a oferta detalhada de outro banco, basta digitar o *Nome do Banco* agora!
-
-(Se o usuário pedir detalhes de outro banco listado, você DEVE procurar os dados deste banco na lista 'sampleOffers' fornecida no JSON. Se o usuário digitar "Tabelas" para ver as outras tabelas do banco principal, procure os dados na lista 'otherTablesOfBestBank'. NUNCA INVENTE TABELAS OU VALORES. Se a oferta estiver no JSON, exiba usando o mesmo layout acima. Se não estiver, peça desculpas e diga que os detalhes completos estão no portal web).
-
-ENCERRAMENTO:
-Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATORIAMENTE anexe a tag \`[END_SESSION]\` à sua mensagem.`;
+---
+REGRAS (Para consulta):
+${cachedBankRulesText}`;
 
     try {
         const contents = [
@@ -300,7 +199,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
             { role: "user", parts: [{ text: message }] }
         ];
 
-        let result = await ai.models.generateContent({
+        const result = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
             contents,
             config: {
@@ -309,19 +208,22 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
             }
         });
 
-        const functionCalls = result.functionCalls;
+        const candidates = (result as any).candidates || (result as any).response?.candidates;
+        const firstCandidate = candidates?.[0];
+        const parts = firstCandidate?.content?.parts || [];
+        const functionCalls = parts.filter((p: any) => p.functionCall).map((p: any) => p.functionCall);
 
-        if (functionCalls && functionCalls[0].name === "calculate_client_loan_offers") {
+        if (functionCalls && functionCalls.length > 0 && functionCalls[0].name === "calculate_client_loan_offers") {
             const call = functionCalls[0];
             const params = call.args as unknown as SimulationParams;
 
-            // Apply the 2 cards rule
+            // Business logic for 2 cards
             if (params.convenio === 'INSS' && (params as any).hasTwoCards) {
                 const desconto = (params as any).negativeCardValue || 81.05;
                 params.valorParcela = Math.max(0, (params.valorParcela || 0) - desconto);
             }
 
-            // Calculate taxaJurosMensal if missing so that C6 Bank and other bank rules apply correctly
+            // Interest rate calculation fallback
             if (!params.taxaJurosMensal) {
                 const pmt = params.valorParcela || 0;
                 const pv = params.saldoDevedor || 0;
@@ -334,7 +236,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
             }
 
             const adminDb = getAdminDb();
-            if (!adminDb) return "⚠️ Erro técnico: Falha ao conectar ao banco de dados Firestore.";
+            if (!adminDb) return "⚠️ Erro de conexão com o banco.";
 
             const [banksSnap, rulesSnap, settingsSnap] = await Promise.all([
                 adminDb.collection('bankRules').get(),
@@ -345,100 +247,55 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
             const banks = banksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             const rules = rulesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             const settingsData = settingsSnap.exists ? settingsSnap.data() : {};
-
             const promotoraPriorities = settingsData?.bankPriorities || {};
             const promotoraInstallments = settingsData?.bankInstallments || {};
 
             const allOffers = calculateOffers(params, banks, rules, promotoraPriorities, promotoraInstallments, userProfileForSimulation);
 
-            // ---------------------------------------------------------
-            // ALINHAMENTO EXATO COM A PÁGINA WEB (Menor Troco Primeiro)
-            // ---------------------------------------------------------
-            // 1. Agrupar por banco
+            // Grouping and Sorting
             const bankGroups = allOffers.reduce((acc, offer) => {
-                if (!acc[offer.name]) {
-                    acc[offer.name] = { bankName: offer.name, offers: [] };
-                }
+                if (!acc[offer.name]) acc[offer.name] = { bankName: offer.name, offers: [] };
                 acc[offer.name].offers.push(offer);
                 return acc;
             }, {} as Record<string, { bankName: string, offers: any[] }>);
 
-            // 2. Ordenar tabelas dentro do banco (Menor Troco) e depois os bancos (Prioridade Mestre + Menor Troco)
-            const groupedAndSortedBanks = Object.values(bankGroups).map(group => {
-                const sortedOffers = group.offers.sort((a, b) => a.valorTroco - b.valorTroco);
-                return {
-                    ...group,
-                    offers: sortedOffers,
-                    topOffer: sortedOffers[0]
-                };
+            const groupedBanks = Object.values(bankGroups).map(group => {
+                const sorted = group.offers.sort((a, b) => a.valorTroco - b.valorTroco);
+                return { ...group, offers: sorted, topOffer: sorted[0] };
             }).sort((a, b) => {
-                const bankIdA = a.topOffer.id.split('-')[0];
-                const bankIdB = b.topOffer.id.split('-')[0];
-                const pA = promotoraPriorities[bankIdA] ?? a.topOffer.priority ?? 999;
-                const pB = promotoraPriorities[bankIdB] ?? b.topOffer.priority ?? 999;
-                const finalPA = (pA === 0 || pA === undefined) ? 999 : pA;
-                const finalPB = (pB === 0 || pB === undefined) ? 999 : pB;
-
-                if (finalPA !== finalPB) {
-                    return finalPA - finalPB;
-                }
-
+                const pA = promotoraPriorities[a.topOffer.id.split('-')[0]] ?? a.topOffer.priority ?? 999;
+                const pB = promotoraPriorities[b.topOffer.id.split('-')[0]] ?? b.topOffer.priority ?? 999;
+                if (pA !== pB) return (pA || 999) - (pB || 999);
                 return a.topOffer.valorTroco - b.topOffer.valorTroco;
             });
 
-            // ---------------------------------------------------------
+            const sanitize = (o: any) => o ? { ...o, logo: undefined } : null;
+            const topOffer = sanitize(groupedBanks.length > 0 ? groupedBanks[0].topOffer : null);
+            const otherBanks = groupedBanks.map(g => g.bankName);
+            const sampleOffers = groupedBanks.map(g => sanitize(g.topOffer)).slice(0, 10);
 
-            const sanitizeOffer = (o: any) => o ? { ...o, logo: undefined } : null;
-
-            // A melhor oferta global (banco vencedor)
-            const bestTrocoOfferOriginal = groupedAndSortedBanks.length > 0 ? groupedAndSortedBanks[0].topOffer : null;
-            const bestTrocoOffer = sanitizeOffer(bestTrocoOfferOriginal);
-
-            // Lista das melhores ofertas principais de todos os bancos (para Other Banks)
-            const sanitizedSampleOffers = groupedAndSortedBanks.map(g => sanitizeOffer(g.topOffer)).slice(0, 10);
-            const uniqueBanks = groupedAndSortedBanks.map(g => g.bankName);
-
+            // Save simulation
             const simId = crypto.randomUUID();
             try {
-                const simulationData = {
-                    userId: userProfileForSimulation.uid || 'whatsapp-bot',
-                    userName: userProfileForSimulation.name || 'Usuário WhatsApp',
-                    userEmail: userProfileForSimulation.email || '',
-                    promotoraId: userProfileForSimulation.promotoraId || '',
-                    clientName: 'Cliente via WhatsApp',
-                    convenio: params.convenio || 'INSS',
-                    bancoAtual: params.bancoAtual || '',
-                    valorParcela: params.valorParcela || 0,
-                    saldoDevedor: params.saldoDevedor || 0,
-                    selectedOffer: bestTrocoOfferOriginal,
-                    allOffers: allOffers.slice(0, 5),
-                    topOffer: bestTrocoOfferOriginal?.name || '',
-                    topOfferContrato: bestTrocoOfferOriginal?.valorContrato || 0,
-                    topOfferTroco: bestTrocoOfferOriginal?.valorTroco || 0,
-                    topOfferTaxa: bestTrocoOfferOriginal?.novaTaxaPortabilidade || 0,
-                    topOfferTabela: bestTrocoOfferOriginal?.tabela || '',
+                await adminDb.collection('simulations').doc(simId).set({
+                    userId: userProfileForSimulation.uid || 'bot',
+                    userName: userProfileForSimulation.name || 'WhatsApp',
+                    userAvatar: userProfileForSimulation.logoUrl || userProfileForSimulation.avatarUrl || '',
+                    convenio: params.convenio,
+                    valorParcela: params.valorParcela,
+                    saldoDevedor: params.saldoDevedor,
+                    selectedOffer: topOffer,
+                    topOffer: topOffer?.name || '',
                     createdAt: new Date(),
-                    timestamp: Date.now(),
                     origin: 'whatsapp'
-                };
-
-                await adminDb.collection('simulations').doc(simId).set(simulationData);
-
-                await adminDb.collection('whatsappSimulations').doc(simId).set({
-                    params,
-                    topOffer: bestTrocoOfferOriginal,
-                    createdAt: new Date().toISOString()
                 });
-            } catch (err: any) {
-                console.error("Erro saving sim to dashboard collection: ", err.message);
-            }
+            } catch (e) { console.error(e); }
 
-            // Resposta com o resultado da função - enriquecida com metadados técnicos
-            const followUpResult = await ai.models.generateContent({
+            const followUp = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
                 contents: [
                     ...contents,
-                    result.candidates?.[0]?.content || { role: "model", parts: [{ text: "" }] },
+                    firstCandidate?.content || { role: "model", parts: [{ text: "" }] },
                     {
                         role: "user",
                         parts: [{
@@ -446,16 +303,11 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                                 name: "calculate_client_loan_offers",
                                 response: {
                                     offersCount: allOffers.length,
-                                    banksCount: uniqueBanks.length,
-                                    bestTroco: bestTrocoOffer,
-                                    allBanksWithOffers: uniqueBanks,
-                                    simulationId: simId,
-                                    // Propostas principais de outros bancos
-                                    sampleOffers: sanitizedSampleOffers,
-                                    // Outras tabelas do banco vencedor (limitado a 5 para não estourar o prompt)
-                                    otherTablesOfBestBank: groupedAndSortedBanks.length > 0
-                                        ? groupedAndSortedBanks[0].offers.slice(1, 6).map(sanitizeOffer)
-                                        : []
+                                    banksCount: otherBanks.length,
+                                    bestTroco: topOffer,
+                                    allBanksWithOffers: otherBanks,
+                                    sampleOffers,
+                                    otherTablesOfBestBank: groupedBanks.length > 0 ? groupedBanks[0].offers.slice(1, 6).map(sanitize) : []
                                 }
                             }
                         }]
@@ -464,13 +316,13 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                 config: { systemInstruction }
             });
 
-            return followUpResult.text || "Operação realizada. Encontrei propostas interessantes para o seu contrato!";
+            return followUp.text || "Encontrei propostas interessantes!";
         }
 
-        return result.text || "Como posso ajudar na sua simulação hoje, parceiro?";
+        return firstCandidate?.content?.parts?.[0]?.text || (result as any).text || "Como posso ajudar?";
 
     } catch (error: any) {
-        console.error("AI Agent Error EXACT:", error);
-        return `DEBUG_CATCH_ERROR: ${error.message} [Key: ${((getAI() as any)?.apiKey || "").substring(0, 5)}]`;
+        console.error(error);
+        return `DEBUG_ERROR: ${error.message}`;
     }
 }
