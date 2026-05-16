@@ -591,15 +591,15 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground font-sans pb-24 md:pb-0">
+    <div className="flex flex-col min-h-screen bg-background text-foreground font-sans pb-24 md:pb-0 overflow-x-hidden">
       <QuotaAlert />
       
       {/* Header Section */}
-      <div className="bg-primary dark:bg-black text-white px-6 pt-8 pb-16 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl animate-pulse" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-secondary/20 rounded-full -ml-24 -mb-24 blur-2xl" />
+      <div className="bg-primary dark:bg-black text-white px-6 pt-8 pb-16 relative">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl animate-pulse pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-secondary/20 rounded-full -ml-24 -mb-24 blur-2xl pointer-events-none" />
         
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="relative z-50 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <PromotoraAvatar 
               logoUrl={profile.avatarUrl || profile.photoUrl} 

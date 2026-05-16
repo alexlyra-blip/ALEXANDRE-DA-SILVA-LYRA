@@ -53,11 +53,93 @@ function calculateInterestRateAgent(pv: number, pmt: number, n: number) {
     return rate;
 }
 
+let cachedBankRulesText = '';
+let lastCacheTime = 0;
+
 export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '') {
     const ai = getAI();
         if (!ai || (ai as any).error) {
             return `DEBUG_NULL_AI: ${(ai as any)?.error || "unknown"}`;
         }
+
+        // Se for a primeira mensagem (histórico vazio) oferece opções iniciais
+        if (history.length === 0) {
+            const welcome = `Olá! Eu sou o *Gutto*, seu especialista em portabilidade de crédito consignado.\n\nVocê pode:
+• *Iniciar uma simulação* – basta dizer "Quero simular" ou "Iniciar simulação".
+• *Consultar regras* – peça o "resumo das regras" ou pergunte sobre um banco específico (ex.: "Qual a idade mínima do Banco do Brasil?").\n\nComo posso ajudar?`;
+            return welcome;
+        }
+
+        // Verificar se a mensagem solicita informações ou resumo das regras dos bancos
+        const lowerMsg = message.toLowerCase();
+        const asksForRules = /\b(resumo|regras|informações?|detalhes?)\b/.test(lowerMsg) || /\b(banco|instituição)\b/.test(lowerMsg);
+        if (asksForRules) {
+            // Se ainda não temos o cache, carrega rapidamente (fallback)
+            if (!cachedBankRulesText) {
+                // Carrega de forma síncrona rápida – já existe lógica de cache abaixo, então chamamos manualmente
+                // (ignore erros silenciosamente)
+                try {
+                    const adminDb = getAdminDb();
+                    if (adminDb) {
+                        const snap = await adminDb.collection('bankRules').get();
+                        let txt = '';
+                        snap.forEach(d => {
+                            const dta = d.data();
+                            if (dta.isActive !== false) {
+                                txt += `- ${dta.name}: Idade ${dta.minAge||18} a ${dta.maxAge||80} anos. `;
+                                if (dta.portabilityRate) txt += `Taxa mín. Portabilidade: ${dta.portabilityRate}%. `;
+                                if (dta.refinRate) txt += `Taxa Refin: ${dta.refinRate}%. `;
+                                if (dta.minBalance) txt += `Saldo mín.: R$ ${dta.minBalance}. `;
+                                if (dta.minTroco) txt += `Troco mín.: R$ ${dta.minTroco}. `;
+                                if (dta.minInstallmentValue) txt += `Parcela mín.: R$ ${dta.minInstallmentValue}. `;
+                                txt += '\n';
+                            }
+                        });
+                        cachedBankRulesText = txt;
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            const response = `📝 *Resumo das regras dos bancos*:\n${cachedBankRulesText}\nSe quiser detalhes de algum banco específico, basta informar o nome dele.`;
+            return response;
+        }
+
+        // Carregar e fazer cache das regras dos bancos para o Gutto responder dúvidas (mantém o bloco existente abaixo)
+        const now = Date.now();
+        if (now - lastCacheTime > 5 * 60 * 1000) {
+            try {
+                const adminDb = getAdminDb();
+                if (adminDb) {
+                    const banksSnap = await adminDb.collection('bankRules').get();
+                    let rulesText = 'RESUMO DAS REGRAS DOS BANCOS (Use apenas se o usuário perguntar dúvidas sobre regras):\n';
+                    banksSnap.forEach(doc => {
+                        const data = doc.data();
+                        if (data.isActive !== false) {
+                            rulesText += `- ${data.name}: Idade ${data.minAge || 18} a ${data.maxAge || 80} anos. `;
+                            if (data.portabilityRate) rulesText += `Taxa mín. Portabilidade: ${data.portabilityRate}%. `;
+                            if (data.refinRate) rulesText += `Taxa Refin: ${data.refinRate}%. `;
+                            if (data.minBalance) rulesText += `Saldo mín: R$ ${data.minBalance}. `;
+                            if (data.minTroco) rulesText += `Troco mín: R$ ${data.minTroco}. `;
+                            if (data.minInstallmentValue) rulesText += `Parcela mín: R$ ${data.minInstallmentValue}. `;
+                            if (data.nonAcceptedBanks && data.nonAcceptedBanks.length > 0) rulesText += `Bancos que NÃO aceita: ${data.nonAcceptedBanks.join(', ')}. `;
+                            rulesText += '\n';
+                        }
+                    });
+                    cachedBankRulesText = rulesText;
+                    lastCacheTime = now;
+                }
+            } catch (e) {
+                console.error("Erro ao carregar regras para o cache:", e);
+            }
+        }
+
+        const systemInstruction = `Você é o "Gutto", o Agente de IA especialista em Portabilidade de Crédito Consignado da Portabilidade PRO.
+Você não só realiza simulações, mas também tira qualquer dúvida do corretor sobre as regras dos bancos.
+
+${cachedBankRulesText}
+Se o corretor fizer uma pergunta sobre as regras de um banco específico ou pedir um resumo geral, responda de forma consultiva e educada usando os dados acima. Se ele quiser apenas tirar dúvidas, não exija todos os dados do fluxo, apenas responda a dúvida dele de forma prestativa!
+
+O QUE COLETAR DO PARCEIRO PARA SIMULAÇÃO (DIRETO E OBJETIVO):`;
+
 
     let userProfileForSimulation = { role: 'admin' } as any;
 
@@ -86,10 +168,42 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         }
     }
 
-    const systemInstruction = `Você é o "Gutto", o Agente de IA especialista em Portabilidade de Crédito Consignado da Portabilidade PRO.
-Seja sempre ágil, direto e com respostas curtas.
+    // Carregar e fazer cache das regras dos bancos para o Gutto responder dúvidas
+    const now = Date.now();
+    if (now - lastCacheTime > 5 * 60 * 1000) {
+        try {
+            const adminDb = getAdminDb();
+            if (adminDb) {
+                const banksSnap = await adminDb.collection('bankRules').get();
+                let rulesText = 'RESUMO DAS REGRAS DOS BANCOS (Use apenas se o usuário perguntar dúvidas sobre regras):\n';
+                banksSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.isActive !== false) {
+                        rulesText += `- ${data.name}: Idade ${data.minAge || 18} a ${data.maxAge || 80} anos. `;
+                        if (data.portabilityRate) rulesText += `Taxa mín. Portabilidade: ${data.portabilityRate}%. `;
+                        if (data.refinRate) rulesText += `Taxa Refin: ${data.refinRate}%. `;
+                        if (data.minBalance) rulesText += `Saldo mín: R$ ${data.minBalance}. `;
+                        if (data.minTroco) rulesText += `Troco mín: R$ ${data.minTroco}. `;
+                        if (data.minInstallmentValue) rulesText += `Parcela mín: R$ ${data.minInstallmentValue}. `;
+                        if (data.nonAcceptedBanks && data.nonAcceptedBanks.length > 0) rulesText += `Bancos que NÃO aceita: ${data.nonAcceptedBanks.join(', ')}. `;
+                        rulesText += '\n';
+                    }
+                });
+                cachedBankRulesText = rulesText;
+                lastCacheTime = now;
+            }
+        } catch (e) {
+            console.error("Erro ao carregar regras para o cache:", e);
+        }
+    }
 
-O QUE COLETAR DO PARCEIRO (DIRETO E OBJETIVO):
+    const systemInstruction = `Você é o "Gutto", o Agente de IA especialista em Portabilidade de Crédito Consignado da Portabilidade PRO.
+Você não só realiza simulações, mas também tira qualquer dúvida do corretor sobre as regras dos bancos.
+
+${cachedBankRulesText}
+Se o corretor fizer uma pergunta sobre as regras de um banco específico ou pedir um resumo geral, responda de forma consultiva e educada usando os dados acima. Se ele quiser apenas tirar dúvidas, não exija todos os dados do fluxo, apenas responda a dúvida dele de forma prestativa!
+
+O QUE COLETAR DO PARCEIRO PARA SIMULAÇÃO (DIRETO E OBJETIVO):
 Vá pedindo OS DADOS SEGUINDO A ORDEM sem enrolação. Nunca repita perguntas se o usuário já forneceu os dados.
 
 IMPORTANTE: Faça apenas UMA pergunta por vez e espere o usuário responder antes de fazer a próxima. Não junte duas perguntas (ex: analfabeto e 60+) na mesma mensagem.
