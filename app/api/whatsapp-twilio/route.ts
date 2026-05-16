@@ -91,7 +91,7 @@ export async function POST(req: Request) {
     if (sessionData?.lastUpdate) {
       const lastUpdateDate = sessionData.lastUpdate.toDate ? sessionData.lastUpdate.toDate() : new Date(sessionData.lastUpdate);
       const diffMinutes = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60);
-      if (diffMinutes > 5) {
+      if (diffMinutes > 30) {
         sessionData.history = []; // Reset session
         console.log(`[${timestamp}] WhatsApp Session for ${from} timed out after 5 minutes.`);
       }
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
 
     // Update history
     let updatedHistory = [
-      ...(sessionData.history || []).slice(-40),
+      ...(sessionData.history || []).slice(-20),
       { role: 'user', content: bodyText },
       { role: 'model', content: reply }
     ];
