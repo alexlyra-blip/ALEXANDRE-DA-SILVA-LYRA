@@ -240,7 +240,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
             const allOffers = calculateOffers(params, banks, rules, promotoraPriorities, promotoraInstallments, userProfileForSimulation);
 
             // ---------------------------------------------------------
-            // ALINHAMENTO EXATO COM A PÁGINA WEB (Maior Troco Primeiro)
+            // ALINHAMENTO EXATO COM A PÁGINA WEB (Menor Troco Primeiro)
             // ---------------------------------------------------------
             // 1. Agrupar por banco
             const bankGroups = allOffers.reduce((acc, offer) => {
@@ -251,15 +251,15 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                 return acc;
             }, {} as Record<string, { bankName: string, offers: any[] }>);
 
-            // 2. Ordenar tabelas dentro do banco (Maior Troco) e depois os bancos (Maior Troco)
+            // 2. Ordenar tabelas dentro do banco (Menor Troco) e depois os bancos (Menor Troco)
             const groupedAndSortedBanks = Object.values(bankGroups).map(group => {
-                const sortedOffers = group.offers.sort((a, b) => b.valorTroco - a.valorTroco);
+                const sortedOffers = group.offers.sort((a, b) => a.valorTroco - b.valorTroco);
                 return {
                     ...group,
                     offers: sortedOffers,
                     topOffer: sortedOffers[0]
                 };
-            }).sort((a, b) => b.topOffer.valorTroco - a.topOffer.valorTroco);
+            }).sort((a, b) => a.topOffer.valorTroco - b.topOffer.valorTroco);
 
             // ---------------------------------------------------------
 
