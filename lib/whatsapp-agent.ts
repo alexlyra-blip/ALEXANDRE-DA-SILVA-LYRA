@@ -240,14 +240,39 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
 
             const allOffers = calculateOffers(params, banks, rules, promotoraPriorities, promotoraInstallments, userProfileForSimulation);
 
-            // Preparar metadados para a IA gerar a resposta técnica
+            // ---------------------------------------------------------
+            // ALINHAMENTO EXATO COM A PÁGINA WEB (Maior Troco Primeiro)
+            // ---------------------------------------------------------
+            // 1. Agrupar por banco
+            const bankGroups = allOffers.reduce((acc, offer) => {
+                if (!acc[offer.name]) {
+                    acc[offer.name] = { bankName: offer.name, offers: [] };
+                }
+                acc[offer.name].offers.push(offer);
+                return acc;
+            }, {} as Record<string, { bankName: string, offers: any[] }>);
+
+            // 2. Ordenar tabelas dentro do banco (Maior Troco) e depois os bancos (Maior Troco)
+            const groupedAndSortedBanks = Object.values(bankGroups).map(group => {
+                const sortedOffers = group.offers.sort((a, b) => b.valorTroco - a.valorTroco);
+                return {
+                    ...group,
+                    offers: sortedOffers,
+                    topOffer: sortedOffers[0]
+                };
+            }).sort((a, b) => b.topOffer.valorTroco - a.topOffer.valorTroco);
+
+            // ---------------------------------------------------------
+
             const sanitizeOffer = (o: any) => o ? { ...o, logo: undefined } : null;
             
-            const bestTrocoOfferOriginal = allOffers.length > 0 ? allOffers[0] : null;
-            
+            // A melhor oferta global (banco vencedor)
+            const bestTrocoOfferOriginal = groupedAndSortedBanks.length > 0 ? groupedAndSortedBanks[0].topOffer : null;
             const bestTrocoOffer = sanitizeOffer(bestTrocoOfferOriginal);
-            const sanitizedSampleOffers = allOffers.slice(0, 5).map(sanitizeOffer);
-            const uniqueBanks = Array.from(new Set(allOffers.map(o => o.name)));
+            
+            // Lista das melhores ofertas principais de todos os bancos (para Other Banks)
+            const sanitizedSampleOffers = groupedAndSortedBanks.map(g => sanitizeOffer(g.topOffer)).slice(0, 5);
+            const uniqueBanks = groupedAndSortedBanks.map(g => g.bankName);
             
             const simId = crypto.randomUUID();
             try {
