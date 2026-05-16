@@ -221,22 +221,44 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
             const sanitizeOffer = (o: any) => o ? { ...o, logo: undefined } : null;
             
             const bestTrocoOfferOriginal = allOffers.length > 0 ? allOffers[0] : null;
-            const lowestRateOfferOriginal = allOffers.length > 0 ? [...allOffers].sort((a, b) => (a.novaTaxaPortabilidade || 9) - (b.novaTaxaPortabilidade || 9))[0] : null;
             
             const bestTrocoOffer = sanitizeOffer(bestTrocoOfferOriginal);
-            const lowestRateOffer = sanitizeOffer(lowestRateOfferOriginal);
             const sanitizedSampleOffers = allOffers.slice(0, 5).map(sanitizeOffer);
             const uniqueBanks = Array.from(new Set(allOffers.map(o => o.name)));
             
             const simId = crypto.randomUUID();
             try {
+                const simulationData = {
+                    userId: userProfileForSimulation.uid || 'whatsapp-bot',
+                    userName: userProfileForSimulation.name || 'WhatsApp Bot',
+                    userEmail: userProfileForSimulation.email || '',
+                    promotoraId: userProfileForSimulation.promotoraId || '',
+                    clientName: 'Cliente via WhatsApp',
+                    convenio: params.convenio || 'INSS',
+                    bancoAtual: params.bancoAtual || '',
+                    valorParcela: params.valorParcela || 0,
+                    saldoDevedor: params.saldoDevedor || 0,
+                    selectedOffer: bestTrocoOfferOriginal,
+                    allOffers: allOffers.slice(0, 5),
+                    topOffer: bestTrocoOfferOriginal?.name || '',
+                    topOfferContrato: bestTrocoOfferOriginal?.valorContrato || 0,
+                    topOfferTroco: bestTrocoOfferOriginal?.valorTroco || 0,
+                    topOfferTaxa: bestTrocoOfferOriginal?.novaTaxaPortabilidade || 0,
+                    topOfferTabela: bestTrocoOfferOriginal?.tabela || '',
+                    createdAt: new Date(),
+                    timestamp: Date.now(),
+                    origin: 'whatsapp'
+                };
+                
+                await adminDb.collection('simulations').doc(simId).set(simulationData);
+                
                 await adminDb.collection('whatsappSimulations').doc(simId).set({
                     params,
                     topOffer: bestTrocoOfferOriginal,
                     createdAt: new Date().toISOString()
                 });
             } catch (err: any) {
-                console.error("Erro saving sim for PDF: ", err.message);
+                console.error("Erro saving sim to dashboard collection: ", err.message);
             }
 
             // Resposta com o resultado da função - enriquecida com metadados técnicos
@@ -254,7 +276,6 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                                     offersCount: allOffers.length,
                                     banksCount: uniqueBanks.length,
                                     bestTroco: bestTrocoOffer,
-                                    lowestRate: lowestRateOffer,
                                     allBanksWithOffers: uniqueBanks,
                                     simulationId: simId,
                                     // Mandamos algumas propostas de exemplo apenas para referência da IA
