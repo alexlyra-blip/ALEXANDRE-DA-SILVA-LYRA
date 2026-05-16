@@ -170,7 +170,7 @@ Se o usuário disser o nome do banco, use o código se souber. Segue a lista com
 Também liberamos ofertas para outros bancos (somente se houver 'allBanksWithOffers', exiba-os lado a lado separados por vírgula):
 Outros Bancos Disponíveis: [BANCO 2], [BANCO 3], [BANCO 4]
 
-Opções no final da mensagem (obrigatório):
+Sempre encerre a sua mensagem listando as duas opções abaixo para o cliente de forma natural:
 Para ver as outras tabelas disponíveis deste banco, digite *Tabelas*.
 Caso queira ver a oferta detalhada de outro banco, basta digitar o *Nome do Banco* agora!
 
@@ -251,7 +251,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                 return acc;
             }, {} as Record<string, { bankName: string, offers: any[] }>);
 
-            // 2. Ordenar tabelas dentro do banco (Menor Troco) e depois os bancos (Menor Troco)
+            // 2. Ordenar tabelas dentro do banco (Menor Troco) e depois os bancos (Prioridade Mestre + Menor Troco)
             const groupedAndSortedBanks = Object.values(bankGroups).map(group => {
                 const sortedOffers = group.offers.sort((a, b) => a.valorTroco - b.valorTroco);
                 return {
@@ -259,7 +259,20 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                     offers: sortedOffers,
                     topOffer: sortedOffers[0]
                 };
-            }).sort((a, b) => a.topOffer.valorTroco - b.topOffer.valorTroco);
+            }).sort((a, b) => {
+                const bankIdA = a.topOffer.id.split('-')[0];
+                const bankIdB = b.topOffer.id.split('-')[0];
+                const pA = promotoraPriorities[bankIdA] ?? a.topOffer.priority ?? 999;
+                const pB = promotoraPriorities[bankIdB] ?? b.topOffer.priority ?? 999;
+                const finalPA = (pA === 0 || pA === undefined) ? 999 : pA;
+                const finalPB = (pB === 0 || pB === undefined) ? 999 : pB;
+                
+                if (finalPA !== finalPB) {
+                    return finalPA - finalPB;
+                }
+                
+                return a.topOffer.valorTroco - b.topOffer.valorTroco;
+            });
 
             // ---------------------------------------------------------
 
