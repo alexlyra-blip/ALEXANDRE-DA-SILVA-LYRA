@@ -206,7 +206,7 @@ IMPORTANTE:
         console.log(`[Gutto] Calling Gemini with ${contents.length} messages`);
 
         const result = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
+            model: "gemini-2.0-flash-001",
             contents,
             config: {
                 systemInstruction,
@@ -320,6 +320,6 @@ IMPORTANTE:
 
     } catch (error: any) {
         console.error("Agent Error:", error);
-        return "Desculpe, tive um problema técnico. Pode tentar novamente?";
+        return `⚠️ Erro técnico: ${error.message || 'desconhecido'}. Tente novamente em instantes.`;
     }
 }
