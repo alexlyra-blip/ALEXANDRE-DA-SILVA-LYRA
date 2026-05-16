@@ -206,7 +206,7 @@ IMPORTANTE:
         console.log(`[Gutto] Calling Gemini with ${contents.length} messages`);
 
         const result = await ai.models.generateContent({
-            model: "gemini-2.0-flash-001",
+            model: "gemini-3-flash-preview",
             contents,
             config: {
                 systemInstruction,
