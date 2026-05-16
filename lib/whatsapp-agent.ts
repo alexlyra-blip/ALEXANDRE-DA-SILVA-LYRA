@@ -171,10 +171,9 @@ Também liberamos ofertas para outros bancos (somente se houver 'allBanksWithOff
 Outros Bancos Disponíveis: [BANCO 2], [BANCO 3], [BANCO 4]
 
 Opções no final da mensagem (obrigatório):
-Para ver as outras tabelas disponíveis deste banco, digite *Tabelas*.
 Caso queira ver a oferta detalhada de outro banco, basta digitar o *Nome do Banco* agora!
 
-(Se ele pedir detalhes de outro banco listado, use o mesmo formato mudando o cabeçalho para '🎉 Oferta no *[Nome do Banco]*:' e no final diga 'Se quiser ver de outro banco, basta digitar o nome. Ou digite "Oi" para uma nova simulação.')
+(Se ele pedir detalhes de outro banco listado, você DEVE procurar os dados deste banco na lista 'sampleOffers' fornecida no JSON. NUNCA INVENTE TABELAS OU VALORES. Se a oferta estiver no 'sampleOffers', exiba usando o mesmo layout acima. Se não estiver, peça desculpas e diga que os detalhes completos estão no portal web).
 
 ENCERRAMENTO:
 Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATORIAMENTE anexe a tag \`[END_SESSION]\` à sua mensagem.`;
@@ -270,7 +269,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
             const bestTrocoOffer = sanitizeOffer(bestTrocoOfferOriginal);
             
             // Lista das melhores ofertas principais de todos os bancos (para Other Banks)
-            const sanitizedSampleOffers = groupedAndSortedBanks.map(g => sanitizeOffer(g.topOffer)).slice(0, 5);
+            const sanitizedSampleOffers = groupedAndSortedBanks.map(g => sanitizeOffer(g.topOffer)).slice(0, 10);
             const uniqueBanks = groupedAndSortedBanks.map(g => g.bankName);
             
             const simId = crypto.randomUUID();
