@@ -20,6 +20,28 @@ export default function ChatAssistant() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input after loading finishes
+  useEffect(() => {
+    if (!loading && isOpen && !isMinimized && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [loading, isOpen, isMinimized]);
+
+  // Format bold text (*text* or **text**)
+  const formatMessage = (text: string) => {
+    const parts = text.split(/(\*\*?[^*]+\*\*?)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={index} className="font-bold">{part.slice(2, -2)}</strong>;
+      }
+      if (part.startsWith('*') && part.endsWith('*')) {
+        return <strong key={index} className="font-bold">{part.slice(1, -1)}</strong>;
+      }
+      return part;
+    });
+  };
 
   // Initial greeting
   useEffect(() => {
@@ -91,7 +113,7 @@ export default function ChatAssistant() {
                   <img src={GUTTO_AVATAR} alt="Gutto Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-white text-sm">Gutto Assistant</h3>
+                  <h3 className="font-bold text-white text-sm">Gutto Especialista em Portabilidade</h3>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
                     <span className="text-[10px] text-white/70 font-bold uppercase tracking-wider">Online</span>
@@ -135,7 +157,7 @@ export default function ChatAssistant() {
                         ? 'bg-secondary/10 dark:bg-secondary/5 text-slate-800 dark:text-slate-200 border border-secondary/20 rounded-tr-none' 
                         : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-tl-none'
                     }`}>
-                      {msg.content}
+                      {formatMessage(msg.content)}
                     </div>
                   </div>
                 </div>
@@ -158,6 +180,7 @@ export default function ChatAssistant() {
             <form onSubmit={handleSend} className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
               <div className="flex gap-2">
                 <input
+                  ref={inputRef}
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}

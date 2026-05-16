@@ -59,6 +59,21 @@ interface Offer {
 
 import SimulationForm from '@/components/SimulationForm';
 
+function calculateRate(pv: number, pmt: number, n: number) {
+  if (pmt <= 0 || pv <= 0 || n <= 0) return 0;
+  if (pmt * n <= pv) return 0;
+  let low = 0.0001; let high = 1; let rate = 0.05; let diff = 1;
+  let iterations = 0;
+  while (diff > 0.0001 && high - low > 0.00001 && iterations < 100) {
+      const calculatedPv = (pmt / rate) * (1 - Math.pow(1 + rate, -n));
+      diff = Math.abs(calculatedPv - pv);
+      if (calculatedPv > pv) { low = rate; rate = (rate + high) / 2; }
+      else { high = rate; rate = (rate + low) / 2; }
+      iterations++;
+  }
+  return rate;
+}
+
 export default function Recomendacoes() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -289,6 +304,9 @@ export default function Recomendacoes() {
       } = currentSim;
 
       const originalRate = currentSim.taxaJurosMensal ? currentSim.taxaJurosMensal * 100 : 0;
+      const effectiveN = parcelasRestantes || (prazoTotal > 0 && parcelasPagas !== undefined ? prazoTotal - parcelasPagas : 0);
+      const newRateCalculated = calculateRate(saldoDevedor, valorParcela, effectiveN) * 100;
+      
       const calculatedOffers: Offer[] = [];
       const localFilterReasons: {bankName: string, reason: string, tabela?: string}[] = [];
 
@@ -531,9 +549,18 @@ export default function Recomendacoes() {
             }
 
             const taxaTabelaValida = parseRate(tabela.taxaTabela) > 0 ? parseRate(tabela.taxaTabela) : parseRate(bank.refinRate);
+            const tDiferencial = parseRate(tabela.taxaDiferencial);
+            const bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
             const bankAdjustment = parseRate(bank.ajusteTaxa);
             const bankPortRate = parseRate(bank.portabilityRate);
-            const novaTaxaPort = Number((originalRate + bankAdjustment).toFixed(2));
+            
+            const targetCandidates = [tDiferencial, bankNovaTaxaRef].filter(v => v > 0);
+            const novaTaxaPort = targetCandidates.length > 0 ? Math.min(...targetCandidates) : Number((originalRate + bankAdjustment).toFixed(2));
+            
+            if (bankPortRate > 0 && newRateCalculated > 0 && newRateCalculated < bankPortRate) {
+              log(`Nova taxa calculada (${newRateCalculated.toFixed(2)}%) é menor que o mínimo do banco (${bankPortRate}%)`, tabela.nome);
+              return;
+            }
             if (bankPortRate > 0 && novaTaxaPort < bankPortRate) {
               log(`Taxa portabilidade insuficiente: ${novaTaxaPort}% (Mínimo banco: ${bankPortRate}%)`, tabela.nome);
               return;

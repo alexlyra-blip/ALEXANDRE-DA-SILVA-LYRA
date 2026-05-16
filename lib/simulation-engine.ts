@@ -90,6 +90,21 @@ const checkBankMatch = (ruleBank: string, currentBank: string) => {
   return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
 };
 
+function calculateRate(pv: number, pmt: number, n: number) {
+  if (pmt <= 0 || pv <= 0 || n <= 0) return 0;
+  if (pmt * n <= pv) return 0;
+  let low = 0.0001; let high = 1; let rate = 0.05; let diff = 1;
+  let iterations = 0;
+  while (diff > 0.0001 && high - low > 0.00001 && iterations < 100) {
+      const calculatedPv = (pmt / rate) * (1 - Math.pow(1 + rate, -n));
+      diff = Math.abs(calculatedPv - pv);
+      if (calculatedPv > pv) { low = rate; rate = (rate + high) / 2; }
+      else { high = rate; rate = (rate + low) / 2; }
+      iterations++;
+  }
+  return rate;
+}
+
 export function calculateOffers(
   params: SimulationParams,
   banks: any[],
@@ -113,6 +128,11 @@ export function calculateOffers(
   } = params;
 
   const originalRate = params.taxaJurosMensal ? params.taxaJurosMensal * 100 : 0;
+  
+  // Calculate the NEW calculated rate with the current (potentially reduced) valorParcela
+  const effectiveN = parcelasRestantes || (prazoTotal > 0 && parcelasPagas !== undefined ? prazoTotal - parcelasPagas : 0);
+  const newRateCalculated = calculateRate(saldoDevedor, valorParcela, effectiveN) * 100;
+  
   const calculatedOffers: Offer[] = [];
   
   const cleanBeneficio = codigoBeneficio ? String(codigoBeneficio).replace(/^0+/, '') : '';
@@ -253,6 +273,10 @@ export function calculateOffers(
         const targetCandidates = [tDiferencial, bankNovaTaxaRef].filter(v => v > 0);
         const novaTaxaPortTarget = targetCandidates.length > 0 ? Math.min(...targetCandidates) : (originalRate + bankAdjustment);
         
+        // 1. Validation: Does the NEW calculated rate (with reduced installment) meet the bank's minimum portability rate?
+        if (bankPortRate > 0 && newRateCalculated > 0 && newRateCalculated < bankPortRate) return;
+        
+        // 2. Validation: Does the table's target rate meet the bank's minimum portability rate?
         if (bankPortRate > 0 && novaTaxaPortTarget < bankPortRate) return;
 
         // Weighted Rate
