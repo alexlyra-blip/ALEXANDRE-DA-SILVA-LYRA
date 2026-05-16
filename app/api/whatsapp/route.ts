@@ -130,21 +130,38 @@ export async function POST(req: NextRequest) {
     const sessionRef = adminDb.collection('whatsappSessions').doc(sessionId);
     let sessionSnap = await sessionRef.get();
     let sessionData = sessionSnap.exists ? sessionSnap.data() : { history: [] };
+    
+    // Time out sessions after 5 minutes of inactivity
+    const now = new Date();
+    if (sessionData?.lastUpdate) {
+      const lastUpdateDate = sessionData.lastUpdate.toDate ? sessionData.lastUpdate.toDate() : new Date(sessionData.lastUpdate);
+      const diffMinutes = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60);
+      if (diffMinutes > 5) {
+        sessionData.history = []; // Reset session
+        console.log(`WhatsApp Session for ${senderNumber} timed out after 5 minutes.`);
+      }
+    }
+
     if (!sessionData?.history) sessionData = { ...sessionData, history: [] };
 
     // 1. Usar o Agente de IA consolidado
     const { processWhatsAppMessage } = await import('@/lib/whatsapp-agent');
-    const responseText = await processWhatsAppMessage(messageText, sessionData.history || []);
+    let responseText = await processWhatsAppMessage(messageText, sessionData.history || []);
 
-    // 2. Atualizar histórico
+    // 2. Atualizar histórico (Aumentado para 40 mensagens para não esquecer os dados iniciais)
     const updatedHistory = [
-      ...(sessionData.history || []).slice(-10),
+      ...(sessionData.history || []).slice(-40),
       { role: 'user', content: messageText },
       { role: 'model', content: responseText }
     ];
 
     try {
-      await sessionRef.set({ ...sessionData, history: updatedHistory, lastUpdate: new Date() });
+      if (responseText.includes('[END_SESSION]')) {
+        await sessionRef.set({ history: [], lastUpdate: now });
+        responseText = responseText.replace('[END_SESSION]', '').trim();
+      } else {
+        await sessionRef.set({ ...sessionData, history: updatedHistory, lastUpdate: now });
+      }
     } catch (e: any) {
       console.error("Erro ao salvar sessão:", e.message);
     }

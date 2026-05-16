@@ -44,6 +44,7 @@ import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 
 import { DashboardSkeleton } from '@/components/DashboardSkeleton';
+import { NotificationBell } from '@/components/NotificationBell';
 import { 
   getBrandingSettings,
   handleFirestoreError,
@@ -639,6 +640,7 @@ export default function Dashboard() {
           </div>
           
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <button 
               onClick={generateDashboardReport}
               disabled={generatingReport}

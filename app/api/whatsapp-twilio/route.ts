@@ -85,6 +85,18 @@ export async function POST(req: Request) {
     const sessionRef = adminDb.collection('whatsappSessions').doc(sessionId);
     let sessionSnap = await sessionRef.get();
     let sessionData = sessionSnap.exists ? sessionSnap.data() : { history: [] };
+
+    // Time out sessions after 5 minutes of inactivity
+    const now = new Date();
+    if (sessionData?.lastUpdate) {
+      const lastUpdateDate = sessionData.lastUpdate.toDate ? sessionData.lastUpdate.toDate() : new Date(sessionData.lastUpdate);
+      const diffMinutes = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60);
+      if (diffMinutes > 5) {
+        sessionData.history = []; // Reset session
+        console.log(`[${timestamp}] WhatsApp Session for ${from} timed out after 5 minutes.`);
+      }
+    }
+
     if (!sessionData?.history) sessionData = { ...sessionData, history: [] };
 
     // New AI Agent Logic
@@ -95,7 +107,7 @@ export async function POST(req: Request) {
 
     // Update history
     let updatedHistory = [
-      ...(sessionData.history || []).slice(-10),
+      ...(sessionData.history || []).slice(-40),
       { role: 'user', content: bodyText },
       { role: 'model', content: reply }
     ];
@@ -121,7 +133,7 @@ export async function POST(req: Request) {
 
     // Save state
     try {
-      await sessionRef.set({ ...sessionData, history: updatedHistory, lastUpdate: new Date() });
+      await sessionRef.set({ ...sessionData, history: updatedHistory, lastUpdate: now });
       console.log(`[${timestamp}] State saved to Firestore.`);
     } catch (e: any) {
       console.error(`[${timestamp}] Error saving session:`, e.message);

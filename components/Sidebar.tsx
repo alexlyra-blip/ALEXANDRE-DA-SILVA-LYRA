@@ -8,7 +8,6 @@ import { LayoutDashboard, Landmark, FileText, Users, Banknote, LogOut, Settings,
 import { motion, useAnimation } from 'motion/react';
 import { PromotoraAvatar } from './PromotoraAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
-import { NotificationBell } from './NotificationBell';
 
 export default function Sidebar() {
   const { profile, logout, inactivityTimeLeft } = useAuth();
@@ -111,7 +110,6 @@ export default function Sidebar() {
             <span className="text-[7px] font-black tracking-tight text-white/40 uppercase ml-0.5">DESLOGAR</span>
           </div>
           <div className="flex items-center gap-1 pl-1 border-l border-white/10 ml-1">
-            <NotificationBell />
             <button 
               onClick={() => logout()}
               title="Sair do Sistema"

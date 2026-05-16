@@ -1852,7 +1852,6 @@ function UsuariosAdminContent() {
                         <Phone className="w-3 h-3" /> {user.phone}
                       </p>
                     )}
-                    )}
                     <div className="flex gap-2 items-center mt-1">
                       <p className="text-[10px] text-slate-400">Criado por: {getCreatorName(user.createdBy)}</p>
                       <UserSimulationCounter userId={user.id} />
