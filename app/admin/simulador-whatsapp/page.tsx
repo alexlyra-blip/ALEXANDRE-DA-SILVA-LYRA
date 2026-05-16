@@ -129,7 +129,18 @@ export default function WhatsappSimulator() {
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.type === 'sent' ? 'justify-end' : 'justify-start'}`}>
               <div className={`px-4 py-2 rounded-lg max-w-[80%] whitespace-pre-wrap text-sm shadow-sm ${msg.type === 'sent' ? 'bg-[#DCF8C6] rounded-tr-none text-slate-800' : 'bg-white rounded-tl-none text-slate-800'}`}>
-                {msg.text}
+                {(() => {
+                  const parts = msg.text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+                  return parts.map((part, index) => {
+                    if (part.startsWith('**') && part.endsWith('**')) {
+                      return <strong key={index} className="font-bold">{part.slice(2, -2)}</strong>;
+                    }
+                    if (part.startsWith('*') && part.endsWith('*')) {
+                      return <strong key={index} className="font-bold">{part.slice(1, -1)}</strong>;
+                    }
+                    return part;
+                  });
+                })()}
               </div>
             </div>
           ))}
