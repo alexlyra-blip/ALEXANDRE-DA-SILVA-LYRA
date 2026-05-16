@@ -83,10 +83,10 @@ export function getAdminApp() {
       return adminApp;
     }
     
-    initError = "FIREBASE_SERVICE_ACCOUNT environment variable is missing. To use server-side Firebase features (like Webhooks), you must add your Firebase Service Account JSON string to the AI Studio Secrets menu as FIREBASE_SERVICE_ACCOUNT.";
-    console.error('Falha ao inicializar Firebase Admin:', initError);
-    // Explicitly return null instead of falling back to ADC
-    return null;
+    // Fallback para Application Default Credentials (ideal no App Hosting / Cloud Run)
+    console.log('FIREBASE_SERVICE_ACCOUNT não encontrado. Inicializando com Application Default Credentials (ADC).');
+    adminApp = admin.initializeApp();
+    return adminApp;
   } catch (error: any) {
     console.error('Falha ao inicializar Firebase Admin:', error);
     initError = error.message;
