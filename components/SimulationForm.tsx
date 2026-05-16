@@ -336,6 +336,8 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [dataConcessao, setDataConcessao] = useState('');
   const [isAnalfabeto, setIsAnalfabeto] = useState<boolean | null>(null);
   const [isCliente60Mais, setIsCliente60Mais] = useState<boolean | null>(null);
+  const [hasTwoCards, setHasTwoCards] = useState<boolean | null>(null);
+  const [negativeCardValue, setNegativeCardValue] = useState('');
 
   const effectiveIs60MaisForUI = isCliente60Mais !== null ? isCliente60Mais : (parseInt(idade) >= 60);
   const isInvalidityBenefit = ['4', '04', '5', '05', '11', '30', '32', '33', '34', '92'].includes(codigoBeneficio);
@@ -518,7 +520,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         codigoBeneficio,
         dataConcessao,
         bancoAtual: c.bancoAtual,
-        valorParcela: parseCurrency(c.valorParcela),
+        valorParcela: Math.max(0, parseCurrency(c.valorParcela) - (convenio === 'INSS' && hasTwoCards ? (negativeCardValue ? parseCurrency(negativeCardValue) : 81.05) : 0)),
         prazoTotal: parseInt(c.prazoTotal) || 0,
         parcelasRestantes: parseInt(c.parcelasRestantes) || 0,
         saldoDevedor: parseCurrency(c.saldoDevedor),
@@ -704,6 +706,32 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                 </div>
               )}
 
+              {convenio === 'INSS' && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-slate-600 dark:text-white">Cliente tem 2 cartões ativos?</label>
+                    <div className="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl">
+                      <button type="button" onClick={() => setHasTwoCards(true)} className={`px-4 py-1.5 rounded-lg text-xs font-bold ${hasTwoCards === true ? 'bg-primary text-white' : 'text-slate-500'}`}>SIM</button>
+                      <button type="button" onClick={() => setHasTwoCards(false)} className={`px-4 py-1.5 rounded-lg text-xs font-bold ${hasTwoCards === false ? 'bg-primary text-white' : 'text-slate-500'}`}>NÃO</button>
+                    </div>
+                  </div>
+                  {hasTwoCards === true && (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">
+                        Valor Negativo do Cartão (R$) - Opcional (Padrão: R$ 81,05)
+                      </label>
+                      <input 
+                        className="w-full rounded-xl border border-primary/20 bg-white dark:bg-slate-800/50 h-14 p-4 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm" 
+                        type="text" 
+                        value={negativeCardValue} 
+                        onChange={(e) => setNegativeCardValue(formatCurrency(e.target.value))} 
+                        placeholder="Ex: 81,05" 
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold text-slate-600 dark:text-white">Analfabeto?</label>
                 <div className="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl">
@@ -735,7 +763,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
               <button 
                 type="button"
                 onClick={addContract}
-                disabled={contracts.length >= 5}
+                disabled={contracts.length >= 5 || (convenio === 'INSS' && hasTwoCards === true)}
                 className="flex items-center gap-1 px-4 py-2 bg-emerald-500/10 text-emerald-600 rounded-xl text-xs font-black uppercase tracking-tight hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm border border-emerald-500/10"
               >
                 <Plus className="w-4 h-4" />
