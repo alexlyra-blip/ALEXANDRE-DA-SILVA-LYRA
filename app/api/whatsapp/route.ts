@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
 
     // 2. Atualizar histórico (Aumentado para 40 mensagens para não esquecer os dados iniciais)
     const updatedHistory = [
-      ...(sessionData.history || []).slice(-40),
+      ...(sessionData.history || []).slice(-20),
       { role: 'user', content: messageText },
       { role: 'model', content: responseText }
     ];
