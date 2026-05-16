@@ -103,41 +103,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         return response;
     }
 
-    // Carregar e fazer cache das regras dos bancos para o Gutto responder dúvidas (mantém o bloco existente abaixo)
-    if (Date.now() - lastCacheTime > 5 * 60 * 1000) {
-        try {
-            const adminDb = getAdminDb();
-            if (adminDb) {
-                const banksSnap = await adminDb.collection('bankRules').get();
-                let rulesText = 'RESUMO DAS REGRAS DOS BANCOS (Use apenas se o usuário perguntar dúvidas sobre regras):\n';
-                banksSnap.forEach(doc => {
-                    const data = doc.data();
-                    if (data.isActive !== false) {
-                        rulesText += `- ${data.name}: Idade ${data.minAge || 18} a ${data.maxAge || 80} anos. `;
-                        if (data.portabilityRate) rulesText += `Taxa mín. Portabilidade: ${data.portabilityRate}%. `;
-                        if (data.refinRate) rulesText += `Taxa Refin: ${data.refinRate}%. `;
-                        if (data.minBalance) rulesText += `Saldo mín: R$ ${data.minBalance}. `;
-                        if (data.minTroco) rulesText += `Troco mín: R$ ${data.minTroco}. `;
-                        if (data.minInstallmentValue) rulesText += `Parcela mín: R$ ${data.minInstallmentValue}. `;
-                        if (data.nonAcceptedBanks && data.nonAcceptedBanks.length > 0) rulesText += `Bancos que NÃO aceita: ${data.nonAcceptedBanks.join(', ')}. `;
-                        rulesText += '\n';
-                    }
-                });
-                cachedBankRulesText = rulesText;
-                lastCacheTime = now;
-            }
-        } catch (e) {
-            console.error("Erro ao carregar regras para o cache:", e);
-        }
-    }
-
-    const systemInstruction = `Você é o "Gutto", o Agente de IA especialista em Portabilidade de Crédito Consignado da Portabilidade PRO.
-Você não só realiza simulações, mas também tira qualquer dúvida do corretor sobre as regras dos bancos.
-
-${cachedBankRulesText}
-Se o corretor fizer uma pergunta sobre as regras de um banco específico ou pedir um resumo geral, responda de forma consultiva e educada usando os dados acima. Se ele quiser apenas tirar dúvidas, não exija todos os dados do fluxo, apenas responda a dúvida dele de forma prestativa!
-
-O QUE COLETAR DO PARCEIRO PARA SIMULAÇÃO (DIRETO E OBJETIVO):`;
+    // O perfil do usuário e o cache de regras são processados abaixo
 
 
     let userProfileForSimulation = { role: 'admin' } as any;
