@@ -6,12 +6,16 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function safeStringify(obj: any) {
-  try {
-    return JSON.stringify(obj);
-  } catch (e) {
-    console.error("Error stringifying object:", e);
-    return "{}";
-  }
+  const cache = new Set();
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === 'object' && value !== null) {
+      if (value instanceof HTMLElement) return "[HTMLElement]";
+      if (value['$$typeof']) return "[ReactElement]";
+      if (cache.has(value)) return "[Circular]";
+      cache.add(value);
+    }
+    return value;
+  });
 }
 
 export function safeLocalStorageSet(key: string, value: string) {

@@ -23,6 +23,7 @@ import { collection, query, onSnapshot, where, limit, Timestamp, doc, updateDoc 
 import { db, auth } from '@/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PromotoraAvatar } from '@/components/PromotoraAvatar';
+import { safeStringify } from '@/lib/utils';
 import {
   LineChart,
   Line,
@@ -313,7 +314,7 @@ export default function Dashboard() {
     // Top users
     const userCounts: Record<string, { name: string, count: number, avatar: string | null }> = {};
     filteredSimulations.forEach(sim => {
-      if (sim.userId && sim.userName) {
+      if (sim.userId && sim.userName && sim.userName !== 'J2 Promotora') {
         if (!userCounts[sim.userId]) {
           userCounts[sim.userId] = { name: sim.userName, count: 0, avatar: sim.userAvatar || null };
         }
@@ -464,7 +465,7 @@ export default function Dashboard() {
 
   const loadSimulation = (sim: any) => {
     // Save to session storage and redirect to recommendations page to view details
-    sessionStorage.setItem('simulationData', JSON.stringify(sim));
+    sessionStorage.setItem('simulationData', safeStringify(sim));
     router.push('/simulacao/recomendacoes');
   };
 
