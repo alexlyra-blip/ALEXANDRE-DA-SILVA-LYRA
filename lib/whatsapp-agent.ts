@@ -4,11 +4,11 @@ import { calculateOffers, SimulationParams } from "@/lib/simulation-engine";
 // Initialization logic
 const getAI = () => {
     const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-    
+
     if (!apiKey || apiKey.includes("MY_GEMINI")) {
         console.warn("Invalid or missing API Key for Gemini");
     }
-    
+
     return new GoogleGenAI({ apiKey });
 };
 
@@ -58,81 +58,80 @@ let lastCacheTime = 0;
 
 export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '') {
     const ai = getAI();
-        if (!ai || (ai as any).error) {
-            return `DEBUG_NULL_AI: ${(ai as any)?.error || "unknown"}`;
-        }
+    if (!ai || (ai as any).error) {
+        return `DEBUG_NULL_AI: ${(ai as any)?.error || "unknown"}`;
+    }
 
-        // Se for a primeira mensagem (histórico vazio) oferece opções iniciais
-        if (history.length === 0) {
-            const welcome = `Olá! Eu sou o *Gutto*, seu especialista em portabilidade de crédito consignado.\n\nVocê pode:
+    // Se for a primeira mensagem (histórico vazio) oferece opções iniciais
+    if (history.length === 0) {
+        const welcome = `Olá! Eu sou o *Gutto*, seu especialista em portabilidade de crédito consignado.\n\nVocê pode:
 • *Iniciar uma simulação* – basta dizer "Quero simular" ou "Iniciar simulação".
 • *Consultar regras* – peça o "resumo das regras" ou pergunte sobre um banco específico (ex.: "Qual a idade mínima do Banco do Brasil?").\n\nComo posso ajudar?`;
-            return welcome;
-        }
+        return welcome;
+    }
 
-        // Verificar se a mensagem solicita informações ou resumo das regras dos bancos
-        const lowerMsg = message.toLowerCase();
-        const asksForRules = /\b(resumo|regras|informações?|detalhes?)\b/.test(lowerMsg) || /\b(banco|instituição)\b/.test(lowerMsg);
-        if (asksForRules) {
-            // Se ainda não temos o cache, carrega rapidamente (fallback)
-            if (!cachedBankRulesText) {
-                // Carrega de forma síncrona rápida – já existe lógica de cache abaixo, então chamamos manualmente
-                // (ignore erros silenciosamente)
-                try {
-                    const adminDb = getAdminDb();
-                    if (adminDb) {
-                        const snap = await adminDb.collection('bankRules').get();
-                        let txt = '';
-                        snap.forEach(d => {
-                            const dta = d.data();
-                            if (dta.isActive !== false) {
-                                txt += `- ${dta.name}: Idade ${dta.minAge||18} a ${dta.maxAge||80} anos. `;
-                                if (dta.portabilityRate) txt += `Taxa mín. Portabilidade: ${dta.portabilityRate}%. `;
-                                if (dta.refinRate) txt += `Taxa Refin: ${dta.refinRate}%. `;
-                                if (dta.minBalance) txt += `Saldo mín.: R$ ${dta.minBalance}. `;
-                                if (dta.minTroco) txt += `Troco mín.: R$ ${dta.minTroco}. `;
-                                if (dta.minInstallmentValue) txt += `Parcela mín.: R$ ${dta.minInstallmentValue}. `;
-                                txt += '\n';
-                            }
-                        });
-                        cachedBankRulesText = txt;
-                    }
-                } catch (e) { /* ignore */ }
-            }
-            const response = `📝 *Resumo das regras dos bancos*:\n${cachedBankRulesText}\nSe quiser detalhes de algum banco específico, basta informar o nome dele.`;
-            return response;
-        }
-
-        // Carregar e fazer cache das regras dos bancos para o Gutto responder dúvidas (mantém o bloco existente abaixo)
-        const now = Date.now();
-        if (now - lastCacheTime > 5 * 60 * 1000) {
+    // Verificar se a mensagem solicita informações ou resumo das regras dos bancos
+    const lowerMsg = message.toLowerCase();
+    const asksForRules = /\b(resumo|regras|informações?|detalhes?)\b/.test(lowerMsg) || /\b(banco|instituição)\b/.test(lowerMsg);
+    if (asksForRules) {
+        // Se ainda não temos o cache, carrega rapidamente (fallback)
+        if (!cachedBankRulesText) {
+            // Carrega de forma síncrona rápida – já existe lógica de cache abaixo, então chamamos manualmente
+            // (ignore erros silenciosamente)
             try {
                 const adminDb = getAdminDb();
                 if (adminDb) {
-                    const banksSnap = await adminDb.collection('bankRules').get();
-                    let rulesText = 'RESUMO DAS REGRAS DOS BANCOS (Use apenas se o usuário perguntar dúvidas sobre regras):\n';
-                    banksSnap.forEach(doc => {
-                        const data = doc.data();
-                        if (data.isActive !== false) {
-                            rulesText += `- ${data.name}: Idade ${data.minAge || 18} a ${data.maxAge || 80} anos. `;
-                            if (data.portabilityRate) rulesText += `Taxa mín. Portabilidade: ${data.portabilityRate}%. `;
-                            if (data.refinRate) rulesText += `Taxa Refin: ${data.refinRate}%. `;
-                            if (data.minBalance) rulesText += `Saldo mín: R$ ${data.minBalance}. `;
-                            if (data.minTroco) rulesText += `Troco mín: R$ ${data.minTroco}. `;
-                            if (data.minInstallmentValue) rulesText += `Parcela mín: R$ ${data.minInstallmentValue}. `;
-                            if (data.nonAcceptedBanks && data.nonAcceptedBanks.length > 0) rulesText += `Bancos que NÃO aceita: ${data.nonAcceptedBanks.join(', ')}. `;
-                            rulesText += '\n';
+                    const snap = await adminDb.collection('bankRules').get();
+                    let txt = '';
+                    snap.forEach(d => {
+                        const dta = d.data();
+                        if (dta.isActive !== false) {
+                            txt += `- ${dta.name}: Idade ${dta.minAge || 18} a ${dta.maxAge || 80} anos. `;
+                            if (dta.portabilityRate) txt += `Taxa mín. Portabilidade: ${dta.portabilityRate}%. `;
+                            if (dta.refinRate) txt += `Taxa Refin: ${dta.refinRate}%. `;
+                            if (dta.minBalance) txt += `Saldo mín.: R$ ${dta.minBalance}. `;
+                            if (dta.minTroco) txt += `Troco mín.: R$ ${dta.minTroco}. `;
+                            if (dta.minInstallmentValue) txt += `Parcela mín.: R$ ${dta.minInstallmentValue}. `;
+                            txt += '\n';
                         }
                     });
-                    cachedBankRulesText = rulesText;
-                    lastCacheTime = now;
+                    cachedBankRulesText = txt;
                 }
-            } catch (e) {
-                console.error("Erro ao carregar regras para o cache:", e);
-            }
+            } catch (e) { /* ignore */ }
         }
+        const response = `📝 *Resumo das regras dos bancos*:\n${cachedBankRulesText}\nSe quiser detalhes de algum banco específico, basta informar o nome dele.`;
+        return response;
+    }
 
-        const systemInstruction = `Você é o "Gutto", o Agente de IA especialista em Portabilidade de Crédito Consignado da Portabilidade PRO.
+    // Carregar e fazer cache das regras dos bancos para o Gutto responder dúvidas (mantém o bloco existente abaixo)
+    if (Date.now() - lastCacheTime > 5 * 60 * 1000) {
+        try {
+            const adminDb = getAdminDb();
+            if (adminDb) {
+                const banksSnap = await adminDb.collection('bankRules').get();
+                let rulesText = 'RESUMO DAS REGRAS DOS BANCOS (Use apenas se o usuário perguntar dúvidas sobre regras):\n';
+                banksSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.isActive !== false) {
+                        rulesText += `- ${data.name}: Idade ${data.minAge || 18} a ${data.maxAge || 80} anos. `;
+                        if (data.portabilityRate) rulesText += `Taxa mín. Portabilidade: ${data.portabilityRate}%. `;
+                        if (data.refinRate) rulesText += `Taxa Refin: ${data.refinRate}%. `;
+                        if (data.minBalance) rulesText += `Saldo mín: R$ ${data.minBalance}. `;
+                        if (data.minTroco) rulesText += `Troco mín: R$ ${data.minTroco}. `;
+                        if (data.minInstallmentValue) rulesText += `Parcela mín: R$ ${data.minInstallmentValue}. `;
+                        if (data.nonAcceptedBanks && data.nonAcceptedBanks.length > 0) rulesText += `Bancos que NÃO aceita: ${data.nonAcceptedBanks.join(', ')}. `;
+                        rulesText += '\n';
+                    }
+                });
+                cachedBankRulesText = rulesText;
+                lastCacheTime = now;
+            }
+        } catch (e) {
+            console.error("Erro ao carregar regras para o cache:", e);
+        }
+    }
+
+    const systemInstruction = `Você é o "Gutto", o Agente de IA especialista em Portabilidade de Crédito Consignado da Portabilidade PRO.
 Você não só realiza simulações, mas também tira qualquer dúvida do corretor sobre as regras dos bancos.
 
 ${cachedBankRulesText}
@@ -310,13 +309,13 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                 tools: [{ functionDeclarations: [calculateLoanOffersTool] }]
             }
         });
-        
+
         const functionCalls = result.functionCalls;
-        
+
         if (functionCalls && functionCalls[0].name === "calculate_client_loan_offers") {
             const call = functionCalls[0];
             const params = call.args as unknown as SimulationParams;
-            
+
             // Apply the 2 cards rule
             if (params.convenio === 'INSS' && (params as any).hasTwoCards) {
                 const desconto = (params as any).negativeCardValue || 81.05;
@@ -347,7 +346,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
             const banks = banksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             const rules = rulesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             const settingsData = settingsSnap.exists ? settingsSnap.data() : {};
-            
+
             const promotoraPriorities = settingsData?.bankPriorities || {};
             const promotoraInstallments = settingsData?.bankInstallments || {};
 
@@ -380,26 +379,26 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                 const pB = promotoraPriorities[bankIdB] ?? b.topOffer.priority ?? 999;
                 const finalPA = (pA === 0 || pA === undefined) ? 999 : pA;
                 const finalPB = (pB === 0 || pB === undefined) ? 999 : pB;
-                
+
                 if (finalPA !== finalPB) {
                     return finalPA - finalPB;
                 }
-                
+
                 return a.topOffer.valorTroco - b.topOffer.valorTroco;
             });
 
             // ---------------------------------------------------------
 
             const sanitizeOffer = (o: any) => o ? { ...o, logo: undefined } : null;
-            
+
             // A melhor oferta global (banco vencedor)
             const bestTrocoOfferOriginal = groupedAndSortedBanks.length > 0 ? groupedAndSortedBanks[0].topOffer : null;
             const bestTrocoOffer = sanitizeOffer(bestTrocoOfferOriginal);
-            
+
             // Lista das melhores ofertas principais de todos os bancos (para Other Banks)
             const sanitizedSampleOffers = groupedAndSortedBanks.map(g => sanitizeOffer(g.topOffer)).slice(0, 10);
             const uniqueBanks = groupedAndSortedBanks.map(g => g.bankName);
-            
+
             const simId = crypto.randomUUID();
             try {
                 const simulationData = {
@@ -423,9 +422,9 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                     timestamp: Date.now(),
                     origin: 'whatsapp'
                 };
-                
+
                 await adminDb.collection('simulations').doc(simId).set(simulationData);
-                
+
                 await adminDb.collection('whatsappSimulations').doc(simId).set({
                     params,
                     topOffer: bestTrocoOfferOriginal,
@@ -440,13 +439,13 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                 model: "gemini-3-flash-preview",
                 contents: [
                     ...contents,
-                    result.candidates?.[0]?.content || { role: "model", parts: [{ text: "" }] }, 
+                    result.candidates?.[0]?.content || { role: "model", parts: [{ text: "" }] },
                     {
                         role: "user",
                         parts: [{
                             functionResponse: {
                                 name: "calculate_client_loan_offers",
-                                response: { 
+                                response: {
                                     offersCount: allOffers.length,
                                     banksCount: uniqueBanks.length,
                                     bestTroco: bestTrocoOffer,
@@ -455,9 +454,9 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                                     // Propostas principais de outros bancos
                                     sampleOffers: sanitizedSampleOffers,
                                     // Outras tabelas do banco vencedor (limitado a 5 para não estourar o prompt)
-                                    otherTablesOfBestBank: groupedAndSortedBanks.length > 0 
-                                      ? groupedAndSortedBanks[0].offers.slice(1, 6).map(sanitizeOffer) 
-                                      : []
+                                    otherTablesOfBestBank: groupedAndSortedBanks.length > 0
+                                        ? groupedAndSortedBanks[0].offers.slice(1, 6).map(sanitizeOffer)
+                                        : []
                                 }
                             }
                         }]
@@ -465,7 +464,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                 ],
                 config: { systemInstruction }
             });
-            
+
             return followUpResult.text || "Operação realizada. Encontrei propostas interessantes para o seu contrato!";
         }
 
@@ -473,6 +472,6 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
 
     } catch (error: any) {
         console.error("AI Agent Error EXACT:", error);
-        return `DEBUG_CATCH_ERROR: ${error.message} [Key: ${((getAI() as any)?.apiKey || "").substring(0,5)}]`;
+        return `DEBUG_CATCH_ERROR: ${error.message} [Key: ${((getAI() as any)?.apiKey || "").substring(0, 5)}]`;
     }
 }
