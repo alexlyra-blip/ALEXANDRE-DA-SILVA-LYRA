@@ -604,7 +604,7 @@ export default function Dashboard() {
             <PromotoraAvatar 
               logoUrl={profile.avatarUrl || profile.photoUrl} 
               name={profile.name} 
-              className="size-20 border-4 border-white/30 shadow-xl"
+              className="size-20 rounded-xl border-4 border-white/30 shadow-xl"
             />
             <div>
               <h1 className="text-3xl font-black tracking-tight mb-1">Dashboard</h1>
@@ -996,7 +996,7 @@ export default function Dashboard() {
                 >
                   <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/50 pb-4">
                     <div className="flex items-center gap-3">
-                      <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-10 border-2 border-white dark:border-slate-800 shadow-sm" />
+                      <PromotoraAvatar logoUrl={sim.userAvatar} name={sim.userName} className="size-10 rounded-xl border-2 border-white dark:border-slate-800 shadow-sm" />
                        <div className="flex flex-col">
                          <span className="font-bold text-sm text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors">{sim.userName || 'N/A'}</span>
                          <span className="text-[10px] font-bold text-slate-400 mt-0.5">

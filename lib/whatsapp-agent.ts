@@ -370,6 +370,7 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                 const simulationData = {
                     userId: userProfileForSimulation.uid || 'whatsapp-bot',
                     userName: userProfileForSimulation.name || 'Usuário WhatsApp',
+                    userAvatar: userProfileForSimulation.logoUrl || userProfileForSimulation.avatarUrl || userProfileForSimulation.photoUrl || userProfileForSimulation.photoURL || '',
                     userEmail: userProfileForSimulation.email || '',
                     promotoraId: userProfileForSimulation.promotoraId || '',
                     clientName: 'Cliente via WhatsApp',
