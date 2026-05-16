@@ -297,7 +297,7 @@ ${cachedBankRulesText}`;
                     ...contents,
                     firstCandidate?.content || { role: "model", parts: [{ functionCall: functionCalls[0] }] },
                     {
-                        role: "user",
+                        role: "function",
                         parts: [{
                             functionResponse: {
                                 name: "calculate_client_loan_offers",
@@ -316,7 +316,15 @@ ${cachedBankRulesText}`;
                 config: { systemInstruction }
             });
 
-            return followUp.text || "Simulação concluída com sucesso! Aqui estão as melhores ofertas que encontrei para você.";
+            // Se o followUp não trouxer texto, geramos um fallback estruturado
+            if (!followUp.text) {
+                if (topOffer) {
+                    return `Encontramos uma oferta ideal para você no *${topOffer.name}*!\n\n📊 *Tabela:* ${topOffer.tabela}\n💰 *Troco Estimado:* R$ ${topOffer.valorTroco.toLocaleString('pt-BR')}\n📄 *Novo Contrato:* R$ ${topOffer.valorContrato.toLocaleString('pt-BR')}\n💲 *Parcela:* R$ ${params.valorParcela}\n⏳ *Prazo:* ${topOffer.prazoRefinPort || 96} meses\n\nOutros Bancos: ${otherBanks.join(', ')}`;
+                }
+                return "Simulação concluída, mas não encontramos ofertas viáveis para o seu perfil no momento.";
+            }
+
+            return followUp.text;
         }
 
         return firstCandidate?.content?.parts?.find((p: any) => p.text)?.text || (result as any).text || "Como posso ajudar na sua simulação hoje?";
