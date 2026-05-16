@@ -146,16 +146,19 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         } catch (e) { console.error(e); }
     }
 
-    const systemInstruction = `Você é o "Gutto", Agente de IA da Portabilidade PRO.
+    const systemInstruction = `Você é o "Gutto", o Agente de IA especialista em Portabilidade da Portabilidade PRO.
 
-ESTADO DA CONVERSA:
-1. Verifique o histórico para ver o que já foi coletado.
-2. Se você já apresentou o resultado (Troco Estimado) e o usuário pedir "Outro Banco" ou o nome de um banco da lista, VOCÊ DEVE chamar a ferramenta 'calculate_client_loan_offers' novamente, mantendo os dados e trocando apenas o 'bancoAtual'.
-3. Faça apenas UMA pergunta por vez.
+SUA MISSÃO: Coletar 10 dados e entregar o cálculo de ofertas.
 
-FLUXO DE COLETA:
+REGRAS DE OURO (NÃO NEGOCIÁVEIS):
+1. Verifique o histórico. Se o usuário já deu um dado, NUNCA pergunte novamente.
+2. Faça APENAS UMA pergunta por vez.
+3. Assim que receber o "Saldo Devedor", você deve IMEDIATAMENTE chamar a ferramenta 'calculate_client_loan_offers'. NÃO faça mais perguntas após o saldo devedor.
+4. Se o usuário pedir "Outro Banco" da lista que você mostrou, chame a ferramenta novamente trocando apenas o banco.
+
+ORDEM DE COLETA (Siga rigorosamente):
 1. Convênio e Idade.
-2. Localidade se 60+.
+2. Se 60+, pergunte se reside em AP, PB, TO ou RR.
 3. Sub-convênio/Espécie.
 4. Cartões (apenas INSS).
 5. Analfabeto.
@@ -163,13 +166,9 @@ FLUXO DE COLETA:
 7. Prazo Total.
 8. Prazo Restante.
 9. Valor da Parcela.
-10. Saldo Devedor.
+10. Saldo Devedor -> CHAME A FERRAMENTA AGORA.
 
-REGRAS CRÍTICAS:
-- Assim que tiver o 'Saldo Devedor' ou o usuário pedir outro banco da lista, chame a ferramenta 'calculate_client_loan_offers'.
-- NUNCA invente valores. Use apenas o que a ferramenta retornar.
-
-LAYOUT DE RESPOSTA (OBRIGATÓRIO):
+LAYOUT DE RESPOSTA (Ao receber o resultado da ferramenta):
 Encontramos uma oferta ideal para você no *[NOME DO BANCO]*:
 ⭐ *[tabelasCount] tabelas disponíveis*
 
@@ -187,7 +186,7 @@ OPÇÕES:
 - Digite o *Nome de outro Banco* para ver detalhes dele.
 
 ---
-REGRAS (Para consulta):
+REGRAS DOS BANCOS (Para consulta se houver dúvida):
 ${cachedBankRulesText}`;
 
     try {
@@ -208,27 +207,31 @@ ${cachedBankRulesText}`;
             }
         });
 
-        const candidates = (result as any).candidates || (result as any).response?.candidates;
-        const firstCandidate = candidates?.[0];
+        // Detecção ultra-robusta de Function Call
+        const candidates = (result as any).candidates || (result as any).response?.candidates || [];
+        const firstCandidate = candidates[0];
         const parts = firstCandidate?.content?.parts || [];
-        const functionCalls = parts.filter((p: any) => p.functionCall).map((p: any) => p.functionCall);
+        
+        // Verifica tanto pela propriedade oficial quanto pelo parsing manual dos parts
+        let callPart = parts.find((p: any) => p.functionCall);
+        const functionCalls = callPart ? [callPart.functionCall] : ((result as any).functionCalls || []);
 
         if (functionCalls && functionCalls.length > 0 && functionCalls[0].name === "calculate_client_loan_offers") {
             const call = functionCalls[0];
             const params = call.args as unknown as SimulationParams;
 
-            // Business logic for 2 cards
+            // Regra dos 2 cartões
             if (params.convenio === 'INSS' && (params as any).hasTwoCards) {
                 const desconto = (params as any).negativeCardValue || 81.05;
                 params.valorParcela = Math.max(0, (params.valorParcela || 0) - desconto);
             }
 
-            // Interest rate calculation fallback
+            // Fallback de Taxa
             if (!params.taxaJurosMensal) {
                 const pmt = params.valorParcela || 0;
                 const pv = params.saldoDevedor || 0;
-                const pagas = params.parcelasPagas || 0;
                 const total = params.prazoTotal || 0;
+                const pagas = params.parcelasPagas || 0;
                 const n = params.parcelasRestantes || (total > 0 ? total - pagas : 0);
                 if (pmt > 0 && pv > 0 && n > 0) {
                     params.taxaJurosMensal = calculateInterestRateAgent(pv, pmt, n);
@@ -252,7 +255,6 @@ ${cachedBankRulesText}`;
 
             const allOffers = calculateOffers(params, banks, rules, promotoraPriorities, promotoraInstallments, userProfileForSimulation);
 
-            // Grouping and Sorting
             const bankGroups = allOffers.reduce((acc, offer) => {
                 if (!acc[offer.name]) acc[offer.name] = { bankName: offer.name, offers: [] };
                 acc[offer.name].offers.push(offer);
@@ -274,7 +276,6 @@ ${cachedBankRulesText}`;
             const otherBanks = groupedBanks.map(g => g.bankName);
             const sampleOffers = groupedBanks.map(g => sanitize(g.topOffer)).slice(0, 10);
 
-            // Save simulation
             const simId = crypto.randomUUID();
             try {
                 await adminDb.collection('simulations').doc(simId).set({
@@ -289,13 +290,13 @@ ${cachedBankRulesText}`;
                     createdAt: new Date(),
                     origin: 'whatsapp'
                 });
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error("Sim Save Error:", e); }
 
             const followUp = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
                 contents: [
                     ...contents,
-                    firstCandidate?.content || { role: "model", parts: [{ text: "" }] },
+                    firstCandidate?.content || { role: "model", parts: [{ functionCall: functionCalls[0] }] },
                     {
                         role: "user",
                         parts: [{
@@ -316,13 +317,13 @@ ${cachedBankRulesText}`;
                 config: { systemInstruction }
             });
 
-            return followUp.text || "Encontrei propostas interessantes!";
+            return followUp.text || "Simulação concluída com sucesso! Aqui estão as melhores ofertas que encontrei para você.";
         }
 
-        return firstCandidate?.content?.parts?.[0]?.text || (result as any).text || "Como posso ajudar?";
+        return firstCandidate?.content?.parts?.find((p: any) => p.text)?.text || (result as any).text || "Como posso ajudar na sua simulação hoje?";
 
     } catch (error: any) {
-        console.error(error);
-        return `DEBUG_ERROR: ${error.message}`;
+        console.error("Critical Agent Error:", error);
+        return "Desculpe, tive um problema técnico ao processar sua simulação. Pode tentar novamente em alguns instantes?";
     }
 }
