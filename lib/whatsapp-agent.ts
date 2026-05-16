@@ -171,9 +171,10 @@ Também liberamos ofertas para outros bancos (somente se houver 'allBanksWithOff
 Outros Bancos Disponíveis: [BANCO 2], [BANCO 3], [BANCO 4]
 
 Opções no final da mensagem (obrigatório):
+Para ver as outras tabelas disponíveis deste banco, digite *Tabelas*.
 Caso queira ver a oferta detalhada de outro banco, basta digitar o *Nome do Banco* agora!
 
-(Se ele pedir detalhes de outro banco listado, você DEVE procurar os dados deste banco na lista 'sampleOffers' fornecida no JSON. NUNCA INVENTE TABELAS OU VALORES. Se a oferta estiver no 'sampleOffers', exiba usando o mesmo layout acima. Se não estiver, peça desculpas e diga que os detalhes completos estão no portal web).
+(Se o usuário pedir detalhes de outro banco listado, você DEVE procurar os dados deste banco na lista 'sampleOffers' fornecida no JSON. Se o usuário digitar "Tabelas" para ver as outras tabelas do banco principal, procure os dados na lista 'otherTablesOfBestBank'. NUNCA INVENTE TABELAS OU VALORES. Se a oferta estiver no JSON, exiba usando o mesmo layout acima. Se não estiver, peça desculpas e diga que os detalhes completos estão no portal web).
 
 ENCERRAMENTO:
 Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATORIAMENTE anexe a tag \`[END_SESSION]\` à sua mensagem.`;
@@ -324,8 +325,12 @@ Se o usuário encerrar ou não quiser mais simulações, se despeça e OBRIGATOR
                                     bestTroco: bestTrocoOffer,
                                     allBanksWithOffers: uniqueBanks,
                                     simulationId: simId,
-                                    // Mandamos algumas propostas de exemplo apenas para referência da IA
-                                    sampleOffers: sanitizedSampleOffers 
+                                    // Propostas principais de outros bancos
+                                    sampleOffers: sanitizedSampleOffers,
+                                    // Outras tabelas do banco vencedor (limitado a 5 para não estourar o prompt)
+                                    otherTablesOfBestBank: groupedAndSortedBanks.length > 0 
+                                      ? groupedAndSortedBanks[0].offers.slice(1, 6).map(sanitizeOffer) 
+                                      : []
                                 }
                             }
                         }]
