@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { calculateOffers, SimulationParams } from "@/lib/simulation-engine";
+import { randomUUID } from "crypto";
 
 const getAI = () => {
     const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
@@ -285,7 +286,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
     const bankNames = sorted.map((g: any) => g.bankName);
 
     try {
-        await db.collection('simulations').doc(crypto.randomUUID()).set({
+        await db.collection('simulations').doc(randomUUID()).set({
             userId: userProfile.uid || 'bot', userName: userProfile.name || 'WhatsApp',
             userAvatar: userProfile.logoUrl || userProfile.avatarUrl || '',
             convenio: params.convenio, bancoAtual: params.bancoAtual, valorParcela: params.valorParcela,
