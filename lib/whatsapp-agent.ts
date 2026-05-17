@@ -4,322 +4,294 @@ import { calculateOffers, SimulationParams } from "@/lib/simulation-engine";
 
 const getAI = () => {
     const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-    if (!apiKey || apiKey.includes("MY_GEMINI")) {
-        console.warn("Invalid or missing API Key for Gemini");
-    }
+    if (!apiKey || apiKey.includes("MY_GEMINI")) console.warn("Missing API Key");
     return new GoogleGenAI({ apiKey });
 };
 
 const calculateLoanOffersTool = {
     name: "calculate_client_loan_offers",
-    description: "Calculates loan portability offers. Call this ONLY after collecting ALL required data: convenio, idade, bancoAtual, valorParcela, saldoDevedor, prazoTotal.",
+    description: "Calculates loan portability offers. Call IMMEDIATELY when you have: convenio, idade, bancoAtual, valorParcela, saldoDevedor, prazoTotal.",
     parameters: {
         type: Type.OBJECT,
         properties: {
             idade: { type: Type.NUMBER, description: "Customer age" },
-            convenio: { type: Type.STRING, description: "Agreement type (INSS, SIAPE, GOVERNO, FORCAS_ARMADAS)" },
-            subConvenio: { type: Type.STRING, description: "Sub-agreement (Marinha, Exercito, etc.)" },
+            convenio: { type: Type.STRING, description: "INSS, SIAPE, GOVERNO, FORCAS_ARMADAS, CLT PRIVADO" },
+            subConvenio: { type: Type.STRING, description: "Sub-agreement" },
             bancoAtual: { type: Type.STRING, description: "Current bank name" },
-            valorParcela: { type: Type.NUMBER, description: "Current monthly installment value" },
+            valorParcela: { type: Type.NUMBER, description: "Monthly installment" },
             saldoDevedor: { type: Type.NUMBER, description: "Outstanding balance" },
-            prazoTotal: { type: Type.NUMBER, description: "Total term in months (e.g. 84, 96)" },
-            parcelasPagas: { type: Type.NUMBER, description: "Installments already paid" },
+            prazoTotal: { type: Type.NUMBER, description: "Total term months" },
+            parcelasPagas: { type: Type.NUMBER, description: "Paid installments" },
             parcelasRestantes: { type: Type.NUMBER, description: "Remaining installments" },
-            isAnalfabeto: { type: Type.BOOLEAN, description: "If customer is illiterate" },
-            isCliente60Mais: { type: Type.BOOLEAN, description: "If customer is 60+ in AP/PB/TO/RR" },
-            hasTwoCards: { type: Type.BOOLEAN, description: "If client has 2 active cards (INSS only)" },
-            negativeCardValue: { type: Type.NUMBER, description: "Card discount value" }
+            isAnalfabeto: { type: Type.BOOLEAN, description: "Illiterate" },
+            isCliente60Mais: { type: Type.BOOLEAN, description: "60+ in AP/PB/TO/RR" },
+            hasTwoCards: { type: Type.BOOLEAN, description: "2 active cards (INSS)" },
+            negativeCardValue: { type: Type.NUMBER, description: "Card discount" }
         },
         required: ["idade", "convenio", "bancoAtual", "valorParcela", "saldoDevedor", "prazoTotal"]
     }
 };
 
-function calculateInterestRateAgent(pv: number, pmt: number, n: number) {
+function calcRate(pv: number, pmt: number, n: number) {
     if (pmt <= 0 || pv <= 0 || n <= 0) return 0;
-    let low = 0.0001, high = 1, rate = 0.05, diff = 1, iterations = 0;
-    while (diff > 0.0001 && high - low > 0.00001 && iterations < 100) {
-        const calc = (pmt / rate) * (1 - Math.pow(1 + rate, -n));
-        diff = Math.abs(calc - pv);
-        if (calc > pv) { low = rate; rate = (rate + high) / 2; }
-        else { high = rate; rate = (rate + low) / 2; }
-        iterations++;
+    let lo = 0.0001, hi = 1, r = 0.05, d = 1, i = 0;
+    while (d > 0.0001 && hi - lo > 0.00001 && i < 100) {
+        const c = (pmt / r) * (1 - Math.pow(1 + r, -n));
+        d = Math.abs(c - pv);
+        if (c > pv) { lo = r; r = (r + hi) / 2; } else { hi = r; r = (r + lo) / 2; }
+        i++;
     }
-    return rate;
+    return r;
 }
 
 let cachedBankRules: any[] = [];
-let lastCacheTime = 0;
+let lastCache = 0;
 
-async function loadBankRules() {
-    const now = Date.now();
-    if (now - lastCacheTime > 5 * 60 * 1000) {
+async function loadRules() {
+    if (Date.now() - lastCache > 300000) {
         try {
-            const adminDb = getAdminDb();
-            if (adminDb) {
-                const snap = await adminDb.collection('bankRules').get();
+            const db = getAdminDb();
+            if (db) {
+                const snap = await db.collection('bankRules').get();
                 cachedBankRules = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((b: any) => b.isActive !== false);
-                lastCacheTime = now;
+                lastCache = Date.now();
             }
-        } catch (e) { console.error("Cache load error:", e); }
+        } catch (e) { console.error(e); }
     }
-    return cachedBankRules;
 }
 
-function formatBankRuleSummary(bankName: string): string {
-    const bank = cachedBankRules.find(b => 
-        (b.name || '').toLowerCase().includes(bankName.toLowerCase()) ||
-        bankName.toLowerCase().includes((b.name || '').toLowerCase())
-    );
-    if (!bank) return `Não encontrei regras para o banco "${bankName}". Bancos disponíveis: ${cachedBankRules.map(b => b.name).join(', ')}.`;
-    
-    let txt = `📋 *Regras do ${bank.name}*:\n`;
-    txt += `• Idade: ${bank.minAge || 18} a ${bank.maxAge || 80} anos\n`;
-    if (bank.portabilityRate) txt += `• Taxa Portabilidade: ${bank.portabilityRate}%\n`;
-    if (bank.refinRate) txt += `• Taxa Refin: ${bank.refinRate}%\n`;
-    if (bank.minBalance) txt += `• Saldo mínimo: R$ ${bank.minBalance}\n`;
-    if (bank.minTroco) txt += `• Troco mínimo: R$ ${bank.minTroco}\n`;
-    if (bank.minInstallmentValue) txt += `• Parcela mínima: R$ ${bank.minInstallmentValue}\n`;
-    if (bank.nonAcceptedBanks?.length > 0) txt += `• Bancos que NÃO aceita: ${bank.nonAcceptedBanks.join(', ')}\n`;
-    return txt;
+function getRuleSummary(bankName: string): string {
+    const b = cachedBankRules.find(r => (r.name || '').toLowerCase().includes(bankName.toLowerCase()));
+    if (!b) return `Banco "${bankName}" não encontrado. Disponíveis: ${cachedBankRules.map(r => r.name).join(', ')}`;
+    let t = `📋 *Regras do ${b.name}*:\n• Idade: ${b.minAge || 18} a ${b.maxAge || 80}\n`;
+    if (b.portabilityRate) t += `• Taxa Port: ${b.portabilityRate}%\n`;
+    if (b.refinRate) t += `• Taxa Refin: ${b.refinRate}%\n`;
+    if (b.minBalance) t += `• Saldo mín: R$ ${b.minBalance}\n`;
+    if (b.minTroco) t += `• Troco mín: R$ ${b.minTroco}\n`;
+    return t;
 }
 
-function formatAllBankNames(): string {
-    return cachedBankRules.map(b => b.name).join(', ');
+// Extrai dados coletados do histórico da conversa
+function extractDataFromHistory(history: any[], currentMsg: string): Partial<SimulationParams> {
+    const data: any = {};
+    const allMessages = [...history, { role: 'user', content: currentMsg }];
+    
+    for (let i = 0; i < allMessages.length; i++) {
+        const msg = allMessages[i];
+        if (msg.role !== 'user') continue;
+        const txt = (msg.content || '').toLowerCase().replace(/[.,]/g, '');
+        const prev = i > 0 ? (allMessages[i - 1].content || '').toLowerCase() : '';
+        
+        // Convênio
+        if (prev.includes('convênio') || prev.includes('convenio') || i <= 2) {
+            if (/\binss\b/.test(txt)) data.convenio = 'INSS';
+            else if (/\bsiape\b/.test(txt)) data.convenio = 'SIAPE';
+            else if (/\bgoverno\b/.test(txt)) data.convenio = 'GOVERNO';
+            else if (/for[çc]as?\s*armadas?/.test(txt)) data.convenio = 'FORCAS_ARMADAS';
+            else if (/\bclt\b/.test(txt)) data.convenio = 'CLT PRIVADO';
+        }
+        // Idade
+        if (prev.includes('idade') || prev.includes('anos')) {
+            const m = txt.match(/(\d{2})/);
+            if (m && parseInt(m[1]) >= 18 && parseInt(m[1]) <= 100) data.idade = parseInt(m[1]);
+        }
+        // Banco atual
+        if (prev.includes('banco') && (prev.includes('atual') || prev.includes('contrato'))) {
+            data.bancoAtual = msg.content.trim();
+        }
+        // Prazo total
+        if (prev.includes('prazo total') || prev.includes('prazo do contrato') || prev.includes('quantas parcelas')) {
+            const m = txt.match(/(\d+)/);
+            if (m) data.prazoTotal = parseInt(m[1]);
+        }
+        // Prazo restante
+        if (prev.includes('restante') || prev.includes('faltam') || prev.includes('prazo restante')) {
+            const m = txt.match(/(\d+)/);
+            if (m) data.parcelasRestantes = parseInt(m[1]);
+        }
+        // Valor da parcela
+        if (prev.includes('parcela') && (prev.includes('valor') || prev.includes('quanto') || prev.includes('mensal'))) {
+            const m = txt.match(/([\d]+)/);
+            if (m) data.valorParcela = parseFloat(m[1]);
+        }
+        // Saldo devedor
+        if (prev.includes('saldo') || txt.includes('saldo')) {
+            const m = txt.match(/([\d]+)/);
+            if (m) data.saldoDevedor = parseFloat(m[1]);
+        }
+        // Analfabeto
+        if (prev.includes('analfabeto')) {
+            data.isAnalfabeto = /sim/.test(txt);
+        }
+    }
+    return data;
 }
 
-// Formata o resultado da simulação diretamente, sem depender da IA
-function formatSimulationResult(topOffer: any, otherBanks: string[], groupedBanks: any[], params: SimulationParams): string {
-    if (!topOffer) {
-        return "❌ Não encontramos ofertas viáveis para o seu perfil no momento. Verifique os dados e tente novamente.";
-    }
+function hasAllRequired(d: any): boolean {
+    return !!(d.convenio && d.idade && d.bancoAtual && d.valorParcela && d.saldoDevedor && d.prazoTotal);
+}
 
-    const fmt = (v: number) => v?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00';
-    
-    let msg = `✅ *Simulação concluída!*\n\n`;
-    msg += `Encontramos a melhor oferta para você no *${topOffer.name}*:\n\n`;
-    
-    const totalTables = groupedBanks.find(g => g.bankName === topOffer.name)?.offers?.length || 1;
-    msg += `⭐ *${totalTables} tabela(s) disponível(is)*\n\n`;
-    
-    if (topOffer.tabela) msg += `📊 *Tabela:* ${topOffer.tabela}\n`;
-    msg += `💰 *Troco Estimado:* R$ ${fmt(topOffer.valorTroco)}\n`;
-    msg += `📄 *Novo Contrato:* R$ ${fmt(topOffer.valorContrato)}\n`;
-    msg += `💲 *Valor da Parcela:* R$ ${fmt(params.valorParcela || 0)}\n`;
-    msg += `⏳ *Prazo:* ${topOffer.prazoRefinPort || topOffer.prazoTotal || 96} meses\n`;
-    if (topOffer.novaTaxaPortabilidade) msg += `📈 *Taxa:* ${topOffer.novaTaxaPortabilidade}%\n`;
-    
-    const otherBankNames = otherBanks.filter(b => b !== topOffer.name);
-    if (otherBankNames.length > 0) {
-        msg += `\n🏦 *Outros Bancos Disponíveis:* ${otherBankNames.join(', ')}\n`;
+function fmt(v: number) { return v?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'; }
+
+function formatResult(top: any, banks: string[], grouped: any[], p: SimulationParams): string {
+    if (!top) return "❌ Não encontramos ofertas viáveis para o seu perfil.";
+    const tables = grouped.find(g => g.bankName === top.name)?.offers?.length || 1;
+    let m = `✅ *Simulação concluída!*\n\nMelhor oferta no *${top.name}*:\n⭐ *${tables} tabela(s)*\n\n`;
+    if (top.tabela) m += `📊 *Tabela:* ${top.tabela}\n`;
+    m += `💰 *Troco Estimado:* R$ ${fmt(top.valorTroco)}\n`;
+    m += `📄 *Novo Contrato:* R$ ${fmt(top.valorContrato)}\n`;
+    m += `💲 *Parcela:* R$ ${fmt(p.valorParcela || 0)}\n`;
+    m += `⏳ *Prazo:* ${top.prazoRefinPort || 96} meses\n`;
+    if (top.novaTaxaPortabilidade) m += `📈 *Taxa:* ${top.novaTaxaPortabilidade}%\n`;
+    const others = banks.filter(b => b !== top.name);
+    if (others.length > 0) m += `\n🏦 *Outros Bancos:* ${others.join(', ')}\n`;
+    m += `\n_Digite o *nome de outro banco* para ver a oferta dele._`;
+    return m;
+}
+
+async function doCalculation(params: SimulationParams, userProfile: any): Promise<string> {
+    if (!params.taxaJurosMensal) {
+        const n = params.parcelasRestantes || ((params.prazoTotal || 0) - (params.parcelasPagas || 0));
+        if ((params.valorParcela || 0) > 0 && (params.saldoDevedor || 0) > 0 && n > 0) {
+            params.taxaJurosMensal = calcRate(params.saldoDevedor!, params.valorParcela!, n);
+        }
     }
-    
-    msg += `\n_Digite o *nome de outro banco* para ver a oferta dele._`;
-    
-    return msg;
+    const db = getAdminDb();
+    if (!db) return "⚠️ Erro de conexão.";
+    const [bSnap, rSnap, sSnap] = await Promise.all([
+        db.collection('bankRules').get(), db.collection('generalRules').get(), db.collection('settings').doc('admin').get()
+    ]);
+    const banks = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const rules = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const sd = sSnap.exists ? sSnap.data() : {};
+    const pp = sd?.bankPriorities || {};
+    const pi = sd?.bankInstallments || {};
+    const offers = calculateOffers(params, banks, rules, pp, pi, userProfile);
+    console.log(`[Gutto] Offers: ${offers.length}`);
+    const groups = offers.reduce((a, o) => { if (!a[o.name]) a[o.name] = { bankName: o.name, offers: [] }; a[o.name].offers.push(o); return a; }, {} as Record<string, any>);
+    const sorted = Object.values(groups).map((g: any) => { const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco); return { ...g, offers: s, topOffer: s[0] }; })
+        .sort((a: any, b: any) => { const pA = pp[a.topOffer.id?.split('-')[0]] ?? 999; const pB = pp[b.topOffer.id?.split('-')[0]] ?? 999; return (pA || 999) !== (pB || 999) ? (pA || 999) - (pB || 999) : a.topOffer.valorTroco - b.topOffer.valorTroco; });
+    const top = sorted.length > 0 ? sorted[0].topOffer : null;
+    const bankNames = sorted.map((g: any) => g.bankName);
+    try {
+        await db.collection('simulations').doc(crypto.randomUUID()).set({
+            userId: userProfile.uid || 'bot', userName: userProfile.name || 'WhatsApp',
+            userAvatar: userProfile.logoUrl || userProfile.avatarUrl || '',
+            convenio: params.convenio, bancoAtual: params.bancoAtual, valorParcela: params.valorParcela,
+            saldoDevedor: params.saldoDevedor, selectedOffer: top, topOffer: top?.name || '',
+            topOfferContrato: top?.valorContrato || 0, topOfferTroco: top?.valorTroco || 0,
+            topOfferTaxa: top?.novaTaxaPortabilidade || 0, topOfferTabela: top?.tabela || '',
+            createdAt: new Date(), timestamp: Date.now(), origin: 'whatsapp'
+        });
+    } catch (e) { console.error(e); }
+    return formatResult(top, bankNames, sorted, params);
 }
 
 export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '') {
     const ai = getAI();
-    if (!ai || (ai as any).error) {
-        return `Erro de configuração do assistente. Por favor, tente mais tarde.`;
-    }
+    await loadRules();
 
-    // Carregar regras dos bancos
-    await loadBankRules();
-
-    // Primeira mensagem - boas-vindas
     if (history.length === 0) {
-        return `Olá! Eu sou o *Gutto*, seu especialista em portabilidade de crédito consignado.\n\nDigite *"Simular"* para iniciar uma simulação ou pergunte sobre as *regras de um banco específico* (ex: "Regras do Banco do Brasil").`;
+        return `Olá! Eu sou o *Gutto*, especialista em portabilidade.\n\nDigite *"Simular"* para iniciar ou pergunte as *regras de um banco* (ex: "Regras do Bradesco").`;
     }
 
-    const lowerMsg = message.toLowerCase().trim();
+    const lower = message.toLowerCase().trim();
 
-    // Consulta de regras - AGORA POR BANCO ESPECÍFICO
-    const rulesMatch = lowerMsg.match(/regras?\s+(?:do\s+)?(.+)/i);
-    if (rulesMatch) {
-        const bankName = rulesMatch[1].trim();
-        return formatBankRuleSummary(bankName);
-    }
-    
-    // Pedir lista de bancos
-    if (/\b(bancos|lista|quais bancos)\b/.test(lowerMsg) && !history.some(h => h.content?.includes('Troco Estimado'))) {
-        return `🏦 *Bancos disponíveis:*\n${formatAllBankNames()}\n\nPara ver as regras de um banco, digite: *Regras do [nome do banco]*`;
-    }
+    // Consulta de regras por banco
+    const rulesMatch = lower.match(/regras?\s+(?:do\s+)?(.+)/i);
+    if (rulesMatch) return getRuleSummary(rulesMatch[1].trim());
+    if (/\b(bancos|lista)\b/.test(lower) && !history.some(h => h.content?.includes('Troco Estimado')))
+        return `🏦 *Bancos:* ${cachedBankRules.map(b => b.name).join(', ')}\n\nDigite: *Regras do [banco]*`;
 
     // Validar telefone
-    let userProfileForSimulation = { role: 'admin' } as any;
+    let userProfile = { role: 'admin' } as any;
     if (currentPhone) {
-        const cleanPhone = currentPhone.replace(/\D/g, '');
-        const adminDb = getAdminDb();
-        if (adminDb) {
-            const usersRef = await adminDb.collection('users').get();
-            let foundUser = null;
-            usersRef.forEach(doc => {
-                const userData = doc.data();
-                if (userData.phone) {
-                    const cleanDbPhone = userData.phone.replace(/\D/g, '');
-                    if (cleanDbPhone.length >= 8 && cleanPhone.endsWith(cleanDbPhone)) {
-                        foundUser = { uid: doc.id, ...userData };
-                    }
-                }
-            });
-            if (!foundUser) return "Desculpe, seu número não está cadastrado no sistema.";
-            userProfileForSimulation = foundUser;
+        const clean = currentPhone.replace(/\D/g, '');
+        const db = getAdminDb();
+        if (db) {
+            const snap = await db.collection('users').get();
+            let found = null;
+            snap.forEach(doc => { const d = doc.data(); if (d.phone) { const cp = d.phone.replace(/\D/g, ''); if (cp.length >= 8 && clean.endsWith(cp)) found = { uid: doc.id, ...d }; } });
+            if (!found) return "Desculpe, seu número não está cadastrado.";
+            userProfile = found;
         }
     }
 
-    // Construir o prompt do sistema - ULTRA CONCISO
-    const systemInstruction = `Você é o Gutto, assistente de portabilidade.
+    // FALLBACK: Extrair dados do histórico e calcular diretamente se tiver tudo
+    const extracted = extractDataFromHistory(history, message);
+    console.log(`[Gutto] Extracted:`, JSON.stringify(extracted));
 
-REGRA ABSOLUTA: Faça APENAS UMA pergunta por vez. Nunca pergunte duas coisas na mesma mensagem.
+    if (hasAllRequired(extracted)) {
+        console.log(`[Gutto] All data present! Forcing calculation.`);
+        return await doCalculation(extracted as SimulationParams, userProfile);
+    }
 
-DADOS A COLETAR (nesta ordem, um por vez):
-1. Convênio
+    // Construir summary dos dados já coletados para ajudar a IA
+    let dataSummary = '';
+    if (extracted.convenio) dataSummary += `Convênio: ${extracted.convenio}\n`;
+    if (extracted.idade) dataSummary += `Idade: ${extracted.idade}\n`;
+    if (extracted.bancoAtual) dataSummary += `Banco: ${extracted.bancoAtual}\n`;
+    if (extracted.prazoTotal) dataSummary += `Prazo: ${extracted.prazoTotal}\n`;
+    if (extracted.parcelasRestantes) dataSummary += `Restante: ${extracted.parcelasRestantes}\n`;
+    if (extracted.valorParcela) dataSummary += `Parcela: ${extracted.valorParcela}\n`;
+    if (extracted.saldoDevedor) dataSummary += `Saldo: ${extracted.saldoDevedor}\n`;
+
+    const sysInst = `Você é o Gutto, assistente de portabilidade.
+
+REGRA: Faça APENAS UMA pergunta por vez.
+
+DADOS COLETADOS:
+${dataSummary || 'Nenhum ainda.'}
+
+ORDEM DE COLETA (pergunte o PRÓXIMO dado que ainda falta):
+1. Convênio (INSS, SIAPE, Governo, Forças Armadas ou CLT Privado)
 2. Idade
-3. Se idade >= 60: reside em AP/PB/TO/RR?
-4. Sub-convênio (se aplicável)
-5. Analfabeto? (sim/não)
-6. Se INSS: possui 2 cartões ativos? Valor desconto?
-7. Banco atual do contrato
+3. Se 60+: reside em AP/PB/TO/RR?
+4. Sub-convênio
+5. Analfabeto?
+6. Se INSS: 2 cartões ativos?
+7. Banco atual
 8. Prazo total (meses)
-9. Valor da parcela mensal
-10. Saldo devedor
+9. Prazo restante (parcelas que faltam)
+10. Valor da parcela
+11. Saldo devedor
 
-IMPORTANTE:
-- Verifique o histórico antes de perguntar. Se o dado já existe, pule para o próximo.
-- Quando tiver TODOS os dados obrigatórios (convenio, idade, bancoAtual, valorParcela, saldoDevedor, prazoTotal), chame a ferramenta calculate_client_loan_offers IMEDIATAMENTE.
-- Confirme cada dado recebido de forma breve antes de pedir o próximo.
-- Se o usuário informar o nome de um banco após uma simulação, chame a ferramenta novamente trocando apenas bancoAtual.`;
+Quando tiver TODOS os dados obrigatórios, chame calculate_client_loan_offers.`;
 
     try {
-        // Limitar histórico para as últimas 16 mensagens
-        const recentHistory = history.slice(-16);
-        
         const contents = [
-            ...recentHistory.map(h => ({
-                role: h.role === 'user' ? 'user' : 'model',
-                parts: [{ text: h.content }]
-            })),
-            { role: "user", parts: [{ text: message }] }
+            ...history.slice(-16).map(h => ({ role: h.role === 'user' ? 'user' as const : 'model' as const, parts: [{ text: h.content }] })),
+            { role: "user" as const, parts: [{ text: message }] }
         ];
-
-        console.log(`[Gutto] Calling Gemini with ${contents.length} messages`);
 
         const result = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
             contents,
-            config: {
-                systemInstruction,
-                tools: [{ functionDeclarations: [calculateLoanOffersTool] }]
-            }
+            config: { systemInstruction: sysInst, tools: [{ functionDeclarations: [calculateLoanOffersTool] }] }
         });
 
         // Detectar function call
         const candidates = (result as any).candidates || [];
-        const firstCandidate = candidates[0];
-        const parts = firstCandidate?.content?.parts || [];
-        const fcPart = parts.find((p: any) => p.functionCall);
+        const parts = candidates[0]?.content?.parts || [];
+        const fc = parts.find((p: any) => p.functionCall);
 
-        console.log(`[Gutto] Function call detected: ${!!fcPart}`);
-
-        if (fcPart && fcPart.functionCall?.name === "calculate_client_loan_offers") {
-            console.log(`[Gutto] Executing calculation with args:`, JSON.stringify(fcPart.functionCall.args).substring(0, 200));
-            
-            const params = fcPart.functionCall.args as unknown as SimulationParams;
-
-            // Regra dos 2 cartões
-            if (params.convenio === 'INSS' && (params as any).hasTwoCards) {
+        if (fc?.functionCall?.name === "calculate_client_loan_offers") {
+            console.log(`[Gutto] Function call detected!`);
+            const params = fc.functionCall.args as unknown as SimulationParams;
+            if (params.convenio === 'INSS' && (params as any).hasTwoCards)
                 params.valorParcela = Math.max(0, (params.valorParcela || 0) - ((params as any).negativeCardValue || 81.05));
-            }
-
-            // Calcular taxa se necessário
-            if (!params.taxaJurosMensal) {
-                const pmt = params.valorParcela || 0;
-                const pv = params.saldoDevedor || 0;
-                const total = params.prazoTotal || 0;
-                const pagas = params.parcelasPagas || 0;
-                const n = params.parcelasRestantes || (total > 0 ? total - pagas : 0);
-                if (pmt > 0 && pv > 0 && n > 0) {
-                    params.taxaJurosMensal = calculateInterestRateAgent(pv, pmt, n);
-                }
-            }
-
-            const adminDb = getAdminDb();
-            if (!adminDb) return "⚠️ Erro de conexão com o banco de dados.";
-
-            const [banksSnap, rulesSnap, settingsSnap] = await Promise.all([
-                adminDb.collection('bankRules').get(),
-                adminDb.collection('generalRules').get(),
-                adminDb.collection('settings').doc('admin').get()
-            ]);
-
-            const banks = banksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-            const rules = rulesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-            const settingsData = settingsSnap.exists ? settingsSnap.data() : {};
-            const promotoraPriorities = settingsData?.bankPriorities || {};
-            const promotoraInstallments = settingsData?.bankInstallments || {};
-
-            const allOffers = calculateOffers(params, banks, rules, promotoraPriorities, promotoraInstallments, userProfileForSimulation);
-
-            console.log(`[Gutto] Offers calculated: ${allOffers.length} total`);
-
-            // Agrupar e ordenar
-            const bankGroups = allOffers.reduce((acc, offer) => {
-                if (!acc[offer.name]) acc[offer.name] = { bankName: offer.name, offers: [] };
-                acc[offer.name].offers.push(offer);
-                return acc;
-            }, {} as Record<string, { bankName: string, offers: any[] }>);
-
-            const groupedBanks = Object.values(bankGroups).map(group => {
-                const sorted = group.offers.sort((a, b) => a.valorTroco - b.valorTroco);
-                return { ...group, offers: sorted, topOffer: sorted[0] };
-            }).sort((a, b) => {
-                const pA = promotoraPriorities[a.topOffer.id?.split('-')[0]] ?? a.topOffer.priority ?? 999;
-                const pB = promotoraPriorities[b.topOffer.id?.split('-')[0]] ?? b.topOffer.priority ?? 999;
-                if ((pA || 999) !== (pB || 999)) return (pA || 999) - (pB || 999);
-                return a.topOffer.valorTroco - b.topOffer.valorTroco;
-            });
-
-            const topOffer = groupedBanks.length > 0 ? groupedBanks[0].topOffer : null;
-            const otherBanks = groupedBanks.map(g => g.bankName);
-
-            // Salvar simulação
-            try {
-                const simId = crypto.randomUUID();
-                await adminDb.collection('simulations').doc(simId).set({
-                    userId: userProfileForSimulation.uid || 'bot',
-                    userName: userProfileForSimulation.name || 'WhatsApp',
-                    userAvatar: userProfileForSimulation.logoUrl || userProfileForSimulation.avatarUrl || '',
-                    convenio: params.convenio,
-                    bancoAtual: params.bancoAtual,
-                    valorParcela: params.valorParcela,
-                    saldoDevedor: params.saldoDevedor,
-                    selectedOffer: topOffer,
-                    topOffer: topOffer?.name || '',
-                    topOfferContrato: topOffer?.valorContrato || 0,
-                    topOfferTroco: topOffer?.valorTroco || 0,
-                    topOfferTaxa: topOffer?.novaTaxaPortabilidade || 0,
-                    topOfferTabela: topOffer?.tabela || '',
-                    createdAt: new Date(),
-                    timestamp: Date.now(),
-                    origin: 'whatsapp'
-                });
-            } catch (e) { console.error("Sim save error:", e); }
-
-            // RETORNA RESULTADO FORMATADO DIRETAMENTE - sem segunda chamada à IA
-            return formatSimulationResult(topOffer, otherBanks, groupedBanks, params);
+            return await doCalculation(params, userProfile);
         }
 
-        // Se não houve function call, retorna o texto da IA
-        const textPart = parts.find((p: any) => p.text);
-        const aiText = textPart?.text || (result as any).text;
-        
-        if (aiText) return aiText;
-        
-        return "Como posso ajudar na sua simulação?";
+        const text = parts.find((p: any) => p.text)?.text || (result as any).text;
+        return text || "Qual informação deseja fornecer?";
 
     } catch (error: any) {
         console.error("Agent Error:", error);
-        return `⚠️ Erro técnico: ${error.message || 'desconhecido'}. Tente novamente em instantes.`;
+        // Se deu erro mas temos dados suficientes, tenta calcular mesmo assim
+        if (hasAllRequired(extracted)) {
+            return await doCalculation(extracted as SimulationParams, userProfile);
+        }
+        return `⚠️ Erro: ${error.message || 'desconhecido'}`;
     }
 }
