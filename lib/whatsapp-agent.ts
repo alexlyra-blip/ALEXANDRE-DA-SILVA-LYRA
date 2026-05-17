@@ -264,6 +264,21 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
 
     const lower = message.toLowerCase().trim();
 
+    // Verificar agradecimentos / encerramento se a última mensagem do bot foi uma simulação
+    const thanksKeywords = ['obrigado', 'obrigada', 'valeu', 'agradeço', 'grato', 'grata', 'tchau', 'obg', 'perfeito', 'show', 'blz', 'beleza', 'excelente', 'resolvido', 'ajudou', 'satisfeito'];
+    const lastBotMsgContent = history.length > 0 ? history[history.length - 1].content || '' : '';
+    const wasLastMsgSimulation = lastBotMsgContent.includes('Simulação concluída') || 
+                                 lastBotMsgContent.includes('DETALHES DA OPERAÇÃO') || 
+                                 lastBotMsgContent.includes('VALOR DO TROCO LIBERADO');
+    
+    const isThanks = thanksKeywords.some(kw => lower.includes(kw));
+    
+    if (isThanks && wasLastMsgSimulation) {
+        sessionData.extractedParams = {}; // Limpa parâmetros
+        sessionData.lastExtractedParams = null; // Limpa histórico
+        return `Por nada! 😊 Fico extremamente feliz em ajudar na sua busca pelas melhores taxas.\n\nEstou à sua total disposição sempre que precisar de uma nova simulação ou tirar dúvidas sobre portabilidade. Tenha um excelente dia e ótimos negócios! 🚀💼`;
+    }
+
     // Consulta de regras por banco
     const rulesMatch = lower.match(/regras?\s+(?:do\s+)?(.+)/i);
     if (rulesMatch) return getRuleSummary(rulesMatch[1].trim());
