@@ -93,59 +93,51 @@ function parsePortugueseNumber(valStr: string): number | null {
 }
 
 // Extrai dados coletados do histórico da conversa
-function extractDataFromHistory(history: any[], currentMsg: string): Partial<SimulationParams> {
-    const data: any = {};
-    const allMessages = [...history, { role: 'user', content: currentMsg }];
+function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: string) {
+    const txt = userMsg.toLowerCase().trim();
+    const prev = lastQuestion.toLowerCase();
     
-    for (let i = 0; i < allMessages.length; i++) {
-        const msg = allMessages[i];
-        if (msg.role !== 'user') continue;
-        const txt = (msg.content || '').toLowerCase();
-        const prev = i > 0 ? (allMessages[i - 1].content || '').toLowerCase() : '';
-        
-        // Convênio
-        if (prev.includes('convênio') || prev.includes('convenio') || i <= 2) {
-            if (/\binss\b/.test(txt)) data.convenio = 'INSS';
-            else if (/\bsiape\b/.test(txt)) data.convenio = 'SIAPE';
-            else if (/\bgoverno\b/.test(txt)) data.convenio = 'GOVERNO';
-            else if (/for[çc]as?\s*armadas?/.test(txt)) data.convenio = 'FORÇAS ARMADAS';
-            else if (/\bclt\b/.test(txt)) data.convenio = 'CLT PRIVADO';
-        }
-        // Idade
-        if (prev.includes('idade') || prev.includes('anos')) {
-            const m = txt.match(/(\d{2})/);
-            if (m && parseInt(m[1]) >= 18 && parseInt(m[1]) <= 100) data.idade = parseInt(m[1]);
-        }
-        // Banco atual
-        if (prev.includes('banco') && (prev.includes('atual') || prev.includes('contrato'))) {
-            data.bancoAtual = msg.content.trim();
-        }
-        // Prazo total
-        if (prev.includes('prazo total') || prev.includes('prazo do contrato') || (prev.includes('quantas') && prev.includes('total'))) {
-            const m = txt.match(/(\d+)/);
-            if (m) data.prazoTotal = parseInt(m[1]);
-        }
-        // Prazo restante
-        if (prev.includes('restante') || prev.includes('faltam') || prev.includes('restantes') || (prev.includes('quantas') && prev.includes('resta'))) {
-            const m = txt.match(/(\d+)/);
-            if (m) data.parcelasRestantes = parseInt(m[1]);
-        }
-        // Valor da parcela
-        if (prev.includes('parcela') && (prev.includes('valor') || prev.includes('quanto') || prev.includes('mensal'))) {
-            const num = parsePortugueseNumber(msg.content);
-            if (num !== null) data.valorParcela = num;
-        }
-        // Saldo devedor
-        if (prev.includes('saldo') || txt.includes('saldo')) {
-            const num = parsePortugueseNumber(msg.content);
-            if (num !== null) data.saldoDevedor = num;
-        }
-        // Analfabeto
-        if (prev.includes('analfabeto')) {
-            data.isAnalfabeto = /sim/.test(txt);
-        }
+    // Convênio
+    if (prev === '' || prev.includes('convênio') || prev.includes('convenio')) {
+        if (/\binss\b/.test(txt)) params.convenio = 'INSS';
+        else if (/\bsiape\b/.test(txt)) params.convenio = 'SIAPE';
+        else if (/\bgoverno\b/.test(txt)) params.convenio = 'GOVERNO';
+        else if (/for[çc]as?\s*armadas?/.test(txt)) params.convenio = 'FORÇAS ARMADAS';
+        else if (/\bclt\b/.test(txt)) params.convenio = 'CLT PRIVADO';
     }
-    return data;
+    // Idade
+    if (prev.includes('idade') || prev.includes('anos')) {
+        const m = txt.match(/(\d{2})/);
+        if (m && parseInt(m[1]) >= 18 && parseInt(m[1]) <= 100) params.idade = parseInt(m[1]);
+    }
+    // Banco atual
+    if (prev.includes('banco') && (prev.includes('atual') || prev.includes('contrato'))) {
+        params.bancoAtual = userMsg.trim();
+    }
+    // Prazo total
+    if (prev.includes('prazo total') || prev.includes('prazo do contrato') || (prev.includes('quantas') && prev.includes('total'))) {
+        const m = txt.match(/(\d+)/);
+        if (m) params.prazoTotal = parseInt(m[1]);
+    }
+    // Prazo restante
+    if (prev.includes('restante') || prev.includes('faltam') || prev.includes('restantes') || (prev.includes('quantas') && prev.includes('resta'))) {
+        const m = txt.match(/(\d+)/);
+        if (m) params.parcelasRestantes = parseInt(m[1]);
+    }
+    // Valor da parcela
+    if (prev.includes('parcela') && (prev.includes('valor') || prev.includes('quanto') || prev.includes('mensal'))) {
+        const num = parsePortugueseNumber(userMsg);
+        if (num !== null) params.valorParcela = num;
+    }
+    // Saldo devedor
+    if (prev.includes('saldo') || txt.includes('saldo')) {
+        const num = parsePortugueseNumber(userMsg);
+        if (num !== null) params.saldoDevedor = num;
+    }
+    // Analfabeto
+    if (prev.includes('analfabeto')) {
+        params.isAnalfabeto = /sim/.test(txt);
+    }
 }
 
 function hasAllRequired(d: any): boolean {
@@ -238,7 +230,7 @@ async function doCalculation(params: SimulationParams, userProfile: any): Promis
     return formatResult(top, bankNames, sorted, params);
 }
 
-export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '') {
+export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}) {
     const ai = getAI();
     await loadRules();
 
@@ -254,7 +246,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     if (/\b(bancos|lista)\b/.test(lower) && !history.some(h => h.content?.includes('Troco Estimado')))
         return `🏦 *Bancos:* ${cachedBankRules.map(b => b.name).join(', ')}\n\nDigite: *Regras do [banco]*`;
 
-    // Validar telefone
+    // Validar telefone e carregar estado da sessão
     let userProfile = { role: 'admin' } as any;
     if (currentPhone) {
         const clean = currentPhone.replace(/\D/g, '');
@@ -268,13 +260,32 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         }
     }
 
-    // EXTRAIR DADOS DO HISTÓRICO E CALCULAR SE TIVER TUDO OBRIGATÓRIO
-    const extracted = extractDataFromHistory(history, message);
+    // Carrega extractedParams diretamente de sessionData (passado por referência do route.ts)
+    let extracted = sessionData.extractedParams || {};
+
+    // Resetar parâmetros se palavras-chave de reinício forem encontradas
+    const restartKeywords = ['simular', 'nova simulação', 'começar', 'reiniciar', 'iniciar', 'resetar', 'oi', 'olá', 'ola'];
+    const isRestart = restartKeywords.includes(lower) && history.length > 0 && history[history.length - 1].content?.includes('Simulação concluída');
+    
+    if (isRestart || lower === 'simular' || lower === 'reiniciar') {
+        extracted = {};
+        console.log(`[Gutto] Resetting session parameters.`);
+    } else {
+        const lastBotMessage = history.length > 0 ? history[history.length - 1].content || '' : '';
+        updateParamsFromMessage(extracted, lastBotMessage, message);
+    }
+
+    // Salva de volta no objeto sessionData por referência
+    sessionData.extractedParams = extracted;
+
     console.log(`[Gutto] Extracted fields:`, JSON.stringify(extracted));
 
+    // Se temos tudo necessário, calcula imediatamente e limpa o estado para uma próxima simulação
     if (hasAllRequired(extracted)) {
         console.log(`[Gutto] All required data present! Performing simulation...`);
-        return await doCalculation(extracted as SimulationParams, userProfile);
+        const res = await doCalculation(extracted as SimulationParams, userProfile);
+        sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
+        return res;
     }
 
     // Construir sumário dos dados já coletados para orientar a IA de forma precisa
@@ -291,12 +302,12 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
 
 REGRA CRÍTICA ABSOLUTA: Faça APENAS UMA pergunta por vez. Nunca pergunte dois ou mais dados na mesma mensagem.
 
-DADOS JÁ COLETADOS ATÉ AGORA:
+DADOS JÁ COLETADOS ATÉ AGORA (Nunca pergunte estes novamente!):
 ${dataSummary || 'Nenhum dado coletado ainda.'}
 
-VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA SEGUINDO A ORDEM EXATA ABAIXO:
+VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EXATA ABAIXO:
 1. Convênio (INSS, SIAPE, Governo, Forças Armadas ou CLT Privado)
-   - IMPORTANTE: Na primeira pergunta, você DEVE listar explicitamente estas 5 opções exatas de convênio para o cliente escolher.
+   - IMPORTANTE: Se o convênio não constar na lista de dados coletados, você DEVE pedir o convênio e listar estas 5 opções exatas de convênio para o cliente escolher.
 2. Idade
 3. Se Idade for maior ou igual a 60 anos: Pergunta em qual estado o cliente reside (AP, PB, TO ou RR)? Se idade < 60, PULE esta pergunta.
 4. Código do Benefício (se convênio for INSS) OU Sub-convênio/órgão (se convênio for SIAPE, Governo ou Forças Armadas). Se convênio for CLT Privado, PULE esta pergunta.
@@ -334,6 +345,7 @@ Quando tiver TODOS os dados obrigatórios listados, chame calculate_client_loan_
             const params = fc.functionCall.args as unknown as SimulationParams;
             if (params.convenio === 'INSS' && (params as any).hasTwoCards)
                 params.valorParcela = Math.max(0, (params.valorParcela || 0) - ((params as any).negativeCardValue || 81.05));
+            sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
             return await doCalculation(params, userProfile);
         }
 
@@ -343,7 +355,9 @@ Quando tiver TODOS os dados obrigatórios listados, chame calculate_client_loan_
     } catch (error: any) {
         console.error("Agent Error:", error);
         if (hasAllRequired(extracted)) {
-            return await doCalculation(extracted as SimulationParams, userProfile);
+            const res = await doCalculation(extracted as SimulationParams, userProfile);
+            sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
+            return res;
         }
         return `⚠️ Ops! Tivemos uma pequena falha de conexão: ${error.message || 'Erro interno'}. Por favor, digite o dado novamente.`;
     }

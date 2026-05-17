@@ -100,9 +100,8 @@ export async function POST(req: Request) {
     if (!sessionData?.history) sessionData = { ...sessionData, history: [] };
 
     // New AI Agent Logic
-    console.log(`[${timestamp}] Calling AI Agent... env.GEMINI_API_KEY length: ${process.env.GEMINI_API_KEY?.length || 0}`);
     const { processWhatsAppMessage } = await import('@/lib/whatsapp-agent');
-    const reply = await processWhatsAppMessage(bodyText, sessionData.history || [], from);
+    const reply = await processWhatsAppMessage(bodyText, sessionData.history || [], from, sessionData);
     console.log(`[${timestamp}] AI Reply: ${reply.substring(0, 100)}...`);
 
     // Update history
