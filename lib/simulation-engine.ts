@@ -246,6 +246,9 @@ export function calculateOffers(
     // Non-accepted banks (Origins)
     if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) return;
 
+    // Prevent same-bank portability
+    if (checkBankMatch(bank.name, bancoAtual)) return;
+
     // Installments Rule
     let requiredInstallments = 0;
     const effectiveParcelasPagas = parcelasPagas !== undefined ? parcelasPagas : (parseInt(String(prazoTotal || 0)) - parseInt(String(parcelasRestantes || 0)));

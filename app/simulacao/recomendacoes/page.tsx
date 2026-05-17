@@ -508,6 +508,12 @@ export default function Recomendacoes() {
           return;
         }
 
+        // Não aceita portabilidade para si mesmo (mesmo banco atual do contrato)
+        if (checkBankMatch(bank.name, bancoAtual)) {
+          log(`Portabilidade interna não permitida: o contrato já está no banco ${bancoAtual}`);
+          return;
+        }
+
         let requiredInstallments = 0;
         const effectiveParcelasPagas = parcelasPagas !== undefined ? parcelasPagas : (parseInt(prazoTotal || 0) - parseInt(parcelasRestantes || 0));
         const specificRule = bank.specificInstallmentRules?.find((r: any) => checkBankMatch(r.bank, bancoAtual));

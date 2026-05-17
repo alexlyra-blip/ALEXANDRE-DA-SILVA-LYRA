@@ -260,6 +260,12 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
         return;
     }
 
+    // Não aceita portabilidade para si mesmo (mesmo banco atual do contrato)
+    if (checkBankMatch(bank.name, bancoAtual)) {
+        console.log(`[DEBUG] Filtrando banco ${bank.name}: Portabilidade interna não permitida`);
+        return;
+    }
+
     // Parcelas pagas
     let requiredInstallments = 0;
     const specificRule = bank.specificInstallmentRules?.find((r: any) => checkBankMatch(r.bank, bancoAtual));
