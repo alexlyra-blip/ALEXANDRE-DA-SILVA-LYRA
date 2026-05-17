@@ -40,10 +40,10 @@ export interface Offer {
 
 export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
   // Fetch banks and general rules from Firestore
-  const banksSnapshot = await getDocs(collection(db, 'banks'));
+  const banksSnapshot = await getDocs(collection(db, 'bankRules'));
   const banks = banksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
 
-  const generalRulesSnapshot = await getDocs(collection(db, 'general_rules'));
+  const generalRulesSnapshot = await getDocs(collection(db, 'generalRules'));
   const generalRules = generalRulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
 
   const calculatedOffers: Offer[] = [];
