@@ -53,6 +53,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ reply });
   } catch (error: any) {
     console.error('Chat API Error:', error);
+    try {
+      const fs = await import('fs');
+      fs.writeFileSync('c:\\Users\\alexa\\SIMULADOR\\chat_error.txt', `[${new Date().toISOString()}] ${error.message}\n${error.stack}`);
+    } catch (e) {}
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

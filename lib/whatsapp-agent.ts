@@ -77,7 +77,7 @@ function parsePortugueseNumber(valStr: string): number | null {
     const match = valStr.match(/[\d.,]+/);
     if (!match) return null;
     let clean = match[0];
-    
+
     if (clean.includes('.') && clean.includes(',')) {
         if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) {
             clean = clean.replace(/\./g, '').replace(',', '.');
@@ -87,7 +87,7 @@ function parsePortugueseNumber(valStr: string): number | null {
     } else if (clean.includes(',')) {
         clean = clean.replace(',', '.');
     }
-    
+
     const parsed = parseFloat(clean);
     return isNaN(parsed) ? null : parsed;
 }
@@ -96,7 +96,7 @@ function parsePortugueseNumber(valStr: string): number | null {
 function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: string) {
     const txt = userMsg.toLowerCase().trim();
     const prev = lastQuestion.toLowerCase();
-    
+
     // Convênio
     if (prev === '' || prev.includes('convênio') || prev.includes('convenio')) {
         if (/\binss\b/.test(txt)) params.convenio = 'INSS';
@@ -175,18 +175,18 @@ function fmt(v: number) { return v?.toLocaleString('pt-BR', { minimumFractionDig
 function formatResult(top: any, banks: string[], grouped: any[], p: SimulationParams): string {
     if (!top) return "❌ Não encontramos ofertas viáveis para o seu perfil no momento com as regras atuais dos bancos.";
     const tables = grouped.find(g => g.bankName === top.name)?.offers?.length || 1;
-    
+
     let m = `✅ *Simulação concluída com sucesso!*\n\n`;
     m += `⭐ *MELHOR OFERTA ENCONTRADA: ${top.name.toUpperCase()}*\n`;
     m += `📊 *${tables} tabela(s) disponível(is)*\n\n`;
-    
+
     m += `📋 *DETALHES DA OPERAÇÃO (CONTRATO):*\n`;
     if (top.tabela) m += `• *Tabela:* ${top.tabela}\n`;
     m += `• *Valor da Parcela:* R$ ${fmt(p.valorParcela || 0)}\n`;
     m += `• *Prazo:* ${top.prazoRefinPort || p.parcelasRestantes || 96} meses\n`;
     m += `• *Novo Contrato:* R$ ${fmt(top.valorContrato)}\n`;
     m += `• *Saldo Devedor:* R$ ${fmt(top.saldoDevedor || p.saldoDevedor || 0)}\n`;
-    
+
     if (top.taxaBase !== undefined) {
         m += `• *Taxa do Refin:* ${top.taxaBase.toFixed(2)}% a.m.\n`;
     }
@@ -196,14 +196,14 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
     if (top.taxaPonderada !== undefined && top.useTaxaPonderada) {
         m += `• *Taxa Ponderada:* ${top.taxaPonderada.toFixed(2)}% a.m.\n`;
     }
-    
+
     m += `\n💰 *VALOR DO TROCO LIBERADO:* R$ ${fmt(top.valorTroco)}\n\n`;
-    
+
     const others = banks.filter(b => b !== top.name);
     if (others.length > 0) {
         m += `🏦 *BANCOS ELEGÍVEIS COM OFERTA:* ${others.join(', ')}\n`;
     }
-    
+
     m += `\n_Caso queira ver a oferta de outro banco listado, digite o nome dele (Ex: "Itau", "Pan")._`;
     return m;
 }
@@ -215,7 +215,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
             params.taxaJurosMensal = calcRate(params.saldoDevedor!, params.valorParcela!, n);
         }
     }
-    
+
     // Set parcelas pagas for simulation engine
     if (params.prazoTotal && params.parcelasRestantes && !params.parcelasPagas) {
         params.parcelasPagas = params.prazoTotal - params.parcelasRestantes;
@@ -231,40 +231,40 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
     const sd = sSnap.exists ? sSnap.data() : {};
     const pp = sd?.bankPriorities || {};
     const pi = sd?.bankInstallments || {};
-    
+
     const offers = calculateOffers(params, banks, rules, pp, pi, userProfile);
     console.log(`[Gutto] Total Offers: ${offers.length}`);
-    
+
     if (offers.length === 0) {
         return "❌ Infelizmente, analisando as regras dos bancos, não encontramos nenhuma oferta vantajosa ou compatível com esses dados no momento.";
     }
 
     const groups = offers.reduce((a, o) => { if (!a[o.name]) a[o.name] = { bankName: o.name, offers: [] }; a[o.name].offers.push(o); return a; }, {} as Record<string, any>);
-    
-    // Ordenar ofertas de cada banco pelo MENOR troco (a.valorTroco - b.valorTroco)
-    const sorted = Object.values(groups).map((g: any) => { 
-        const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco); 
-        return { ...g, offers: s, topOffer: s[0] }; 
-    })
-    // Ordenar bancos pela prioridade e depois pelo MENOR troco
-    .sort((a: any, b: any) => { 
-        const bankIdA = a.topOffer.id?.split('-')[0];
-        const bankIdB = b.topOffer.id?.split('-')[0];
-        const pA = pp[bankIdA] ?? a.topOffer.priority ?? 999; 
-        const pB = pp[bankIdB] ?? b.topOffer.priority ?? 999; 
-        const finalPA = pA === 0 ? 999 : pA;
-        const finalPB = pB === 0 ? 999 : pB;
-        if (finalPA !== finalPB) return finalPA - finalPB; 
-        return a.topOffer.valorTroco - b.topOffer.valorTroco; 
-    });
 
-    const matchedBank = targetBankName 
+    // Ordenar ofertas de cada banco pelo MENOR troco (a.valorTroco - b.valorTroco)
+    const sorted = Object.values(groups).map((g: any) => {
+        const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
+        return { ...g, offers: s, topOffer: s[0] };
+    })
+        // Ordenar bancos pela prioridade e depois pelo MENOR troco
+        .sort((a: any, b: any) => {
+            const bankIdA = a.topOffer.id?.split('-')[0];
+            const bankIdB = b.topOffer.id?.split('-')[0];
+            const pA = pp[bankIdA] ?? a.topOffer.priority ?? 999;
+            const pB = pp[bankIdB] ?? b.topOffer.priority ?? 999;
+            const finalPA = pA === 0 ? 999 : pA;
+            const finalPB = pB === 0 ? 999 : pB;
+            if (finalPA !== finalPB) return finalPA - finalPB;
+            return a.topOffer.valorTroco - b.topOffer.valorTroco;
+        });
+
+    const matchedBank = targetBankName
         ? sorted.find((g: any) => g.bankName.toLowerCase().includes(targetBankName.toLowerCase()) || targetBankName.toLowerCase().includes(g.bankName.toLowerCase()))
         : null;
 
     const top = matchedBank ? matchedBank.topOffer : (sorted.length > 0 ? sorted[0].topOffer : null);
     const bankNames = sorted.map((g: any) => g.bankName);
-    
+
     try {
         await db.collection('simulations').doc(crypto.randomUUID()).set({
             userId: userProfile.uid || 'bot', userName: userProfile.name || 'WhatsApp',
@@ -276,7 +276,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
             createdAt: new Date(), timestamp: Date.now(), origin: 'whatsapp'
         });
     } catch (e) { console.error("Error saving simulation:", e); }
-    
+
     return formatResult(top, bankNames, sorted, params);
 }
 
@@ -293,12 +293,12 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     // Verificar agradecimentos / encerramento se a última mensagem do bot foi uma simulação
     const thanksKeywords = ['obrigado', 'obrigada', 'valeu', 'agradeço', 'grato', 'grata', 'tchau', 'obg', 'perfeito', 'show', 'blz', 'beleza', 'excelente', 'resolvido', 'ajudou', 'satisfeito'];
     const lastBotMsgContent = history.length > 0 ? history[history.length - 1].content || '' : '';
-    const wasLastMsgSimulation = lastBotMsgContent.includes('Simulação concluída') || 
-                                 lastBotMsgContent.includes('DETALHES DA OPERAÇÃO') || 
-                                 lastBotMsgContent.includes('VALOR DO TROCO LIBERADO');
-    
+    const wasLastMsgSimulation = lastBotMsgContent.includes('Simulação concluída') ||
+        lastBotMsgContent.includes('DETALHES DA OPERAÇÃO') ||
+        lastBotMsgContent.includes('VALOR DO TROCO LIBERADO');
+
     const isThanks = thanksKeywords.some(kw => lower.includes(kw));
-    
+
     if (isThanks && wasLastMsgSimulation) {
         sessionData.extractedParams = {}; // Limpa parâmetros
         sessionData.lastExtractedParams = null; // Limpa histórico
@@ -332,7 +332,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     // Resetar parâmetros se palavras-chave de reinício forem encontradas
     const restartKeywords = ['simular', 'nova simulação', 'começar', 'reiniciar', 'iniciar', 'resetar', 'oi', 'olá', 'ola'];
     const isRestart = restartKeywords.includes(lower) && history.length > 0 && history[history.length - 1].content?.includes('Simulação concluída');
-    
+
     if (isRestart || lower === 'simular' || lower === 'reiniciar') {
         extracted = {};
         sessionData.extractedParams = {};
@@ -341,7 +341,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     } else {
         // Se temos lastExtracted e o usuário digitou o nome de um banco
         const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
-        const matchedCachedBank = lastExtracted && cachedBankRules.find(b => 
+        const matchedCachedBank = lastExtracted && cachedBankRules.find(b =>
             b.name.toLowerCase().includes(cleanMsg) || cleanMsg.includes(b.name.toLowerCase())
         );
         if (matchedCachedBank && lastExtracted) {

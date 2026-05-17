@@ -174,6 +174,24 @@ export default function RegrasBanco() {
     }
   };
 
+  const changeConvenio = (newConvenio: 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO') => {
+    const oldDefault = convenio === 'SIAPE' ? '1.70' : (convenio === 'INSS' ? '1.85' : '2.05');
+    const newDefault = newConvenio === 'SIAPE' ? '1.70' : (newConvenio === 'INSS' ? '1.85' : '2.05');
+    
+    setConvenio(newConvenio);
+    
+    if (taxaContratoAtualPreview === oldDefault || taxaContratoAtualPreview === '1.85' || !taxaContratoAtualPreview) {
+      setTaxaContratoAtualPreview(newDefault);
+    }
+    if (novaTaxaReferencia === oldDefault || novaTaxaReferencia === '1.85' || !novaTaxaReferencia) {
+      setNovaTaxaReferencia(newDefault);
+    }
+    
+    if (newConvenio !== 'GOVERNO' && newConvenio !== 'FORÇAS ARMADAS') {
+      setSubConvenio('');
+    }
+  };
+
   const handleTabelaChange = (index: number, field: string, value: any) => {
     const newTabelas = [...tabelas];
     (newTabelas[index] as any)[field] = value;
@@ -454,9 +472,10 @@ export default function RegrasBanco() {
     setConvenio(bank.convenio || 'INSS');
     setSubConvenio(bank.subConvenio || '');
     setIsActive(bank.isActive !== false);
-    setTaxaContratoAtualPreview(bank.taxaPortabilidadeOrigem?.toString() || '1.85');
+    const defaultRate = bank.convenio === 'SIAPE' ? '1.70' : (bank.convenio === 'INSS' ? '1.85' : '2.05');
+    setTaxaContratoAtualPreview(bank.taxaPortabilidadeOrigem?.toString() || defaultRate);
     setAjusteTaxa(bank.ajusteTaxa?.toString() || '0');
-    setNovaTaxaReferencia(bank.novaTaxaReferencia?.toString() || '1.85');
+    setNovaTaxaReferencia(bank.novaTaxaReferencia?.toString() || defaultRate);
     setTabelas(bank.tabelas?.length > 0 ? bank.tabelas.map(t => ({ 
       nome: t.nome || '', 
       coeficiente: t.coeficiente?.toString() || '',
@@ -968,7 +987,7 @@ export default function RegrasBanco() {
                     <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex flex-wrap gap-1">
                       <button
                         type="button"
-                        onClick={() => setConvenio('INSS')}
+                        onClick={() => changeConvenio('INSS')}
                         className={`flex-1 min-w-[80px] py-1 rounded-md font-bold text-[9px] transition-all ${
                           convenio === 'INSS'
                             ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
@@ -979,7 +998,7 @@ export default function RegrasBanco() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setConvenio('SIAPE')}
+                        onClick={() => changeConvenio('SIAPE')}
                         className={`flex-1 min-w-[80px] py-1 rounded-md font-bold text-[9px] transition-all ${
                           convenio === 'SIAPE'
                             ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
@@ -990,7 +1009,7 @@ export default function RegrasBanco() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setConvenio('GOVERNO')}
+                        onClick={() => changeConvenio('GOVERNO')}
                         className={`flex-1 min-w-[80px] py-1 rounded-md font-bold text-[9px] transition-all ${
                           convenio === 'GOVERNO'
                             ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
@@ -1001,7 +1020,7 @@ export default function RegrasBanco() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setConvenio('FORÇAS ARMADAS')}
+                        onClick={() => changeConvenio('FORÇAS ARMADAS')}
                         className={`flex-1 min-w-[80px] py-1 rounded-md font-bold text-[9px] transition-all ${
                           convenio === 'FORÇAS ARMADAS'
                             ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
@@ -1012,7 +1031,7 @@ export default function RegrasBanco() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setConvenio('CLT PRIVADO')}
+                        onClick={() => changeConvenio('CLT PRIVADO')}
                         className={`flex-1 min-w-[80px] py-1 rounded-md font-bold text-[9px] transition-all ${
                           convenio === 'CLT PRIVADO'
                             ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'

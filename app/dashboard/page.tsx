@@ -519,7 +519,7 @@ export default function Dashboard() {
         ['Tabela', sim.topOfferTabela || 'Não informado'],
         ['Valor do Contrato', formatCurrency(sim.topOfferContrato || 0)],
         ['Valor do Troco', formatCurrency(sim.topOfferTroco || 0)],
-        ['Nova Taxa Port.', `${(sim.topOfferTaxa !== undefined && sim.topOfferTaxa > 1.85 ? 1.85 : (sim.topOfferTaxa || 0)).toFixed(2)}%`],
+        ['Nova Taxa Port.', `${(sim.topOfferTaxa || 0).toFixed(2)}%`],
       ];
 
       autoTable(doc, {

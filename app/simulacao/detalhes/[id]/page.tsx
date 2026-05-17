@@ -37,8 +37,39 @@ export default function SimulacaoDetalhes() {
     const bankId = idParam.substring(0, lastDashIndex);
     const tabelaNome = idParam.substring(lastDashIndex + 1);
 
-    const bank = banks.find(b => b.id === bankId);
-    if (!bank) return;
+    const rawBank = banks.find(b => b.id === bankId);
+    if (!rawBank) return;
+
+    const bank = {
+      ...rawBank,
+      minAge: rawBank.minAge !== undefined ? rawBank.minAge : (rawBank.min_age !== undefined ? rawBank.min_age : 0),
+      maxAge: rawBank.maxAge !== undefined ? rawBank.maxAge : (rawBank.max_age !== undefined ? rawBank.max_age : 0),
+      minInstallmentValue: rawBank.minInstallmentValue !== undefined ? rawBank.minInstallmentValue : (rawBank.min_installment_value !== undefined ? rawBank.min_installment_value : 0),
+      minBalance: rawBank.minBalance !== undefined ? rawBank.minBalance : (rawBank.min_balance !== undefined ? rawBank.min_balance : 0),
+      minTroco: rawBank.minTroco !== undefined ? rawBank.minTroco : (rawBank.min_troco !== undefined ? rawBank.min_troco : 0),
+      portabilityRate: rawBank.portabilityRate !== undefined ? rawBank.portabilityRate : (rawBank.portability_rate !== undefined ? rawBank.portability_rate : 0),
+      refinRate: rawBank.refinRate !== undefined ? rawBank.refinRate : (rawBank.refin_rate !== undefined ? rawBank.refin_rate : 0),
+      sumBalanceAndTroco: rawBank.sumBalanceAndTroco !== undefined ? rawBank.sumBalanceAndTroco : (rawBank.sum_balance_and_troco !== undefined ? rawBank.sum_balance_and_troco : (rawBank.sumSaldoTroco !== undefined ? rawBank.sumSaldoTroco : rawBank.sum_saldo_troco)),
+      acceptsIlliterate: rawBank.acceptsIlliterate !== undefined ? rawBank.acceptsIlliterate : (rawBank.accepts_illiterate !== undefined ? rawBank.accepts_illiterate : false),
+      acceptsLOAS: rawBank.acceptsLOAS !== undefined ? rawBank.acceptsLOAS : (rawBank.accepts_loas !== undefined ? rawBank.accepts_loas : false),
+      accepts60Mais: rawBank.accepts60Mais !== undefined ? rawBank.accepts60Mais : (rawBank.accepts_60_mais !== undefined ? rawBank.accepts_60_mais : false),
+      acceptsInvalidez: rawBank.acceptsInvalidez !== undefined ? rawBank.acceptsInvalidez : (rawBank.accepts_invalidez !== undefined ? rawBank.accepts_invalidez : true),
+      invalidezAgeYears: rawBank.invalidezAgeYears !== undefined ? rawBank.invalidezAgeYears : (rawBank.invalidez_age_years !== undefined ? rawBank.invalidez_age_years : 0),
+      acceptsOver60Invalidez: rawBank.acceptsOver60Invalidez !== undefined ? rawBank.acceptsOver60Invalidez : (rawBank.accepts_over_60_invalidez !== undefined ? rawBank.accepts_over_60_invalidez : false),
+      minBenefitTimeYears: rawBank.minBenefitTimeYears !== undefined ? rawBank.minBenefitTimeYears : (rawBank.min_benefit_time_years !== undefined ? rawBank.min_benefit_time_years : 0),
+      minBenefitTimeMonths: rawBank.minBenefitTimeMonths !== undefined ? rawBank.minBenefitTimeMonths : (rawBank.min_benefit_time_months !== undefined ? rawBank.min_benefit_time_months : 0),
+      taxaPortabilidadeOrigem: rawBank.taxaPortabilidadeOrigem !== undefined ? rawBank.taxaPortabilidadeOrigem : (rawBank.taxa_portabilidade_origem !== undefined ? rawBank.taxa_portabilidade_origem : 0),
+      ajusteTaxa: rawBank.ajusteTaxa !== undefined ? rawBank.ajusteTaxa : (rawBank.ajuste_taxa !== undefined ? rawBank.ajuste_taxa : 0),
+      novaTaxaReferencia: rawBank.novaTaxaReferencia !== undefined ? rawBank.novaTaxaReferencia : (rawBank.nova_taxa_referencia !== undefined ? rawBank.nova_taxa_referencia : 0),
+      minPaidInstallments: rawBank.minPaidInstallments !== undefined ? rawBank.minPaidInstallments : (rawBank.min_paid_installments !== undefined ? rawBank.min_paid_installments : 0),
+      isActive: rawBank.isActive !== undefined ? rawBank.isActive : (rawBank.is_active !== undefined ? rawBank.is_active : true),
+      subConvenio: rawBank.subConvenio !== undefined ? rawBank.subConvenio : (rawBank.sub_convenio !== undefined ? rawBank.sub_convenio : ''),
+      requireTrocoMaiorQue5PorcentoEndividamento: rawBank.requireTrocoMaiorQue5PorcentoEndividamento !== undefined ? rawBank.requireTrocoMaiorQue5PorcentoEndividamento : (rawBank.require_troco_maior_que_5_porcento_endividamento !== undefined ? rawBank.require_troco_maior_que_5_porcento_endividamento : false),
+      excludedBenefits: rawBank.excludedBenefits !== undefined ? rawBank.excludedBenefits : (rawBank.excluded_benefits !== undefined ? rawBank.excluded_benefits : []),
+      nonAcceptedBanks: rawBank.nonAcceptedBanks !== undefined ? rawBank.nonAcceptedBanks : (rawBank.non_accepted_banks !== undefined ? rawBank.non_accepted_banks : []),
+      specificInstallmentRules: rawBank.specificInstallmentRules !== undefined ? rawBank.specificInstallmentRules : (rawBank.specific_installment_rules !== undefined ? rawBank.specific_installment_rules : []),
+      logoUrl: rawBank.logoUrl !== undefined ? rawBank.logoUrl : (rawBank.logo_url !== undefined ? rawBank.logo_url : ''),
+    };
 
     const bankConvenio = bank.convenio || 'INSS';
     const simConvenio = parsedData.convenio || 'INSS';
@@ -67,16 +98,21 @@ export default function SimulacaoDetalhes() {
 
         // Weighted Rate Validation (Taxa Ponderada)
         const originalRate = parsedData.taxaJurosMensal ? parsedData.taxaJurosMensal * 100 : 0;
-        const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || 1.85);
+        const bankConvenio = (bank.convenio || 'INSS').trim().toUpperCase();
+        const defaultRate = bankConvenio === 'SIAPE' ? 1.70 : (bankConvenio === 'INSS' ? 1.85 : 2.05);
+        const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || defaultRate);
         const taxaTabelaValida = (t.taxaTabela !== undefined && t.taxaTabela !== null && t.taxaTabela > 0) ? t.taxaTabela : (bank.refinRate || 0);
-        const taxaDiferencial = (t.taxaDiferencial !== undefined && t.taxaDiferencial !== null && t.taxaDiferencial > 0) ? t.taxaDiferencial : taxaTabelaValida;
+        const taxaDiferencial = (t.taxaDiferencial !== undefined && t.taxaDiferencial !== null && t.taxaDiferencial > 0) ? t.taxaDiferencial : 0;
+        const bankNovaTaxaRef = bank.novaTaxaReferencia || 0;
         
         const bankAdjustment = bank.ajusteTaxa || 0;
-        const novaTaxaPortabilidade = convenioRate + bankAdjustment;
+        
+        const targetCandidates = [taxaDiferencial, bankNovaTaxaRef].filter(v => v > 0);
+        const novaTaxaPortabilidade = targetCandidates.length > 0 ? Math.min(...targetCandidates) : convenioRate + bankAdjustment;
 
         // Correct Calculation: Average of (ConvenioRate + BankAdjustment) and (TaxaDiferencial), then add Adjustment
         // Wait, the requirement was (Original + NovaTaxaPort) / 2
-        const portRate = (convenioRate + bankAdjustment); // This is what is used in simulation
+        const portRate = novaTaxaPortabilidade; // This is what is used in simulation
         const taxaPonderada = ((convenioRate + novaTaxaPortabilidade) / 2) + (parseFloat(t.ajusteTaxaPonderada) || 0);
 
         // Regra: Taxa da tabela deve ser menor ou igual à taxa ponderada
