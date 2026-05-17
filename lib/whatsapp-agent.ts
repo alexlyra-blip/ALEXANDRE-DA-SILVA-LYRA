@@ -110,6 +110,36 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
         const m = txt.match(/(\d{2})/);
         if (m && parseInt(m[1]) >= 18 && parseInt(m[1]) <= 100) params.idade = parseInt(m[1]);
     }
+    // Estado (AP, PB, TO, RR)
+    if (prev.includes('estado') || prev.includes('reside') || prev.includes('mora')) {
+        const stateMatch = txt.match(/\b(ap|pb|to|rr)\b/);
+        if (stateMatch) {
+            params.estado = stateMatch[1].toUpperCase();
+            if (params.idade >= 60) {
+                params.isCliente60Mais = true;
+            }
+        }
+    }
+    // Código do Benefício / Sub-convênio
+    if (prev.includes('benefício') || prev.includes('beneficio') || prev.includes('espécie') || prev.includes('especie') || prev.includes('sub-convênio') || prev.includes('sub-convenio') || prev.includes('órgão') || prev.includes('orgao')) {
+        const m = txt.match(/(\d+)/);
+        if (m) {
+            params.codigoBeneficio = m[1];
+        } else {
+            params.subConvenio = userMsg.trim();
+        }
+    }
+    // Analfabeto
+    if (prev.includes('analfabeto')) {
+        params.isAnalfabeto = /sim/.test(txt);
+    }
+    // Cartões Consignados
+    if (prev.includes('cartões') || prev.includes('cartoes') || prev.includes('rmc') || prev.includes('rcc') || prev.includes('cartão') || prev.includes('cartao')) {
+        params.hasTwoCards = /sim|2|dois|ambos/.test(txt);
+        if (/apenas\s*um|1|só\s*um|so\s*um/.test(txt)) {
+            params.hasTwoCards = false;
+        }
+    }
     // Banco atual
     if (prev.includes('banco') && (prev.includes('atual') || prev.includes('contrato'))) {
         params.bancoAtual = userMsg.trim();
@@ -133,10 +163,6 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
     if (prev.includes('saldo') || prev.includes('devedor') || prev.includes('dívida') || prev.includes('divida') || prev.includes('debito') || prev.includes('débito') || txt.includes('saldo') || txt.includes('devedor')) {
         const num = parsePortugueseNumber(userMsg);
         if (num !== null) params.saldoDevedor = num;
-    }
-    // Analfabeto
-    if (prev.includes('analfabeto')) {
-        params.isAnalfabeto = /sim/.test(txt);
     }
 }
 
@@ -345,6 +371,11 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     let dataSummary = '';
     if (extracted.convenio) dataSummary += `• Convênio: ${extracted.convenio}\n`;
     if (extracted.idade) dataSummary += `• Idade: ${extracted.idade} anos\n`;
+    if (extracted.estado) dataSummary += `• Estado: ${extracted.estado}\n`;
+    if (extracted.codigoBeneficio) dataSummary += `• Código do Benefício: ${extracted.codigoBeneficio}\n`;
+    if (extracted.subConvenio) dataSummary += `• Sub-convênio/órgão: ${extracted.subConvenio}\n`;
+    if (extracted.isAnalfabeto !== undefined) dataSummary += `• Analfabeto: ${extracted.isAnalfabeto ? 'Sim' : 'Não'}\n`;
+    if (extracted.hasTwoCards !== undefined) dataSummary += `• Possui 2 cartões consignados ativos: ${extracted.hasTwoCards ? 'Sim' : 'Não'}\n`;
     if (extracted.bancoAtual) dataSummary += `• Banco Atual: ${extracted.bancoAtual}\n`;
     if (extracted.prazoTotal) dataSummary += `• Prazo Total: ${extracted.prazoTotal} meses\n`;
     if (extracted.parcelasRestantes) dataSummary += `• Prazo Restante: ${extracted.parcelasRestantes} meses\n`;
