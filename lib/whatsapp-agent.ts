@@ -10,7 +10,7 @@ const getAI = () => {
 
 const calculateLoanOffersTool = {
     name: "calculate_client_loan_offers",
-    description: "Calculates loan portability offers. Call IMMEDIATELY when you have: convenio, idade, bancoAtual, valorParcela, saldoDevedor, prazoTotal, parcelasRestantes.",
+    description: "Calculates loan portability offers. Call ONLY when you have collected all required information from the customer: convenio, idade, bancoAtual, valorParcela, saldoDevedor, prazoTotal, parcelasRestantes. DO NOT call this tool if you are missing any of these values.",
     parameters: {
         type: Type.OBJECT,
         properties: {
@@ -130,7 +130,7 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
         if (num !== null) params.valorParcela = num;
     }
     // Saldo devedor
-    if (prev.includes('saldo') || txt.includes('saldo')) {
+    if (prev.includes('saldo') || prev.includes('devedor') || prev.includes('dívida') || prev.includes('divida') || prev.includes('debito') || prev.includes('débito') || txt.includes('saldo') || txt.includes('devedor')) {
         const num = parsePortugueseNumber(userMsg);
         if (num !== null) params.saldoDevedor = num;
     }
@@ -149,15 +149,35 @@ function fmt(v: number) { return v?.toLocaleString('pt-BR', { minimumFractionDig
 function formatResult(top: any, banks: string[], grouped: any[], p: SimulationParams): string {
     if (!top) return "❌ Não encontramos ofertas viáveis para o seu perfil no momento com as regras atuais dos bancos.";
     const tables = grouped.find(g => g.bankName === top.name)?.offers?.length || 1;
-    let m = `✅ *Simulação concluída com sucesso!*\n\nMelhor oferta encontrada no *${top.name}*:\n⭐ *${tables} tabela(s) disponível(is)*\n\n`;
-    if (top.tabela) m += `📊 *Tabela:* ${top.tabela}\n`;
-    m += `💰 *Troco Estimado:* R$ ${fmt(top.valorTroco)}\n`;
-    m += `📄 *Novo Contrato:* R$ ${fmt(top.valorContrato)}\n`;
-    m += `💲 *Valor da Parcela:* R$ ${fmt(p.valorParcela || 0)}\n`;
-    m += `⏳ *Prazo do Refin:* ${top.prazoRefinPort || p.parcelasRestantes || 96} meses\n`;
-    if (top.novaTaxaPortabilidade) m += `📈 *Taxa de Portabilidade:* ${top.novaTaxaPortabilidade.toFixed(2)}% a.m.\n`;
+    
+    let m = `✅ *Simulação concluída com sucesso!*\n\n`;
+    m += `⭐ *MELHOR OFERTA ENCONTRADA: ${top.name.toUpperCase()}*\n`;
+    m += `📊 *${tables} tabela(s) disponível(is)*\n\n`;
+    
+    m += `📋 *DETALHES DA OPERAÇÃO (CONTRATO):*\n`;
+    if (top.tabela) m += `• *Tabela:* ${top.tabela}\n`;
+    m += `• *Valor da Parcela:* R$ ${fmt(p.valorParcela || 0)}\n`;
+    m += `• *Prazo:* ${top.prazoRefinPort || p.parcelasRestantes || 96} meses\n`;
+    m += `• *Novo Contrato:* R$ ${fmt(top.valorContrato)}\n`;
+    m += `• *Saldo Devedor:* R$ ${fmt(top.saldoDevedor || p.saldoDevedor || 0)}\n`;
+    
+    if (top.taxaBase !== undefined) {
+        m += `• *Taxa do Refin:* ${top.taxaBase.toFixed(2)}% a.m.\n`;
+    }
+    if (top.novaTaxaPortabilidade !== undefined) {
+        m += `• *Nova Taxa Port.:* ${top.novaTaxaPortabilidade.toFixed(2)}% a.m.\n`;
+    }
+    if (top.taxaPonderada !== undefined && top.useTaxaPonderada) {
+        m += `• *Taxa Ponderada:* ${top.taxaPonderada.toFixed(2)}% a.m.\n`;
+    }
+    
+    m += `\n💰 *VALOR DO TROCO LIBERADO:* R$ ${fmt(top.valorTroco)}\n\n`;
+    
     const others = banks.filter(b => b !== top.name);
-    if (others.length > 0) m += `\n🏦 *Outros Bancos com Ofertas:* ${others.join(', ')}\n`;
+    if (others.length > 0) {
+        m += `🏦 *BANCOS ELEGÍVEIS COM OFERTA:* ${others.join(', ')}\n`;
+    }
+    
     m += `\n_Caso queira ver a oferta de outro banco listado, digite o nome dele (Ex: "Itau", "Pan")._`;
     return m;
 }
@@ -320,8 +340,9 @@ VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EX
 10. Valor da parcela mensal (R$).
 11. Saldo devedor aproximado do contrato (R$).
 
-CONFIRME de forma extremamente amigável e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista. 
-Quando tiver TODOS os dados obrigatórios listados, chame calculate_client_loan_offers imediatamente para exibir os resultados das ofertas.`;
+CONFIRME de forma extremamente amigável e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista.
+IMPORTANTE: Você DEVE coletar o Saldo Devedor do cliente na pergunta 11. Nunca chame a ferramenta calculate_client_loan_offers sem antes perguntar e de fato obter o Saldo Devedor.
+Quando tiver TODOS os dados obrigatórios listados e coletados de fato (incluindo o saldo devedor), chame calculate_client_loan_offers imediatamente para exibir os resultados das ofertas.`;
 
     try {
         const contents = [
