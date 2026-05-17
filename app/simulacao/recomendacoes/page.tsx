@@ -581,15 +581,6 @@ export default function Recomendacoes() {
 
             const taxaTabelaValida = parseRate(tabela.taxaTabela) > 0 ? parseRate(tabela.taxaTabela) : parseRate(bank.refinRate);
             const tDiferencial = parseRate(tabela.taxaDiferencial);
-            
-            let bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
-            if (bankNovaTaxaRef <= 0) {
-              if (bankConvenio === 'SIAPE' && checkBankMatch('C6 CONSIG', bank.name)) {
-                bankNovaTaxaRef = 1.61;
-              } else if (bankConvenio === 'FORÇAS ARMADAS' || bankConvenio === 'CLT PRIVADO') {
-                bankNovaTaxaRef = 2.05;
-              }
-            }
 
             const bankAdjustment = parseRate(bank.ajusteTaxa);
             const bankPortRate = parseRate(bank.portabilityRate);
@@ -597,8 +588,13 @@ export default function Recomendacoes() {
             const defaultRate = bankConvenio === 'SIAPE' ? 1.70 : (bankConvenio === 'INSS' ? 1.85 : 2.05);
             const orig = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || defaultRate);
             
-            const targetCandidates = [tDiferencial, bankNovaTaxaRef].filter(v => v > 0);
-            const novaTaxaPort = targetCandidates.length > 0 ? Math.min(...targetCandidates) : Number((orig + bankAdjustment).toFixed(2));
+            // Dynamic calculation: client rate + bank adjustment
+            let novaTaxaPort = Number((orig + bankAdjustment).toFixed(2));
+            
+            // Cap by table differential rate if configured and lower
+            if (tDiferencial > 0 && tDiferencial < novaTaxaPort) {
+              novaTaxaPort = tDiferencial;
+            }
             
             if (bankPortRate > 0 && newRateCalculated > 0 && newRateCalculated < bankPortRate) {
               log(`Nova taxa calculada (${newRateCalculated.toFixed(2)}%) é menor que o mínimo do banco (${bankPortRate}%)`, tabela.nome);

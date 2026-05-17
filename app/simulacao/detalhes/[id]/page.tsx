@@ -104,20 +104,15 @@ export default function SimulacaoDetalhes() {
         const taxaTabelaValida = (t.taxaTabela !== undefined && t.taxaTabela !== null && t.taxaTabela > 0) ? t.taxaTabela : (bank.refinRate || 0);
         const taxaDiferencial = (t.taxaDiferencial !== undefined && t.taxaDiferencial !== null && t.taxaDiferencial > 0) ? t.taxaDiferencial : 0;
         
-        let bankNovaTaxaRef = bank.novaTaxaReferencia || 0;
-        if (bankNovaTaxaRef <= 0) {
-          const isC6 = (bank.name || '').trim().toUpperCase().includes('C6');
-          if (bankConvenio === 'SIAPE' && isC6) {
-            bankNovaTaxaRef = 1.61;
-          } else if (bankConvenio === 'FORÇAS ARMADAS' || bankConvenio === 'CLT PRIVADO') {
-            bankNovaTaxaRef = 2.05;
-          }
-        }
-        
         const bankAdjustment = bank.ajusteTaxa || 0;
         
-        const targetCandidates = [taxaDiferencial, bankNovaTaxaRef].filter(v => v > 0);
-        const novaTaxaPortabilidade = targetCandidates.length > 0 ? Math.min(...targetCandidates) : convenioRate + bankAdjustment;
+        // Dynamic calculation: client rate + bank adjustment
+        let novaTaxaPortabilidade = Number((convenioRate + bankAdjustment).toFixed(2));
+        
+        // Cap by table differential rate if configured and lower
+        if (taxaDiferencial > 0 && taxaDiferencial < novaTaxaPortabilidade) {
+          novaTaxaPortabilidade = taxaDiferencial;
+        }
 
         // Correct Calculation: Average of (ConvenioRate + BankAdjustment) and (TaxaDiferencial), then add Adjustment
         // Wait, the requirement was (Original + NovaTaxaPort) / 2

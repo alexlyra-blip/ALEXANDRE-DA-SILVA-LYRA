@@ -324,27 +324,15 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
         
         const tDiferencial = parseRate(tabela.taxaDiferencial);
         
-        let bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
-        if (bankNovaTaxaRef <= 0) {
-          if (convenio === 'SIAPE' && checkBankMatch('C6 CONSIG', bank.name)) {
-            bankNovaTaxaRef = 1.61;
-          } else if (convenio === 'FORÇAS ARMADAS' || convenio === 'CLT PRIVADO') {
-            bankNovaTaxaRef = 2.05;
-          }
-        }
-
-        const bankPortRate = parseRate(bank.portabilityRate);
-        
         const defaultRate = convenio === 'SIAPE' ? 1.70 : (convenio === 'INSS' ? 1.85 : 2.05);
         const origRateCalculated = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || defaultRate);
+
+        // Dynamic calculation: client rate + bank adjustment
+        let taxaParaCalculo = Number((origRateCalculated + bankAdjustment).toFixed(2));
         
-        // PRIORIDADE ROBUSTA: 
-        // Coletamos todas as taxas configuradas e usamos a MENOR (mais agressiva)
-        const candidates = [tDiferencial, bankNovaTaxaRef, bankPortRate].filter(v => v > 0);
-        let taxaParaCalculo = candidates.length > 0 ? Math.min(...candidates) : 0;
-        
-        if (taxaParaCalculo <= 0) {
-          taxaParaCalculo = origRateCalculated + bankAdjustment;
+        // Cap by table differential rate if configured and lower
+        if (tDiferencial > 0 && tDiferencial < taxaParaCalculo) {
+          taxaParaCalculo = tDiferencial;
         }
 
         // Regra Nova: Taxa Mínima Port (portabilityRate)

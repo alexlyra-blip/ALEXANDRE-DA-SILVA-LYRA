@@ -298,20 +298,16 @@ export function calculateOffers(
         // Rates and Validations
         const tDiferencial = parseRate(tabela.taxaDiferencial);
         
-        let bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
-        if (bankNovaTaxaRef <= 0) {
-          if (convenio === 'SIAPE' && checkBankMatch('C6 CONSIG', bank.name)) {
-            bankNovaTaxaRef = 1.61;
-          } else if (convenio === 'FORÇAS ARMADAS' || convenio === 'CLT PRIVADO') {
-            bankNovaTaxaRef = 2.05;
-          }
-        }
-
         const bankPortRate = parseRate(bank.portabilityRate);
         const bankAdjustment = parseRate(bank.ajusteTaxa);
 
-        const targetCandidates = [tDiferencial, bankNovaTaxaRef].filter(v => v > 0);
-        const novaTaxaPortTarget = targetCandidates.length > 0 ? Math.min(...targetCandidates) : (originalRate + bankAdjustment);
+        // Dynamic calculation: client rate + bank adjustment
+        let novaTaxaPortTarget = Number((originalRate + bankAdjustment).toFixed(2));
+        
+        // Cap by table differential rate if configured and lower
+        if (tDiferencial > 0 && tDiferencial < novaTaxaPortTarget) {
+          novaTaxaPortTarget = tDiferencial;
+        }
         
         // 1. Validation: Does the NEW calculated rate (with reduced installment) meet the bank's minimum portability rate?
         if (bankPortRate > 0 && newRateCalculated > 0 && newRateCalculated < bankPortRate) return;
