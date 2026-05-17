@@ -351,6 +351,7 @@ export function calculateOffers(
           saldoDevedor,
           novaTaxaPortabilidade: novaTaxaPortTarget,
           taxaPonderada: taxaPonderadaFinal,
+          useTaxaPonderada: Boolean(tabela.useTaxaPonderada),
           originalRateCalculated: orig,
           taxaBase: taxaTabelaValida,
           priority: bank.priority || 0,
