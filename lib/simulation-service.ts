@@ -323,7 +323,16 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
         const bankAdjustment = parseRate(bank.ajusteTaxa);
         
         const tDiferencial = parseRate(tabela.taxaDiferencial);
-        const bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
+        
+        let bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
+        if (bankNovaTaxaRef <= 0) {
+          if (convenio === 'SIAPE' && checkBankMatch('C6 CONSIG', bank.name)) {
+            bankNovaTaxaRef = 1.61;
+          } else if (convenio === 'FORÇAS ARMADAS' || convenio === 'CLT PRIVADO') {
+            bankNovaTaxaRef = 2.05;
+          }
+        }
+
         const bankPortRate = parseRate(bank.portabilityRate);
         
         const defaultRate = convenio === 'SIAPE' ? 1.70 : (convenio === 'INSS' ? 1.85 : 2.05);

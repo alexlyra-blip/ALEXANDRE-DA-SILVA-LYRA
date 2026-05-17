@@ -581,7 +581,16 @@ export default function Recomendacoes() {
 
             const taxaTabelaValida = parseRate(tabela.taxaTabela) > 0 ? parseRate(tabela.taxaTabela) : parseRate(bank.refinRate);
             const tDiferencial = parseRate(tabela.taxaDiferencial);
-            const bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
+            
+            let bankNovaTaxaRef = parseRate(bank.novaTaxaReferencia);
+            if (bankNovaTaxaRef <= 0) {
+              if (bankConvenio === 'SIAPE' && checkBankMatch('C6 CONSIG', bank.name)) {
+                bankNovaTaxaRef = 1.61;
+              } else if (bankConvenio === 'FORÇAS ARMADAS' || bankConvenio === 'CLT PRIVADO') {
+                bankNovaTaxaRef = 2.05;
+              }
+            }
+
             const bankAdjustment = parseRate(bank.ajusteTaxa);
             const bankPortRate = parseRate(bank.portabilityRate);
             

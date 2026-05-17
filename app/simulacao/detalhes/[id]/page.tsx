@@ -103,7 +103,16 @@ export default function SimulacaoDetalhes() {
         const convenioRate = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || defaultRate);
         const taxaTabelaValida = (t.taxaTabela !== undefined && t.taxaTabela !== null && t.taxaTabela > 0) ? t.taxaTabela : (bank.refinRate || 0);
         const taxaDiferencial = (t.taxaDiferencial !== undefined && t.taxaDiferencial !== null && t.taxaDiferencial > 0) ? t.taxaDiferencial : 0;
-        const bankNovaTaxaRef = bank.novaTaxaReferencia || 0;
+        
+        let bankNovaTaxaRef = bank.novaTaxaReferencia || 0;
+        if (bankNovaTaxaRef <= 0) {
+          const isC6 = (bank.name || '').trim().toUpperCase().includes('C6');
+          if (bankConvenio === 'SIAPE' && isC6) {
+            bankNovaTaxaRef = 1.61;
+          } else if (bankConvenio === 'FORÇAS ARMADAS' || bankConvenio === 'CLT PRIVADO') {
+            bankNovaTaxaRef = 2.05;
+          }
+        }
         
         const bankAdjustment = bank.ajusteTaxa || 0;
         

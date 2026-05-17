@@ -139,10 +139,23 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
             
             // Aggressive deduplication
             const seenKeys = new Map<string, BankRule>();
+            
+            const getUpdatedTime = (b: any): number => {
+              if (!b?.updatedAt) return 0;
+              if (typeof b.updatedAt === 'number') return b.updatedAt;
+              if (typeof b.updatedAt.toMillis === 'function') return b.updatedAt.toMillis();
+              if (b.updatedAt.seconds) return b.updatedAt.seconds * 1000;
+              const parsed = Date.parse(String(b.updatedAt));
+              return isNaN(parsed) ? 0 : parsed;
+            };
+
             banksData.forEach(bank => {
               const key = `${bank.name}-${bank.convenio}-${bank.subConvenio || ''}`.toUpperCase();
               const existing = seenKeys.get(key);
-              if (!existing || ((bank as any).updatedAt || 0) > ((existing as any).updatedAt || 0) || (!(bank as any).updatedAt && !(existing as any).updatedAt && bank.id.localeCompare(existing.id) > 0)) {
+              const tBank = getUpdatedTime(bank);
+              const tExisting = getUpdatedTime(existing);
+              
+              if (!existing || tBank > tExisting || (tBank === tExisting && bank.id.localeCompare(existing.id) > 0)) {
                 seenKeys.set(key, bank);
               }
             });
