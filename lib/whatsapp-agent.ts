@@ -182,7 +182,7 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
     return m;
 }
 
-async function doCalculation(params: SimulationParams, userProfile: any): Promise<string> {
+async function doCalculation(params: SimulationParams, userProfile: any, targetBankName?: string): Promise<string> {
     if (!params.taxaJurosMensal) {
         const n = params.parcelasRestantes || ((params.prazoTotal || 0) - (params.parcelasPagas || 0));
         if ((params.valorParcela || 0) > 0 && (params.saldoDevedor || 0) > 0 && n > 0) {
@@ -215,12 +215,12 @@ async function doCalculation(params: SimulationParams, userProfile: any): Promis
 
     const groups = offers.reduce((a, o) => { if (!a[o.name]) a[o.name] = { bankName: o.name, offers: [] }; a[o.name].offers.push(o); return a; }, {} as Record<string, any>);
     
-    // Ordenar ofertas de cada banco pelo MAIOR troco (b.valorTroco - a.valorTroco)
+    // Ordenar ofertas de cada banco pelo MENOR troco (a.valorTroco - b.valorTroco)
     const sorted = Object.values(groups).map((g: any) => { 
-        const s = g.offers.sort((a: any, b: any) => b.valorTroco - a.valorTroco); 
+        const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco); 
         return { ...g, offers: s, topOffer: s[0] }; 
     })
-    // Ordenar bancos pela prioridade e depois pelo MAIOR troco
+    // Ordenar bancos pela prioridade e depois pelo MENOR troco
     .sort((a: any, b: any) => { 
         const bankIdA = a.topOffer.id?.split('-')[0];
         const bankIdB = b.topOffer.id?.split('-')[0];
@@ -229,10 +229,14 @@ async function doCalculation(params: SimulationParams, userProfile: any): Promis
         const finalPA = pA === 0 ? 999 : pA;
         const finalPB = pB === 0 ? 999 : pB;
         if (finalPA !== finalPB) return finalPA - finalPB; 
-        return b.topOffer.valorTroco - a.topOffer.valorTroco; 
+        return a.topOffer.valorTroco - b.topOffer.valorTroco; 
     });
 
-    const top = sorted.length > 0 ? sorted[0].topOffer : null;
+    const matchedBank = targetBankName 
+        ? sorted.find((g: any) => g.bankName.toLowerCase().includes(targetBankName.toLowerCase()) || targetBankName.toLowerCase().includes(g.bankName.toLowerCase()))
+        : null;
+
+    const top = matchedBank ? matchedBank.topOffer : (sorted.length > 0 ? sorted[0].topOffer : null);
     const bankNames = sorted.map((g: any) => g.bankName);
     
     try {
@@ -282,6 +286,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
 
     // Carrega extractedParams diretamente de sessionData (passado por referência do route.ts)
     let extracted = sessionData.extractedParams || {};
+    let lastExtracted = sessionData.lastExtractedParams;
 
     // Resetar parâmetros se palavras-chave de reinício forem encontradas
     const restartKeywords = ['simular', 'nova simulação', 'começar', 'reiniciar', 'iniciar', 'resetar', 'oi', 'olá', 'ola'];
@@ -289,8 +294,20 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     
     if (isRestart || lower === 'simular' || lower === 'reiniciar') {
         extracted = {};
+        sessionData.extractedParams = {};
+        sessionData.lastExtractedParams = null;
         console.log(`[Gutto] Resetting session parameters.`);
     } else {
+        // Se temos lastExtracted e o usuário digitou o nome de um banco
+        const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
+        const matchedCachedBank = lastExtracted && cachedBankRules.find(b => 
+            b.name.toLowerCase().includes(cleanMsg) || cleanMsg.includes(b.name.toLowerCase())
+        );
+        if (matchedCachedBank && lastExtracted) {
+            console.log(`[Gutto] User selected bank ${matchedCachedBank.name} from previous calculation.`);
+            return await doCalculation(lastExtracted as SimulationParams, userProfile, matchedCachedBank.name);
+        }
+
         const lastBotMessage = history.length > 0 ? history[history.length - 1].content || '' : '';
         updateParamsFromMessage(extracted, lastBotMessage, message);
     }
@@ -304,6 +321,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     if (hasAllRequired(extracted)) {
         console.log(`[Gutto] All required data present! Performing simulation...`);
         const res = await doCalculation(extracted as SimulationParams, userProfile);
+        sessionData.lastExtractedParams = { ...extracted }; // Salva no histórico da sessão
         sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
         return res;
     }
@@ -366,6 +384,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato (incluind
             const params = fc.functionCall.args as unknown as SimulationParams;
             if (params.convenio === 'INSS' && (params as any).hasTwoCards)
                 params.valorParcela = Math.max(0, (params.valorParcela || 0) - ((params as any).negativeCardValue || 81.05));
+            sessionData.lastExtractedParams = { ...params }; // Salva no histórico da sessão
             sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
             return await doCalculation(params, userProfile);
         }
@@ -377,6 +396,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato (incluind
         console.error("Agent Error:", error);
         if (hasAllRequired(extracted)) {
             const res = await doCalculation(extracted as SimulationParams, userProfile);
+            sessionData.lastExtractedParams = { ...extracted }; // Salva no histórico da sessão
             sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
             return res;
         }
