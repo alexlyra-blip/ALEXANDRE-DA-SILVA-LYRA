@@ -10,12 +10,12 @@ const getAI = () => {
 
 const calculateLoanOffersTool = {
     name: "calculate_client_loan_offers",
-    description: "Calculates loan portability offers. Call IMMEDIATELY when you have: convenio, idade, bancoAtual, valorParcela, saldoDevedor, prazoTotal.",
+    description: "Calculates loan portability offers. Call IMMEDIATELY when you have: convenio, idade, bancoAtual, valorParcela, saldoDevedor, prazoTotal, parcelasRestantes.",
     parameters: {
         type: Type.OBJECT,
         properties: {
             idade: { type: Type.NUMBER, description: "Customer age" },
-            convenio: { type: Type.STRING, description: "INSS, SIAPE, GOVERNO, FORCAS_ARMADAS, CLT PRIVADO" },
+            convenio: { type: Type.STRING, description: "INSS, SIAPE, GOVERNO, FORÇAS ARMADAS, CLT PRIVADO" },
             subConvenio: { type: Type.STRING, description: "Sub-agreement" },
             bancoAtual: { type: Type.STRING, description: "Current bank name" },
             valorParcela: { type: Type.NUMBER, description: "Monthly installment" },
@@ -28,12 +28,13 @@ const calculateLoanOffersTool = {
             hasTwoCards: { type: Type.BOOLEAN, description: "2 active cards (INSS)" },
             negativeCardValue: { type: Type.NUMBER, description: "Card discount" }
         },
-        required: ["idade", "convenio", "bancoAtual", "valorParcela", "saldoDevedor", "prazoTotal"]
+        required: ["idade", "convenio", "bancoAtual", "valorParcela", "saldoDevedor", "prazoTotal", "parcelasRestantes"]
     }
 };
 
 function calcRate(pv: number, pmt: number, n: number) {
     if (pmt <= 0 || pv <= 0 || n <= 0) return 0;
+    if (pmt * n <= pv) return 0;
     let lo = 0.0001, hi = 1, r = 0.05, d = 1, i = 0;
     while (d > 0.0001 && hi - lo > 0.00001 && i < 100) {
         const c = (pmt / r) * (1 - Math.pow(1 + r, -n));
@@ -71,6 +72,26 @@ function getRuleSummary(bankName: string): string {
     return t;
 }
 
+function parsePortugueseNumber(valStr: string): number | null {
+    if (!valStr) return null;
+    const match = valStr.match(/[\d.,]+/);
+    if (!match) return null;
+    let clean = match[0];
+    
+    if (clean.includes('.') && clean.includes(',')) {
+        if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) {
+            clean = clean.replace(/\./g, '').replace(',', '.');
+        } else {
+            clean = clean.replace(/,/g, '');
+        }
+    } else if (clean.includes(',')) {
+        clean = clean.replace(',', '.');
+    }
+    
+    const parsed = parseFloat(clean);
+    return isNaN(parsed) ? null : parsed;
+}
+
 // Extrai dados coletados do histórico da conversa
 function extractDataFromHistory(history: any[], currentMsg: string): Partial<SimulationParams> {
     const data: any = {};
@@ -79,7 +100,7 @@ function extractDataFromHistory(history: any[], currentMsg: string): Partial<Sim
     for (let i = 0; i < allMessages.length; i++) {
         const msg = allMessages[i];
         if (msg.role !== 'user') continue;
-        const txt = (msg.content || '').toLowerCase().replace(/[.,]/g, '');
+        const txt = (msg.content || '').toLowerCase();
         const prev = i > 0 ? (allMessages[i - 1].content || '').toLowerCase() : '';
         
         // Convênio
@@ -87,7 +108,7 @@ function extractDataFromHistory(history: any[], currentMsg: string): Partial<Sim
             if (/\binss\b/.test(txt)) data.convenio = 'INSS';
             else if (/\bsiape\b/.test(txt)) data.convenio = 'SIAPE';
             else if (/\bgoverno\b/.test(txt)) data.convenio = 'GOVERNO';
-            else if (/for[çc]as?\s*armadas?/.test(txt)) data.convenio = 'FORCAS_ARMADAS';
+            else if (/for[çc]as?\s*armadas?/.test(txt)) data.convenio = 'FORÇAS ARMADAS';
             else if (/\bclt\b/.test(txt)) data.convenio = 'CLT PRIVADO';
         }
         // Idade
@@ -100,24 +121,24 @@ function extractDataFromHistory(history: any[], currentMsg: string): Partial<Sim
             data.bancoAtual = msg.content.trim();
         }
         // Prazo total
-        if (prev.includes('prazo total') || prev.includes('prazo do contrato') || prev.includes('quantas parcelas')) {
+        if (prev.includes('prazo total') || prev.includes('prazo do contrato') || (prev.includes('quantas') && prev.includes('total'))) {
             const m = txt.match(/(\d+)/);
             if (m) data.prazoTotal = parseInt(m[1]);
         }
         // Prazo restante
-        if (prev.includes('restante') || prev.includes('faltam') || prev.includes('prazo restante')) {
+        if (prev.includes('restante') || prev.includes('faltam') || prev.includes('restantes') || (prev.includes('quantas') && prev.includes('resta'))) {
             const m = txt.match(/(\d+)/);
             if (m) data.parcelasRestantes = parseInt(m[1]);
         }
         // Valor da parcela
         if (prev.includes('parcela') && (prev.includes('valor') || prev.includes('quanto') || prev.includes('mensal'))) {
-            const m = txt.match(/([\d]+)/);
-            if (m) data.valorParcela = parseFloat(m[1]);
+            const num = parsePortugueseNumber(msg.content);
+            if (num !== null) data.valorParcela = num;
         }
         // Saldo devedor
         if (prev.includes('saldo') || txt.includes('saldo')) {
-            const m = txt.match(/([\d]+)/);
-            if (m) data.saldoDevedor = parseFloat(m[1]);
+            const num = parsePortugueseNumber(msg.content);
+            if (num !== null) data.saldoDevedor = num;
         }
         // Analfabeto
         if (prev.includes('analfabeto')) {
@@ -128,24 +149,24 @@ function extractDataFromHistory(history: any[], currentMsg: string): Partial<Sim
 }
 
 function hasAllRequired(d: any): boolean {
-    return !!(d.convenio && d.idade && d.bancoAtual && d.valorParcela && d.saldoDevedor && d.prazoTotal);
+    return !!(d.convenio && d.idade && d.bancoAtual && d.valorParcela && d.saldoDevedor && d.prazoTotal && d.parcelasRestantes);
 }
 
 function fmt(v: number) { return v?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'; }
 
 function formatResult(top: any, banks: string[], grouped: any[], p: SimulationParams): string {
-    if (!top) return "❌ Não encontramos ofertas viáveis para o seu perfil.";
+    if (!top) return "❌ Não encontramos ofertas viáveis para o seu perfil no momento com as regras atuais dos bancos.";
     const tables = grouped.find(g => g.bankName === top.name)?.offers?.length || 1;
-    let m = `✅ *Simulação concluída!*\n\nMelhor oferta no *${top.name}*:\n⭐ *${tables} tabela(s)*\n\n`;
+    let m = `✅ *Simulação concluída com sucesso!*\n\nMelhor oferta encontrada no *${top.name}*:\n⭐ *${tables} tabela(s) disponível(is)*\n\n`;
     if (top.tabela) m += `📊 *Tabela:* ${top.tabela}\n`;
     m += `💰 *Troco Estimado:* R$ ${fmt(top.valorTroco)}\n`;
     m += `📄 *Novo Contrato:* R$ ${fmt(top.valorContrato)}\n`;
-    m += `💲 *Parcela:* R$ ${fmt(p.valorParcela || 0)}\n`;
-    m += `⏳ *Prazo:* ${top.prazoRefinPort || 96} meses\n`;
-    if (top.novaTaxaPortabilidade) m += `📈 *Taxa:* ${top.novaTaxaPortabilidade}%\n`;
+    m += `💲 *Valor da Parcela:* R$ ${fmt(p.valorParcela || 0)}\n`;
+    m += `⏳ *Prazo do Refin:* ${top.prazoRefinPort || p.parcelasRestantes || 96} meses\n`;
+    if (top.novaTaxaPortabilidade) m += `📈 *Taxa de Portabilidade:* ${top.novaTaxaPortabilidade.toFixed(2)}% a.m.\n`;
     const others = banks.filter(b => b !== top.name);
-    if (others.length > 0) m += `\n🏦 *Outros Bancos:* ${others.join(', ')}\n`;
-    m += `\n_Digite o *nome de outro banco* para ver a oferta dele._`;
+    if (others.length > 0) m += `\n🏦 *Outros Bancos com Ofertas:* ${others.join(', ')}\n`;
+    m += `\n_Caso queira ver a oferta de outro banco listado, digite o nome dele (Ex: "Itau", "Pan")._`;
     return m;
 }
 
@@ -156,8 +177,14 @@ async function doCalculation(params: SimulationParams, userProfile: any): Promis
             params.taxaJurosMensal = calcRate(params.saldoDevedor!, params.valorParcela!, n);
         }
     }
+    
+    // Set parcelas pagas for simulation engine
+    if (params.prazoTotal && params.parcelasRestantes && !params.parcelasPagas) {
+        params.parcelasPagas = params.prazoTotal - params.parcelasRestantes;
+    }
+
     const db = getAdminDb();
-    if (!db) return "⚠️ Erro de conexão.";
+    if (!db) return "⚠️ Erro de conexão com o banco de dados.";
     const [bSnap, rSnap, sSnap] = await Promise.all([
         db.collection('bankRules').get(), db.collection('generalRules').get(), db.collection('settings').doc('admin').get()
     ]);
@@ -166,13 +193,36 @@ async function doCalculation(params: SimulationParams, userProfile: any): Promis
     const sd = sSnap.exists ? sSnap.data() : {};
     const pp = sd?.bankPriorities || {};
     const pi = sd?.bankInstallments || {};
+    
     const offers = calculateOffers(params, banks, rules, pp, pi, userProfile);
-    console.log(`[Gutto] Offers: ${offers.length}`);
+    console.log(`[Gutto] Total Offers: ${offers.length}`);
+    
+    if (offers.length === 0) {
+        return "❌ Infelizmente, analisando as regras dos bancos, não encontramos nenhuma oferta vantajosa ou compatível com esses dados no momento.";
+    }
+
     const groups = offers.reduce((a, o) => { if (!a[o.name]) a[o.name] = { bankName: o.name, offers: [] }; a[o.name].offers.push(o); return a; }, {} as Record<string, any>);
-    const sorted = Object.values(groups).map((g: any) => { const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco); return { ...g, offers: s, topOffer: s[0] }; })
-        .sort((a: any, b: any) => { const pA = pp[a.topOffer.id?.split('-')[0]] ?? 999; const pB = pp[b.topOffer.id?.split('-')[0]] ?? 999; return (pA || 999) !== (pB || 999) ? (pA || 999) - (pB || 999) : a.topOffer.valorTroco - b.topOffer.valorTroco; });
+    
+    // Ordenar ofertas de cada banco pelo MAIOR troco (b.valorTroco - a.valorTroco)
+    const sorted = Object.values(groups).map((g: any) => { 
+        const s = g.offers.sort((a: any, b: any) => b.valorTroco - a.valorTroco); 
+        return { ...g, offers: s, topOffer: s[0] }; 
+    })
+    // Ordenar bancos pela prioridade e depois pelo MAIOR troco
+    .sort((a: any, b: any) => { 
+        const bankIdA = a.topOffer.id?.split('-')[0];
+        const bankIdB = b.topOffer.id?.split('-')[0];
+        const pA = pp[bankIdA] ?? a.topOffer.priority ?? 999; 
+        const pB = pp[bankIdB] ?? b.topOffer.priority ?? 999; 
+        const finalPA = pA === 0 ? 999 : pA;
+        const finalPB = pB === 0 ? 999 : pB;
+        if (finalPA !== finalPB) return finalPA - finalPB; 
+        return b.topOffer.valorTroco - a.topOffer.valorTroco; 
+    });
+
     const top = sorted.length > 0 ? sorted[0].topOffer : null;
     const bankNames = sorted.map((g: any) => g.bankName);
+    
     try {
         await db.collection('simulations').doc(crypto.randomUUID()).set({
             userId: userProfile.uid || 'bot', userName: userProfile.name || 'WhatsApp',
@@ -183,7 +233,8 @@ async function doCalculation(params: SimulationParams, userProfile: any): Promis
             topOfferTaxa: top?.novaTaxaPortabilidade || 0, topOfferTabela: top?.tabela || '',
             createdAt: new Date(), timestamp: Date.now(), origin: 'whatsapp'
         });
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("Error saving simulation:", e); }
+    
     return formatResult(top, bankNames, sorted, params);
 }
 
@@ -192,7 +243,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     await loadRules();
 
     if (history.length === 0) {
-        return `Olá! Eu sou o *Gutto*, especialista em portabilidade.\n\nDigite *"Simular"* para iniciar ou pergunte as *regras de um banco* (ex: "Regras do Bradesco").`;
+        return `Olá! Eu sou o *Gutto*, especialista em portabilidade.\n\nPara iniciarmos a sua simulação, qual é o seu *convênio*?\n\n*Opções disponíveis:*\n👉 INSS\n👉 SIAPE\n👉 Governo\n👉 Forças Armadas\n👉 CLT Privado\n\n(Ou pergunte as regras de algum banco, ex: "Regras do Bradesco")`;
     }
 
     const lower = message.toLowerCase().trim();
@@ -212,51 +263,54 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
             const snap = await db.collection('users').get();
             let found = null;
             snap.forEach(doc => { const d = doc.data(); if (d.phone) { const cp = d.phone.replace(/\D/g, ''); if (cp.length >= 8 && clean.endsWith(cp)) found = { uid: doc.id, ...d }; } });
-            if (!found) return "Desculpe, seu número não está cadastrado.";
+            if (!found) return "Desculpe, seu número de telefone não está cadastrado ou autorizado no sistema.";
             userProfile = found;
         }
     }
 
-    // FALLBACK: Extrair dados do histórico e calcular diretamente se tiver tudo
+    // EXTRAIR DADOS DO HISTÓRICO E CALCULAR SE TIVER TUDO OBRIGATÓRIO
     const extracted = extractDataFromHistory(history, message);
-    console.log(`[Gutto] Extracted:`, JSON.stringify(extracted));
+    console.log(`[Gutto] Extracted fields:`, JSON.stringify(extracted));
 
     if (hasAllRequired(extracted)) {
-        console.log(`[Gutto] All data present! Forcing calculation.`);
+        console.log(`[Gutto] All required data present! Performing simulation...`);
         return await doCalculation(extracted as SimulationParams, userProfile);
     }
 
-    // Construir summary dos dados já coletados para ajudar a IA
+    // Construir sumário dos dados já coletados para orientar a IA de forma precisa
     let dataSummary = '';
-    if (extracted.convenio) dataSummary += `Convênio: ${extracted.convenio}\n`;
-    if (extracted.idade) dataSummary += `Idade: ${extracted.idade}\n`;
-    if (extracted.bancoAtual) dataSummary += `Banco: ${extracted.bancoAtual}\n`;
-    if (extracted.prazoTotal) dataSummary += `Prazo: ${extracted.prazoTotal}\n`;
-    if (extracted.parcelasRestantes) dataSummary += `Restante: ${extracted.parcelasRestantes}\n`;
-    if (extracted.valorParcela) dataSummary += `Parcela: ${extracted.valorParcela}\n`;
-    if (extracted.saldoDevedor) dataSummary += `Saldo: ${extracted.saldoDevedor}\n`;
+    if (extracted.convenio) dataSummary += `• Convênio: ${extracted.convenio}\n`;
+    if (extracted.idade) dataSummary += `• Idade: ${extracted.idade} anos\n`;
+    if (extracted.bancoAtual) dataSummary += `• Banco Atual: ${extracted.bancoAtual}\n`;
+    if (extracted.prazoTotal) dataSummary += `• Prazo Total: ${extracted.prazoTotal} meses\n`;
+    if (extracted.parcelasRestantes) dataSummary += `• Prazo Restante: ${extracted.parcelasRestantes} meses\n`;
+    if (extracted.valorParcela) dataSummary += `• Valor da Parcela: R$ ${fmt(extracted.valorParcela)}\n`;
+    if (extracted.saldoDevedor) dataSummary += `• Saldo Devedor: R$ ${fmt(extracted.saldoDevedor)}\n`;
 
-    const sysInst = `Você é o Gutto, assistente de portabilidade.
+    const sysInst = `Você é o Gutto, assistente especialista em portabilidade do portal.
 
-REGRA: Faça APENAS UMA pergunta por vez.
+REGRA CRÍTICA ABSOLUTA: Faça APENAS UMA pergunta por vez. Nunca pergunte dois ou mais dados na mesma mensagem.
 
-DADOS COLETADOS:
-${dataSummary || 'Nenhum ainda.'}
+DADOS JÁ COLETADOS ATÉ AGORA:
+${dataSummary || 'Nenhum dado coletado ainda.'}
 
-ORDEM DE COLETA (pergunte o PRÓXIMO dado que ainda falta):
+VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA SEGUINDO A ORDEM EXATA ABAIXO:
 1. Convênio (INSS, SIAPE, Governo, Forças Armadas ou CLT Privado)
+   - IMPORTANTE: Na primeira pergunta, você DEVE listar explicitamente estas 5 opções exatas de convênio para o cliente escolher.
 2. Idade
-3. Se 60+: reside em AP/PB/TO/RR?
-4. Sub-convênio
-5. Analfabeto?
-6. Se INSS: 2 cartões ativos?
-7. Banco atual
-8. Prazo total (meses)
-9. Prazo restante (parcelas que faltam)
-10. Valor da parcela
-11. Saldo devedor
+3. Se Idade for maior ou igual a 60 anos: Pergunta em qual estado o cliente reside (AP, PB, TO ou RR)? Se idade < 60, PULE esta pergunta.
+4. Código do Benefício (se convênio for INSS) OU Sub-convênio/órgão (se convênio for SIAPE, Governo ou Forças Armadas). Se convênio for CLT Privado, PULE esta pergunta.
+5. Se o cliente é Analfabeto? (Sim/Não)
+6. Se convênio for INSS: Possui 2 cartões de crédito consignado ativos?
+7. Banco atual onde está o contrato que deseja portar.
+8. Prazo total do contrato original (em meses, ex: 84 ou 96).
+9. Prazo restante / Parcelas restantes que ainda faltam pagar (em meses).
+   - ATENÇÃO: Pergunte o prazo restante imediatamente após coletar o prazo total. Ex: "E desse contrato de [prazoTotal] meses, quantas parcelas ainda faltam pagar?"
+10. Valor da parcela mensal (R$).
+11. Saldo devedor aproximado do contrato (R$).
 
-Quando tiver TODOS os dados obrigatórios, chame calculate_client_loan_offers.`;
+CONFIRME de forma extremamente amigável e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista. 
+Quando tiver TODOS os dados obrigatórios listados, chame calculate_client_loan_offers imediatamente para exibir os resultados das ofertas.`;
 
     try {
         const contents = [
@@ -276,7 +330,7 @@ Quando tiver TODOS os dados obrigatórios, chame calculate_client_loan_offers.`;
         const fc = parts.find((p: any) => p.functionCall);
 
         if (fc?.functionCall?.name === "calculate_client_loan_offers") {
-            console.log(`[Gutto] Function call detected!`);
+            console.log(`[Gutto] AI triggered calculate_client_loan_offers tool call!`);
             const params = fc.functionCall.args as unknown as SimulationParams;
             if (params.convenio === 'INSS' && (params as any).hasTwoCards)
                 params.valorParcela = Math.max(0, (params.valorParcela || 0) - ((params as any).negativeCardValue || 81.05));
@@ -284,14 +338,13 @@ Quando tiver TODOS os dados obrigatórios, chame calculate_client_loan_offers.`;
         }
 
         const text = parts.find((p: any) => p.text)?.text || (result as any).text;
-        return text || "Qual informação deseja fornecer?";
+        return text || "Como posso ajudar na sua simulação hoje?";
 
     } catch (error: any) {
         console.error("Agent Error:", error);
-        // Se deu erro mas temos dados suficientes, tenta calcular mesmo assim
         if (hasAllRequired(extracted)) {
             return await doCalculation(extracted as SimulationParams, userProfile);
         }
-        return `⚠️ Erro: ${error.message || 'desconhecido'}`;
+        return `⚠️ Ops! Tivemos uma pequena falha de conexão: ${error.message || 'Erro interno'}. Por favor, digite o dado novamente.`;
     }
 }
