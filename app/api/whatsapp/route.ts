@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Usar o Agente de IA consolidado
     const { processWhatsAppMessage } = await import('@/lib/whatsapp-agent');
-    let responseText = await processWhatsAppMessage(messageText, sessionData.history || []);
+    let responseText = await processWhatsAppMessage(messageText, sessionData.history || [], senderNumber, sessionData);
 
     // 2. Atualizar histórico (Aumentado para 40 mensagens para não esquecer os dados iniciais)
     const updatedHistory = [

@@ -12,19 +12,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
-    // Attempt to get phone from userId if provided
     let phoneFlag = '';
-    if (userId) {
-      const db = getAdminDb();
-      if (db) {
+    let sessionData: any = { history: [] };
+    let sessionRef: any = null;
+    const db = getAdminDb();
+
+    if (db && userId) {
+      try {
         const userDoc = await db.collection('users').doc(userId).get();
         if (userDoc.exists) {
           phoneFlag = userDoc.data()?.phone || '';
         }
+        
+        // Load persistent session parameters using userId
+        const sessionId = `web_${userId}`;
+        sessionRef = db.collection('whatsappSessions').doc(sessionId);
+        const sessionSnap = await sessionRef.get();
+        if (sessionSnap.exists) {
+          sessionData = sessionSnap.data();
+        }
+      } catch (e) {
+        console.error('Error loading session in chat route:', e);
       }
     }
 
-    const reply = await processWhatsAppMessage(message, history || [], phoneFlag);
+    const reply = await processWhatsAppMessage(message, history || [], phoneFlag, sessionData);
+
+    // Save session back to database to persist extractedParams
+    if (sessionRef) {
+      try {
+        await sessionRef.set({
+          ...sessionData,
+          lastUpdate: new Date()
+        });
+      } catch (e) {
+        console.error('Error saving session in chat route:', e);
+      }
+    }
 
     return NextResponse.json({ reply });
   } catch (error: any) {
