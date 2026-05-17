@@ -60,7 +60,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
     parcelasPagas: input.parcelasPagas,
     prazoTotal: (input.parcelasPagas || 0) + (input.parcelasRestantes || 0),
     parcelasRestantes: input.parcelasRestantes,
-    taxaJurosMensal: input.taxaJurosMensal,
+    taxaJurosMensal: input.taxaJurosMensal && input.taxaJurosMensal > 0.1 ? input.taxaJurosMensal / 100 : input.taxaJurosMensal,
     isCliente60Mais: input.isCliente60Mais ?? undefined,
     isAnalfabeto: input.isAnalfabeto
   };

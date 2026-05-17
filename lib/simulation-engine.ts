@@ -304,8 +304,11 @@ export function calculateOffers(
         const bankPortRate = parseRate(bank.portabilityRate);
         const bankAdjustment = parseRate(bank.ajusteTaxa);
 
+        const defaultRate = convenio === 'SIAPE' ? 1.70 : (convenio === 'INSS' ? 1.85 : 2.05);
+        const origRateCalculated = originalRate > 0 ? originalRate : (parseRate(bank.taxaPortabilidadeOrigem) || defaultRate);
+
         // Dynamic calculation: client rate + bank adjustment
-        const novaTaxaPortTarget = Number((originalRate + bankAdjustment).toFixed(2));
+        const novaTaxaPortTarget = Number((origRateCalculated + bankAdjustment).toFixed(2));
         
         // 1. Validation: Does the NEW calculated rate (with reduced installment) meet the bank's minimum portability rate?
         if (bankPortRate > 0 && newRateCalculated > 0 && newRateCalculated < bankPortRate) return;
@@ -314,7 +317,7 @@ export function calculateOffers(
         if (bankPortRate > 0 && novaTaxaPortTarget < bankPortRate) return;
 
         // Weighted Rate
-        const orig = Number(originalRate.toFixed(2));
+        const orig = Number(origRateCalculated.toFixed(2));
         const portTarget = Number(novaTaxaPortTarget.toFixed(2));
         const taxaPonderadaBase = Math.round(((orig + portTarget) / 2) * 100) / 100;
         const ajusteTabela = Number((parseFloat(tabela.ajusteTaxaPonderada) || 0).toFixed(2));

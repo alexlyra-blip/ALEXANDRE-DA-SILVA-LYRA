@@ -26,7 +26,8 @@ const calculateLoanOffersTool = {
             isAnalfabeto: { type: Type.BOOLEAN, description: "Illiterate" },
             isCliente60Mais: { type: Type.BOOLEAN, description: "60+ in AP/PB/TO/RR" },
             hasTwoCards: { type: Type.BOOLEAN, description: "2 active cards (INSS)" },
-            negativeCardValue: { type: Type.NUMBER, description: "Card discount" }
+            negativeCardValue: { type: Type.NUMBER, description: "Card discount" },
+            taxaJurosMensal: { type: Type.NUMBER, description: "Client's current contract interest rate as percentage (e.g. 1.59). Optional." }
         },
         required: ["idade", "convenio", "bancoAtual", "valorParcela", "saldoDevedor", "prazoTotal", "parcelasRestantes"]
     }
@@ -164,6 +165,21 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
         const num = parsePortugueseNumber(userMsg);
         if (num !== null) params.saldoDevedor = num;
     }
+    // Taxa de juros atual
+    if (prev.includes('taxa') || prev.includes('juros') || txt.includes('taxa de juros') || txt.includes('taxa atual')) {
+        const match = txt.match(/(?:taxa|juros|atual)\s*(?:de)?\s*([0-9.,]+)%?/);
+        if (match) {
+            const num = parsePortugueseNumber(match[1]);
+            if (num !== null && num > 0) {
+                params.taxaJurosMensal = num > 0.1 ? num / 100 : num;
+            }
+        } else {
+            const num = parsePortugueseNumber(userMsg);
+            if (num !== null && num > 0) {
+                params.taxaJurosMensal = num > 0.1 ? num / 100 : num;
+            }
+        }
+    }
 }
 
 function hasAllRequired(d: any): boolean {
@@ -209,6 +225,9 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
 }
 
 async function doCalculation(params: SimulationParams, userProfile: any, targetBankName?: string): Promise<string> {
+    if (params.taxaJurosMensal && params.taxaJurosMensal > 0.1) {
+        params.taxaJurosMensal = params.taxaJurosMensal / 100;
+    }
     if (!params.taxaJurosMensal) {
         const n = params.parcelasRestantes || ((params.prazoTotal || 0) - (params.parcelasPagas || 0));
         if ((params.valorParcela || 0) > 0 && (params.saldoDevedor || 0) > 0 && n > 0) {
@@ -381,6 +400,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     if (extracted.parcelasRestantes) dataSummary += `• Prazo Restante: ${extracted.parcelasRestantes} meses\n`;
     if (extracted.valorParcela) dataSummary += `• Valor da Parcela: R$ ${fmt(extracted.valorParcela)}\n`;
     if (extracted.saldoDevedor) dataSummary += `• Saldo Devedor: R$ ${fmt(extracted.saldoDevedor)}\n`;
+    if (extracted.taxaJurosMensal) dataSummary += `• Taxa de Juros: ${(extracted.taxaJurosMensal * 100).toFixed(2)}%\n`;
 
     const sysInst = `Você é o Gutto, assistente especialista em portabilidade do portal.
 
@@ -403,6 +423,7 @@ VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EX
    - ATENÇÃO: Pergunte o prazo restante imediatamente após coletar o prazo total. Ex: "E desse contrato de [prazoTotal] meses, quantas parcelas ainda faltam pagar?"
 10. Valor da parcela mensal (R$).
 11. Saldo devedor aproximado do contrato (R$).
+12. Se o cliente souber/desejar informar: Taxa de juros atual do contrato (Relação opcional, ex: "taxa de 1,59%").
 
 CONFIRME de forma extremamente amigável e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista.
 IMPORTANTE: Você DEVE coletar o Saldo Devedor do cliente na pergunta 11. Nunca chame a ferramenta calculate_client_loan_offers sem antes perguntar e de fato obter o Saldo Devedor.
