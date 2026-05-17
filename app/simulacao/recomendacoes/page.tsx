@@ -589,12 +589,7 @@ export default function Recomendacoes() {
             const orig = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || defaultRate);
             
             // Dynamic calculation: client rate + bank adjustment
-            let novaTaxaPort = Number((orig + bankAdjustment).toFixed(2));
-            
-            // Cap by table differential rate if configured and lower
-            if (tDiferencial > 0 && tDiferencial < novaTaxaPort) {
-              novaTaxaPort = tDiferencial;
-            }
+            const novaTaxaPort = Number((orig + bankAdjustment).toFixed(2));
             
             if (bankPortRate > 0 && newRateCalculated > 0 && newRateCalculated < bankPortRate) {
               log(`Nova taxa calculada (${newRateCalculated.toFixed(2)}%) é menor que o mínimo do banco (${bankPortRate}%)`, tabela.nome);

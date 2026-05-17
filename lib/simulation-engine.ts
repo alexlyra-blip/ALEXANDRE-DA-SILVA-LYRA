@@ -302,12 +302,7 @@ export function calculateOffers(
         const bankAdjustment = parseRate(bank.ajusteTaxa);
 
         // Dynamic calculation: client rate + bank adjustment
-        let novaTaxaPortTarget = Number((originalRate + bankAdjustment).toFixed(2));
-        
-        // Cap by table differential rate if configured and lower
-        if (tDiferencial > 0 && tDiferencial < novaTaxaPortTarget) {
-          novaTaxaPortTarget = tDiferencial;
-        }
+        const novaTaxaPortTarget = Number((originalRate + bankAdjustment).toFixed(2));
         
         // 1. Validation: Does the NEW calculated rate (with reduced installment) meet the bank's minimum portability rate?
         if (bankPortRate > 0 && newRateCalculated > 0 && newRateCalculated < bankPortRate) return;

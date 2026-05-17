@@ -328,12 +328,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
         const origRateCalculated = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || defaultRate);
 
         // Dynamic calculation: client rate + bank adjustment
-        let taxaParaCalculo = Number((origRateCalculated + bankAdjustment).toFixed(2));
-        
-        // Cap by table differential rate if configured and lower
-        if (tDiferencial > 0 && tDiferencial < taxaParaCalculo) {
-          taxaParaCalculo = tDiferencial;
-        }
+        const taxaParaCalculo = Number((origRateCalculated + bankAdjustment).toFixed(2));
 
         // Regra Nova: Taxa Mínima Port (portabilityRate)
         if (bank.portabilityRate && bank.portabilityRate > 0 && taxaParaCalculo < bank.portabilityRate) {

@@ -107,12 +107,7 @@ export default function SimulacaoDetalhes() {
         const bankAdjustment = bank.ajusteTaxa || 0;
         
         // Dynamic calculation: client rate + bank adjustment
-        let novaTaxaPortabilidade = Number((convenioRate + bankAdjustment).toFixed(2));
-        
-        // Cap by table differential rate if configured and lower
-        if (taxaDiferencial > 0 && taxaDiferencial < novaTaxaPortabilidade) {
-          novaTaxaPortabilidade = taxaDiferencial;
-        }
+        const novaTaxaPortabilidade = Number((convenioRate + bankAdjustment).toFixed(2));
 
         // Correct Calculation: Average of (ConvenioRate + BankAdjustment) and (TaxaDiferencial), then add Adjustment
         // Wait, the requirement was (Original + NovaTaxaPort) / 2
