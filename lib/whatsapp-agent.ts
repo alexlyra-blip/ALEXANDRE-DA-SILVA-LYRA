@@ -241,78 +241,85 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
 }
 
 async function doCalculation(params: SimulationParams, userProfile: any, targetBankName?: string): Promise<string> {
-    if (params.taxaJurosMensal && params.taxaJurosMensal > 0.1) {
-        params.taxaJurosMensal = params.taxaJurosMensal / 100;
-    }
-    if (!params.taxaJurosMensal) {
-        const n = params.parcelasRestantes || ((params.prazoTotal || 0) - (params.parcelasPagas || 0));
-        if ((params.valorParcela || 0) > 0 && (params.saldoDevedor || 0) > 0 && n > 0) {
-            params.taxaJurosMensal = calcRate(params.saldoDevedor!, params.valorParcela!, n);
-        }
-    }
-
-    // Set parcelas pagas for simulation engine
-    if (params.prazoTotal && params.parcelasRestantes && !params.parcelasPagas) {
-        params.parcelasPagas = params.prazoTotal - params.parcelasRestantes;
-    }
-
-    const db = getAdminDb();
-    if (!db) return "⚠️ Erro de conexão com o banco de dados.";
-    const [bSnap, rSnap, sSnap] = await Promise.all([
-        db.collection('bankRules').get(), db.collection('generalRules').get(), db.collection('settings').doc('admin').get()
-    ]);
-    const banks = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const rules = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const sd = sSnap.exists ? sSnap.data() : {};
-    const pp = sd?.bankPriorities || {};
-    const pi = sd?.bankInstallments || {};
-
-    const offers = calculateOffers(params, banks, rules, pp, pi, userProfile);
-    console.log(`[Gutto] Total Offers: ${offers.length}`);
-
-    if (offers.length === 0) {
-        return "❌ Infelizmente, analisando as regras dos bancos, não encontramos nenhuma oferta vantajosa ou compatível com esses dados no momento.";
-    }
-
-    const groups = offers.reduce((a, o) => { if (!a[o.name]) a[o.name] = { bankName: o.name, offers: [] }; a[o.name].offers.push(o); return a; }, {} as Record<string, any>);
-
-    // Ordenar ofertas de cada banco pelo MENOR troco (a.valorTroco - b.valorTroco)
-    const sorted = Object.values(groups).map((g: any) => {
-        const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
-        return { ...g, offers: s, topOffer: s[0] };
-    })
-        // Ordenar bancos pela prioridade e depois pelo MENOR troco
-        .sort((a: any, b: any) => {
-            const bankIdA = a.topOffer.id?.split('-')[0];
-            const bankIdB = b.topOffer.id?.split('-')[0];
-            const pA = pp[bankIdA] ?? a.topOffer.priority ?? 999;
-            const pB = pp[bankIdB] ?? b.topOffer.priority ?? 999;
-            const finalPA = pA === 0 ? 999 : pA;
-            const finalPB = pB === 0 ? 999 : pB;
-            if (finalPA !== finalPB) return finalPA - finalPB;
-            return a.topOffer.valorTroco - b.topOffer.valorTroco;
-        });
-
-    const matchedBank = targetBankName
-        ? sorted.find((g: any) => g.bankName.toLowerCase().includes(targetBankName.toLowerCase()) || targetBankName.toLowerCase().includes(g.bankName.toLowerCase()))
-        : null;
-
-    const top = matchedBank ? matchedBank.topOffer : (sorted.length > 0 ? sorted[0].topOffer : null);
-    const bankNames = sorted.map((g: any) => g.bankName);
-
     try {
-        await db.collection('simulations').doc(randomUUID()).set({
-            userId: userProfile.uid || 'bot', userName: userProfile.name || 'WhatsApp',
-            userAvatar: userProfile.logoUrl || userProfile.avatarUrl || '',
-            convenio: params.convenio, bancoAtual: params.bancoAtual, valorParcela: params.valorParcela,
-            saldoDevedor: params.saldoDevedor, selectedOffer: top, topOffer: top?.name || '',
-            topOfferContrato: top?.valorContrato || 0, topOfferTroco: top?.valorTroco || 0,
-            topOfferTaxa: top?.novaTaxaPortabilidade || 0, topOfferTabela: top?.tabela || '',
-            createdAt: new Date(), timestamp: Date.now(), origin: 'whatsapp'
-        });
-    } catch (e) { console.error("Error saving simulation:", e); }
+        if (params.taxaJurosMensal && params.taxaJurosMensal > 0.1) {
+            params.taxaJurosMensal = params.taxaJurosMensal / 100;
+        }
+        if (!params.taxaJurosMensal) {
+            const n = params.parcelasRestantes || ((params.prazoTotal || 0) - (params.parcelasPagas || 0));
+            if ((params.valorParcela || 0) > 0 && (params.saldoDevedor || 0) > 0 && n > 0) {
+                params.taxaJurosMensal = calcRate(params.saldoDevedor!, params.valorParcela!, n);
+            }
+        }
 
-    return formatResult(top, bankNames, sorted, params);
+        // Set parcelas pagas for simulation engine
+        if (params.prazoTotal && params.parcelasRestantes && !params.parcelasPagas) {
+            params.parcelasPagas = params.prazoTotal - params.parcelasRestantes;
+        }
+
+        const db = getAdminDb();
+        if (!db) return "⚠️ Erro de conexão com o banco de dados.";
+        const promotoraId = userProfile?.role === 'admin' ? 'admin' : (userProfile?.role === 'promotora' ? userProfile?.uid : userProfile?.createdBy || 'admin');
+        const [bSnap, rSnap, sSnap] = await Promise.all([
+            db.collection('bankRules').get(), db.collection('generalRules').get(), db.collection('settings').doc(promotoraId).get()
+        ]);
+        const banks = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const rules = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const sd = sSnap.exists ? sSnap.data() : {};
+        const pp = sd?.bankPriorities || {};
+        const pi = sd?.bankInstallments || {};
+
+        const offers = calculateOffers(params, banks, rules, pp, pi, userProfile);
+        console.log(`[Gutto] Total Offers: ${offers.length}`);
+
+        if (offers.length === 0) {
+            return "❌ Infelizmente, analisando as regras dos bancos, não encontramos nenhuma oferta vantajosa ou compatível com esses dados no momento.";
+        }
+
+        const groups = offers.reduce((a, o) => { if (!a[o.name]) a[o.name] = { bankName: o.name, offers: [] }; a[o.name].offers.push(o); return a; }, {} as Record<string, any>);
+
+        // Ordenar ofertas de cada banco pelo MENOR troco (a.valorTroco - b.valorTroco)
+        const sorted = Object.values(groups).map((g: any) => {
+            const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
+            return { ...g, offers: s, topOffer: s[0] };
+        })
+            // Ordenar bancos pela prioridade e depois pelo MENOR troco
+            .sort((a: any, b: any) => {
+                const bankIdA = a.topOffer.id?.split('-')[0];
+                const bankIdB = b.topOffer.id?.split('-')[0];
+                const pA = pp[bankIdA] ?? a.topOffer.priority ?? 999;
+                const pB = pp[bankIdB] ?? b.topOffer.priority ?? 999;
+                const finalPA = pA === 0 ? 999 : pA;
+                const finalPB = pB === 0 ? 999 : pB;
+                if (finalPA !== finalPB) return finalPA - finalPB;
+                return a.topOffer.valorTroco - b.topOffer.valorTroco;
+            });
+
+        const matchedBank = targetBankName
+            ? sorted.find((g: any) => g.bankName.toLowerCase().includes(targetBankName.toLowerCase()) || targetBankName.toLowerCase().includes(g.bankName.toLowerCase()))
+            : null;
+
+        const top = matchedBank ? matchedBank.topOffer : (sorted.length > 0 ? sorted[0].topOffer : null);
+        const bankNames = sorted.map((g: any) => g.bankName);
+
+        try {
+            await db.collection('simulations').doc(randomUUID()).set({
+                userId: userProfile.uid || 'bot', userName: userProfile.name || 'WhatsApp',
+                userAvatar: userProfile.logoUrl || userProfile.avatarUrl || '',
+                convenio: params.convenio, bancoAtual: params.bancoAtual, valorParcela: params.valorParcela,
+                saldoDevedor: params.saldoDevedor, selectedOffer: top, topOffer: top?.name || '',
+                topOfferContrato: top?.valorContrato || 0, topOfferTroco: top?.valorTroco || 0,
+                topOfferTaxa: top?.novaTaxaPortabilidade || 0, topOfferTabela: top?.tabela || '',
+                createdAt: new Date(), timestamp: Date.now(), origin: 'whatsapp'
+            });
+        } catch (e) { console.error("Error saving simulation:", e); }
+
+        return formatResult(top, bankNames, sorted, params);
+    } catch (err: any) {
+        console.error("Critical calculation error:", err);
+        return `⚠️ Ops! Tivemos um erro ao processar as propostas: ${err.message || err}. Por favor, contate o administrador.`;
+    }
+}
 }
 
 export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}) {
