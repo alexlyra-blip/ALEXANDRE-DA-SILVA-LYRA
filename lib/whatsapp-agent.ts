@@ -320,7 +320,6 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
         return `⚠️ Ops! Tivemos um erro ao processar as propostas: ${err.message || err}. Por favor, contate o administrador.`;
     }
 }
-}
 
 export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}) {
     const ai = getAI();
