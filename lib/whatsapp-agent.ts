@@ -1,13 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import { getAI } from '@/lib/ai-config';
 import { getAdminDb } from "@/lib/firebase-admin";
 import { calculateOffers, SimulationParams } from "@/lib/simulation-engine";
 import { randomUUID } from "crypto";
 
-const getAI = () => {
-    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-    if (!apiKey || apiKey.includes("MY_GEMINI")) console.warn("Missing API Key");
-    return new GoogleGenAI({ apiKey });
-};
+const ai = getAI();
 
 const calculateLoanOffersTool = {
     name: "calculate_client_loan_offers",
@@ -196,11 +193,11 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
     // Código do Benefício / Sub-convênio / Situação Funcional
     if (
         (!params.codigoBeneficio && !params.subConvenio) &&
-        (prev.includes('benefício') || prev.includes('beneficio') || 
-         prev.includes('espécie') || prev.includes('especie') || 
-         prev.includes('sub-convênio') || prev.includes('sub-convenio') || 
-         prev.includes('órgão') || prev.includes('orgao') ||
-         prev.includes('funcional') || prev.includes('situação') || prev.includes('situacao'))
+        (prev.includes('benefício') || prev.includes('beneficio') ||
+            prev.includes('espécie') || prev.includes('especie') ||
+            prev.includes('sub-convênio') || prev.includes('sub-convenio') ||
+            prev.includes('órgão') || prev.includes('orgao') ||
+            prev.includes('funcional') || prev.includes('situação') || prev.includes('situacao'))
     ) {
         const m = txt.match(/(\d+)/);
         if (m && !prev.includes('funcional') && !prev.includes('situação') && !prev.includes('situacao')) {
@@ -462,7 +459,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         let matchingRules: any[] = [];
         for (const b of cachedBankRules) {
             const bName = (b.name || '').toLowerCase();
-            
+
             // 1. Correspondência por nome completo
             if (bName.length > 2 && lower.includes(bName)) {
                 matchingRules.push(b);
@@ -492,8 +489,8 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
             if (match) {
                 const searchName = match[1].trim();
                 if (searchName.length >= 2) {
-                    matchingRules = cachedBankRules.filter(b => 
-                        (b.name || '').toLowerCase().includes(searchName) || 
+                    matchingRules = cachedBankRules.filter(b =>
+                        (b.name || '').toLowerCase().includes(searchName) ||
                         searchName.includes((b.name || '').toLowerCase())
                     );
                 }
@@ -518,7 +515,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
             // Se houver múltiplas regras e não sabemos o convênio, perguntamos ao usuário de forma amigável
             const conveniosDisponiveis = Array.from(new Set(matchingRules.map(r => r.convenio || 'INSS')));
             const bankName = matchingRules[0].name.toUpperCase();
-            
+
             let m = `📋 Encontrei o banco *${bankName}* cadastrado para mais de um convênio.\n\n`;
             m += `Por favor, digite qual convênio você gostaria de consultar:\n`;
             conveniosDisponiveis.forEach(c => {

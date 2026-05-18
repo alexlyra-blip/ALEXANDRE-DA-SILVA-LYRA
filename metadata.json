@@ -1,5 +1,8 @@
 {
   "name": "SIMULADOR DE PORTABILIDADE",
   "description": "Plataforma completa para simulação e gestão de portabilidade de crédito consignado com assistente IA via WhatsApp.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

@@ -178,6 +178,7 @@ export function calculateOffers(
       requireTrocoMaiorQue5PorcentoEndividamento: rawBank.requireTrocoMaiorQue5PorcentoEndividamento !== undefined ? rawBank.requireTrocoMaiorQue5PorcentoEndividamento : (rawBank.require_troco_maior_que_5_porcento_endividamento !== undefined ? rawBank.require_troco_maior_que_5_porcento_endividamento : false),
       excludedBenefits: rawBank.excludedBenefits !== undefined ? rawBank.excludedBenefits : (rawBank.excluded_benefits !== undefined ? rawBank.excluded_benefits : []),
       nonAcceptedBanks: rawBank.nonAcceptedBanks !== undefined ? rawBank.nonAcceptedBanks : (rawBank.non_accepted_banks !== undefined ? rawBank.non_accepted_banks : []),
+      nonPortableBanks: rawBank.nonPortableBanks !== undefined ? rawBank.nonPortableBanks : (rawBank.non_portable_banks !== undefined ? rawBank.non_portable_banks : []),
       specificInstallmentRules: rawBank.specificInstallmentRules !== undefined ? rawBank.specificInstallmentRules : (rawBank.specific_installment_rules !== undefined ? rawBank.specific_installment_rules : []),
       logoUrl: rawBank.logoUrl !== undefined ? rawBank.logoUrl : (rawBank.logo_url !== undefined ? rawBank.logo_url : ''),
     };
@@ -245,6 +246,9 @@ export function calculateOffers(
 
     // Non-accepted banks (Origins)
     if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) return;
+
+    // Destination restriction: banks that cannot be ported to any other bank
+    if (banks.some(r => r.nonPortableBanks && r.nonPortableBanks.some((b: string) => checkBankMatch(b, bank.name)))) return;
 
     // Prevent same-bank portability
     if (checkBankMatch(bank.name, bancoAtual)) return;
