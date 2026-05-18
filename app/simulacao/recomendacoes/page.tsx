@@ -90,7 +90,7 @@ export default function Recomendacoes() {
   const [activeSimulationIndex, setActiveSimulationIndex] = useState(0);
   const [showFilterLog, setShowFilterLog] = useState(false);
   const [isAISummarizing, setIsAISummarizing] = useState(false);
-  const { banks, generalRules, promotoraPriorities, promotoraInstallments, isLoaded } = useRules();
+  const { banks, generalRules, promotoraPriorities, promotoraInstallments, nonPortableBanks, isLoaded } = useRules();
   const { profile } = useAuth();
   const savedSimulationIds = useRef<Set<string>>(new Set());
 
@@ -302,6 +302,13 @@ export default function Recomendacoes() {
         parcelasRestantes,
         isCliente60Mais
       } = currentSim;
+
+      // Check if bancoAtual is a globally blocked Non-Portable Bank
+      if (nonPortableBanks && nonPortableBanks.some((b: string) => checkBankMatch(b, bancoAtual))) {
+        newOffersMap[simulationId] = [];
+        newReasonsMap[simulationId] = [{ bankName: bancoAtual || 'Banco', reason: "Este banco não pode ser portado por nenhuma instituição cadastrada." }];
+        return;
+      }
 
       const originalRate = currentSim.taxaJurosMensal ? currentSim.taxaJurosMensal * 100 : 0;
       const effectiveN = parcelasRestantes || (prazoTotal > 0 && parcelasPagas !== undefined ? prazoTotal - parcelasPagas : 0);
@@ -548,6 +555,18 @@ export default function Recomendacoes() {
               if (typeof val === 'number') return val;
               return parseFloat(String(val).replace(',', '.')) || 0;
             };
+
+            // Table Age Limits Validation
+            const tableMinAge = parseRate(tabela.minAge || tabela.idadeMinima || 0);
+            const tableMaxAge = parseRate(tabela.maxAge || tabela.idadeMaxima || 0);
+            if (tableMinAge > 0 && idade < tableMinAge) {
+              log(`Passe da tabela ignorado por idade mínima: ${idade} (Mínimo: ${tableMinAge})`, tabela.nome);
+              return;
+            }
+            if (tableMaxAge > 0 && idade > tableMaxAge) {
+              log(`Passe da tabela ignorado por idade máxima: ${idade} (Máximo: ${tableMaxAge})`, tabela.nome);
+              return;
+            }
 
             const coef = tabela.coeficiente;
             if (!coef || coef <= 0) {

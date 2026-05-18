@@ -111,7 +111,8 @@ export function calculateOffers(
   generalRules: any[],
   promotoraPriorities: Record<string, number> = {},
   promotoraInstallments: Record<string, number> = {},
-  profile: any = {}
+  profile: any = {},
+  nonPortableBanks: string[] = []
 ): Offer[] {
   const {
     idade,
@@ -127,6 +128,11 @@ export function calculateOffers(
     isCliente60Mais,
     isAnalfabeto
   } = params;
+
+  // Global Non-portable bank check
+  if (nonPortableBanks && nonPortableBanks.some((b: string) => checkBankMatch(b, bancoAtual))) {
+    return [];
+  }
 
   const originalRate = params.taxaJurosMensal ? params.taxaJurosMensal * 100 : 0;
   
@@ -282,6 +288,12 @@ export function calculateOffers(
           if (typeof val === 'number') return val;
           return parseFloat(String(val).replace(',', '.')) || 0;
         };
+
+        // Table Age Limits Validation
+        const tableMinAge = parseRate(tabela.minAge || tabela.idadeMinima || 0);
+        const tableMaxAge = parseRate(tabela.maxAge || tabela.idadeMaxima || 0);
+        if (tableMinAge > 0 && idade < tableMinAge) return; // skip table
+        if (tableMaxAge > 0 && idade > tableMaxAge) return; // skip table
 
         const coef = parseRate(tabela.coeficiente);
         if (coef <= 0) return;

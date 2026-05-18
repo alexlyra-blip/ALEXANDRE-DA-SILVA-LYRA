@@ -332,7 +332,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
         const pp = sd?.bankPriorities || {};
         const pi = sd?.bankInstallments || {};
 
-        const offers = calculateOffers(params, banks, rules, pp, pi, userProfile);
+        const offers = calculateOffers(params, banks, rules, pp, pi, userProfile, sd?.nonPortableBanks || []);
         console.log(`[Gutto] Total Offers: ${offers.length}`);
 
         if (offers.length === 0) {

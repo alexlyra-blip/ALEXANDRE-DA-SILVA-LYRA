@@ -78,7 +78,7 @@ export default function RegrasBanco() {
   const [convenio, setConvenio] = useState<'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO'>('INSS');
   const [subConvenio, setSubConvenio] = useState('');
   const [isActive, setIsActive] = useState(true);
-  const [tabelas, setTabelas] = useState([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '' }]);
+  const [tabelas, setTabelas] = useState([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '', idadeMinima: '', idadeMaxima: '' }]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Auto-populate from simulation data
@@ -158,19 +158,19 @@ export default function RegrasBanco() {
     setConvenio('INSS');
     setSubConvenio('');
     setTaxaContratoAtualPreview('1.85');
-    setTabelas([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '' }]);
+    setTabelas([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '', idadeMinima: '', idadeMaxima: '' }]);
     setErrors({});
   }, []);
 
   const addTabela = () => {
-    setTabelas([...tabelas, { nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '' }]);
+    setTabelas([...tabelas, { nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '', idadeMinima: '', idadeMaxima: '' }]);
   };
 
   const removeTabela = (index: number) => {
     if (tabelas.length > 1) {
       setTabelas(tabelas.filter((_, i) => i !== index));
     } else {
-      setTabelas([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', useMinTicket: true, useTaxaPonderada: true }]);
+      setTabelas([{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', useMinTicket: true, useTaxaPonderada: true, idadeMinima: '', idadeMaxima: '' }]);
     }
   };
 
@@ -381,7 +381,9 @@ export default function RegrasBanco() {
           useTaxaPonderada: t.useTaxaPonderada !== false,
           prazoRefinPort: t.prazoRefinPort ? parseInt(t.prazoRefinPort as any) : undefined,
           minInstallmentValue: parseNumeric(t.minInstallmentValue),
-          maxInstallmentValue: parseNumeric(t.maxInstallmentValue)
+          maxInstallmentValue: parseNumeric(t.maxInstallmentValue),
+          idadeMinima: t.idadeMinima ? parseInt(t.idadeMinima as any) : undefined,
+          idadeMaxima: t.idadeMaxima ? parseInt(t.idadeMaxima as any) : undefined
         }))
       };
 
@@ -487,8 +489,10 @@ export default function RegrasBanco() {
       useTaxaPonderada: t.useTaxaPonderada !== false,
       prazoRefinPort: t.prazoRefinPort?.toString() || '',
       minInstallmentValue: t.minInstallmentValue?.toString() || '',
-      maxInstallmentValue: t.maxInstallmentValue?.toString() || ''
-    })) : [{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '' }]);
+      maxInstallmentValue: t.maxInstallmentValue?.toString() || '',
+      idadeMinima: t.idadeMinima?.toString() || '',
+      idadeMaxima: t.idadeMaxima?.toString() || ''
+    })) : [{ nome: '', coeficiente: '', minTicket: '', taxaTabela: '', taxaDiferencial: '', ajusteTaxaPonderada: '', useMinTicket: true, useTaxaPonderada: true, prazoRefinPort: '', minInstallmentValue: '', maxInstallmentValue: '', idadeMinima: '', idadeMaxima: '' }]);
     setIsBankModalOpen(true);
   };
 
@@ -1538,7 +1542,6 @@ export default function RegrasBanco() {
                             className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-black focus:ring-2 focus:ring-primary/10 outline-none transition-all shadow-sm"
                             placeholder="0.00"
                           />
-                          {errors[`tabela_${index}_min_parcela`] && <p className="text-[8px] text-red-500 ml-1 font-bold">{errors[`tabela_${index}_min_parcela`]}</p>}
                         </div>
                         <div className="space-y-1">
                           <label className="text-[8px] font-black uppercase tracking-widest text-slate-500">Parcela Máxima (R$)</label>
@@ -1550,7 +1553,29 @@ export default function RegrasBanco() {
                             className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-black focus:ring-2 focus:ring-primary/10 outline-none transition-all shadow-sm"
                             placeholder="0.00"
                           />
-                          {errors[`tabela_${index}_max_parcela`] && <p className="text-[8px] text-red-500 ml-1 font-bold">{errors[`tabela_${index}_max_parcela`]}</p>}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 sm:col-span-2 md:col-span-12">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500">Idade Mínima (Tabela)</label>
+                          <input 
+                            type="number" 
+                            value={tabela.idadeMinima || ''} 
+                            onChange={e => handleTabelaChange(index, 'idadeMinima', e.target.value)} 
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-black focus:ring-2 focus:ring-primary/10 outline-none transition-all shadow-sm"
+                            placeholder="Ex: 18"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-slate-500">Idade Máxima (Tabela)</label>
+                          <input 
+                            type="number" 
+                            value={tabela.idadeMaxima || ''} 
+                            onChange={e => handleTabelaChange(index, 'idadeMaxima', e.target.value)} 
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-black focus:ring-2 focus:ring-primary/10 outline-none transition-all shadow-sm"
+                            placeholder="Ex: 75"
+                          />
                         </div>
                       </div>
 

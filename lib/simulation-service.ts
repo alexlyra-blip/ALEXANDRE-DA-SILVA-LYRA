@@ -47,6 +47,13 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
   const generalRulesSnapshot = await getDocs(collection(db, 'generalRules'));
   const generalRules = generalRulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
 
+  // Fetch admin settings for priorities, installments, and non-portable banks
+  const settingsSnapshot = await getDocs(collection(db, 'settings'));
+  const adminSettings = settingsSnapshot.docs.find(d => d.id === 'admin')?.data() || {};
+  const nonPortableBanks = adminSettings.nonPortableBanks || [];
+  const pp = adminSettings.bankPriorities || {};
+  const pi = adminSettings.bankInstallments || {};
+
   // Construct SimulationParams for the core engine
   const params: SimulationParams = {
     idade: input.idade,
@@ -66,7 +73,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
   };
 
   // Run the central simulation engine
-  const rawOffers = calculateOffers(params, banks, generalRules);
+  const rawOffers = calculateOffers(params, banks, generalRules, pp, pi, {}, nonPortableBanks);
 
   // Map raw offers to the expected Offer structure for backward compatibility
   return rawOffers.map(o => ({

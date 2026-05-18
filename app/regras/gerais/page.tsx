@@ -16,8 +16,10 @@ export default function RegrasGeraisPage() {
     banks, 
     promotoraPriorities, 
     promotoraInstallments, 
+    nonPortableBanks,
     updatePromotoraPriority, 
-    updatePromotoraInstallment 
+    updatePromotoraInstallment,
+    updateNonPortableBanks
   } = useRules();
 
   const allOriginBanks = Array.from(new Set([
@@ -52,6 +54,7 @@ export default function RegrasGeraisPage() {
   // States Blocked Banks
   const [blockedBanks, setBlockedBanks] = useState<string[]>([]);
   const [blockedBankSelection, setBlockedBankSelection] = useState('');
+  const [nonPortableBankSelection, setNonPortableBankSelection] = useState('');
   
   // States Installments Form
   const [installmentsBankSelection, setInstallmentsBankSelection] = useState('');
@@ -311,6 +314,79 @@ export default function RegrasGeraisPage() {
                         type="button" 
                         onClick={() => updatePromotoraInstallment(bankName, 0)} 
                         className="ml-1 hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* BANCO NÃO PORTADO SECTION */}
+          <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden mt-6">
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+              <h2 className="font-bold flex items-center gap-2">
+                <Landmark className="w-5 h-5 text-red-500" />
+                Banco não Portado (Regra Geral)
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Esse banco selecionado na simulação não será portado por nenhum banco cadastrado.</p>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="flex gap-2">
+                <select 
+                  className="flex-1 min-w-[150px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+                  value={nonPortableBankSelection}
+                  onChange={e => setNonPortableBankSelection(e.target.value)}
+                >
+                  <option value="">Selecione um banco...</option>
+                  {allOriginBanks.filter(b => !nonPortableBanks.includes(b)).map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={isSaving || !nonPortableBankSelection}
+                  onClick={async () => {
+                    if (nonPortableBankSelection) {
+                      setIsSaving(true);
+                      try {
+                        await updateNonPortableBanks([...nonPortableBanks, nonPortableBankSelection]);
+                        setNonPortableBankSelection('');
+                      } catch (e) {
+                        console.error(e);
+                      } finally {
+                        setIsSaving(false);
+                      }
+                    }
+                  }}
+                  className="bg-primary hover:bg-primary/90 disabled:opacity-50 text-white p-2 rounded-xl transition-all flex items-center justify-center shrink-0"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mt-4 text-xs font-bold">
+                {nonPortableBanks.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4 w-full">Nenhum banco não portado configurado.</p>
+                ) : (
+                  nonPortableBanks.map(bankName => (
+                    <span key={bankName} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400">
+                      {bankName}
+                      <button 
+                        type="button" 
+                        onClick={async () => {
+                          setIsSaving(true);
+                          try {
+                            await updateNonPortableBanks(nonPortableBanks.filter(b => b !== bankName));
+                          } catch (e) {
+                            console.error(e);
+                          } finally {
+                            setIsSaving(false);
+                          }
+                        }} 
+                        className="ml-1 hover:text-red-700 transition-colors"
                       >
                         <X className="w-3 h-3" />
                       </button>

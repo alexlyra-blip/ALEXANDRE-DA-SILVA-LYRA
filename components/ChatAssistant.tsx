@@ -29,15 +29,18 @@ export default function ChatAssistant() {
     }
   }, [loading, isOpen, isMinimized]);
 
-  // Format bold text (*text* or **text**)
+  // Format bold text (*text* or **text**) and italic text (_text_)
   const formatMessage = (text: string) => {
-    const parts = text.split(/(\*\*?[^*]+\*\*?)/g);
+    const parts = text.split(/(\*\*?[^*]+\*\*?|_[^_]+_)/g);
     return parts.map((part, index) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         return <strong key={index} className="font-bold">{part.slice(2, -2)}</strong>;
       }
       if (part.startsWith('*') && part.endsWith('*')) {
         return <strong key={index} className="font-bold">{part.slice(1, -1)}</strong>;
+      }
+      if (part.startsWith('_') && part.endsWith('_')) {
+        return <em key={index} className="italic not-italic-none">{part.slice(1, -1)}</em>;
       }
       return part;
     });
