@@ -165,12 +165,29 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
     }
     // Estado (AP, PB, TO, RR)
     if (!params.estado && (prev.includes('estado') || prev.includes('reside') || prev.includes('mora'))) {
-        const stateMatch = txt.match(/\b(ap|pb|to|rr)\b/);
-        if (stateMatch) {
-            params.estado = stateMatch[1].toUpperCase();
-            if (params.idade >= 60) {
-                params.isCliente60Mais = true;
+        const stateNormalized = txt.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Remove acentos
+        if (stateNormalized.includes("amapa") || /\bap\b/.test(stateNormalized)) {
+            params.estado = "AP";
+        } else if (stateNormalized.includes("paraiba") || /\bpb\b/.test(stateNormalized)) {
+            params.estado = "PB";
+        } else if (stateNormalized.includes("tocantins") || /\bto\b/.test(stateNormalized)) {
+            params.estado = "TO";
+        } else if (stateNormalized.includes("roraima") || /\brr\b/.test(stateNormalized)) {
+            params.estado = "RR";
+        } else {
+            // Se o usuário falou outro estado (ex: "sao paulo", "sp", "rio de janeiro", "rj", "outro")
+            const stateAcronymMatch = stateNormalized.match(/\b([a-z]{2})\b/);
+            if (stateAcronymMatch) {
+                params.estado = stateAcronymMatch[1].toUpperCase();
+            } else if (stateNormalized.includes("outro") || stateNormalized.includes("outra")) {
+                params.estado = "Outro";
+            } else {
+                // Caso contrário, salva o texto limpo digitado
+                params.estado = userMsg.trim().substring(0, 20);
             }
+        }
+        if (params.idade >= 60) {
+            params.isCliente60Mais = true;
         }
     }
     // Código do Benefício / Sub-convênio / Situação Funcional
@@ -324,12 +341,12 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
 
         const groups = offers.reduce((a, o) => { if (!a[o.name]) a[o.name] = { bankName: o.name, offers: [] }; a[o.name].offers.push(o); return a; }, {} as Record<string, any>);
 
-        // Ordenar ofertas de cada banco pelo MENOR troco (a.valorTroco - b.valorTroco)
+        // Ordenar ofertas de cada banco pelo MAIOR troco (b.valorTroco - a.valorTroco)
         const sorted = Object.values(groups).map((g: any) => {
-            const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
+            const s = g.offers.sort((a: any, b: any) => b.valorTroco - a.valorTroco);
             return { ...g, offers: s, topOffer: s[0] };
         })
-            // Ordenar bancos pela prioridade e depois pelo MENOR troco
+            // Ordenar bancos pela prioridade e depois pelo MAIOR troco
             .sort((a: any, b: any) => {
                 const bankIdA = a.topOffer.id?.split('-')[0];
                 const bankIdB = b.topOffer.id?.split('-')[0];
@@ -338,7 +355,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
                 const finalPA = pA === 0 ? 999 : pA;
                 const finalPB = pB === 0 ? 999 : pB;
                 if (finalPA !== finalPB) return finalPA - finalPB;
-                return a.topOffer.valorTroco - b.topOffer.valorTroco;
+                return b.topOffer.valorTroco - a.topOffer.valorTroco;
             });
 
         const matchedBank = targetBankName
@@ -541,6 +558,11 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     if (extracted.saldoDevedor) dataSummary += `• Saldo Devedor: R$ ${fmt(extracted.saldoDevedor)}\n`;
     if (extracted.taxaJurosMensal) dataSummary += `• Taxa de Juros: ${(extracted.taxaJurosMensal * 100).toFixed(2)}%\n`;
 
+    const showStateQuestion = extracted.idade >= 60 && !extracted.estado && !extracted.bancoAtual && !extracted.prazoTotal;
+    const step3Text = showStateQuestion
+        ? "3. Se Idade for maior ou igual a 60 anos e o Estado ainda NÃO foi coletado: Pergunta em qual estado o cliente reside (Amapá - AP, Paraíba - PB, Tocantins - TO ou Roraima - RR? Se for outro, pode apenas dizer qual)."
+        : "3. (PULADO - Estado não necessário ou já coletado)";
+
     const sysInst = `Você é o Gutto, assistente especialista em portabilidade do portal.
 
 SOBRE REGRAS, ROTEIROS OU RESUMOS DE PORTABILIDADE:
@@ -557,7 +579,7 @@ VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EX
 1. Convênio (INSS, SIAPE, Governo, Forças Armadas ou CLT Privado)
    - IMPORTANTE: Se o convênio não constar na lista de dados coletados, você DEVE pedir o convênio e listar estas 5 opções exatas de convênio para o cliente escolher.
 2. Idade
-3. Se Idade for maior ou igual a 60 anos: Pergunta em qual estado o cliente reside (AP, PB, TO ou RR)? Se idade < 60, PULE esta pergunta.
+${step3Text}
 4. Para o próximo dado:
    - Se o convênio for INSS, pergunte o Código do Benefício.
    - Se o convênio for SIAPE, pergunte exatamente: "Como o seu convênio é SIAPE, qual é a sua Situação Funcional?\nS1 - Ativo/Aposentado\nS2 - Pensionista"

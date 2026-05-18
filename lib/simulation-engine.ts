@@ -208,8 +208,7 @@ export function calculateOffers(
         if (!bank.acceptsOver60Invalidez) return;
       } else {
         const minAgeDisability = bank.invalidezAgeYears || 0;
-        if (minAgeDisability === 0) return;
-        if (idade < minAgeDisability) return;
+        if (minAgeDisability > 0 && idade < minAgeDisability) return;
         const requiredMonths = (bank.minBenefitTimeYears || 0) * 12 + (bank.minBenefitTimeMonths || 0);
         if (requiredMonths > 0 && benefitTimeMonths < requiredMonths) return;
       }
@@ -298,6 +297,14 @@ export function calculateOffers(
         
         // Check Min Troco
         if (bankMinTroco > 0 && valorTroco < bankMinTroco) return;
+
+        // Check Min/Max Installment Value
+        const tableMinInst = parseRate(tabela.minInstallmentValue);
+        const tableMaxInst = parseRate(tabela.maxInstallmentValue);
+        const effectiveMinInst = tableMinInst > 0 ? tableMinInst : (parseRate(bank.minInstallmentValue) || 0);
+
+        if (effectiveMinInst > 0 && valorParcela < effectiveMinInst) return;
+        if (tableMaxInst > 0 && valorParcela > tableMaxInst) return;
 
         // Rates and Validations
         const tDiferencial = parseRate(tabela.taxaDiferencial);
