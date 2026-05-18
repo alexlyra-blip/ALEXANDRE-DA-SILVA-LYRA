@@ -100,7 +100,7 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
     const prev = lastQuestion.toLowerCase();
 
     // Convênio
-    if (prev === '' || prev.includes('convênio') || prev.includes('convenio')) {
+    if (!params.convenio && (prev === '' || prev.includes('convênio') || prev.includes('convenio'))) {
         if (/\binss\b/.test(txt)) params.convenio = 'INSS';
         else if (/\bsiape\b/.test(txt)) params.convenio = 'SIAPE';
         else if (/\bgoverno\b/.test(txt)) params.convenio = 'GOVERNO';
@@ -108,12 +108,12 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
         else if (/\bclt\b/.test(txt)) params.convenio = 'CLT PRIVADO';
     }
     // Idade
-    if (prev.includes('idade') || prev.includes('anos')) {
+    if (!params.idade && (prev.includes('idade') || prev.includes('anos'))) {
         const m = txt.match(/(\d{2})/);
         if (m && parseInt(m[1]) >= 18 && parseInt(m[1]) <= 100) params.idade = parseInt(m[1]);
     }
     // Estado (AP, PB, TO, RR)
-    if (prev.includes('estado') || prev.includes('reside') || prev.includes('mora')) {
+    if (!params.estado && (prev.includes('estado') || prev.includes('reside') || prev.includes('mora'))) {
         const stateMatch = txt.match(/\b(ap|pb|to|rr)\b/);
         if (stateMatch) {
             params.estado = stateMatch[1].toUpperCase();
@@ -124,11 +124,12 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
     }
     // Código do Benefício / Sub-convênio / Situação Funcional
     if (
-        prev.includes('benefício') || prev.includes('beneficio') || 
-        prev.includes('espécie') || prev.includes('especie') || 
-        prev.includes('sub-convênio') || prev.includes('sub-convenio') || 
-        prev.includes('órgão') || prev.includes('orgao') ||
-        prev.includes('funcional') || prev.includes('situação') || prev.includes('situacao')
+        (!params.codigoBeneficio && !params.subConvenio) &&
+        (prev.includes('benefício') || prev.includes('beneficio') || 
+         prev.includes('espécie') || prev.includes('especie') || 
+         prev.includes('sub-convênio') || prev.includes('sub-convenio') || 
+         prev.includes('órgão') || prev.includes('orgao') ||
+         prev.includes('funcional') || prev.includes('situação') || prev.includes('situacao'))
     ) {
         const m = txt.match(/(\d+)/);
         if (m && !prev.includes('funcional') && !prev.includes('situação') && !prev.includes('situacao')) {
@@ -147,42 +148,42 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
         }
     }
     // Analfabeto
-    if (prev.includes('analfabeto')) {
+    if (params.isAnalfabeto === undefined && prev.includes('analfabeto')) {
         params.isAnalfabeto = /sim/.test(txt);
     }
     // Cartões Consignados
-    if (prev.includes('cartões') || prev.includes('cartoes') || prev.includes('rmc') || prev.includes('rcc') || prev.includes('cartão') || prev.includes('cartao')) {
+    if (params.hasTwoCards === undefined && (prev.includes('cartões') || prev.includes('cartoes') || prev.includes('rmc') || prev.includes('rcc') || prev.includes('cartão') || prev.includes('cartao'))) {
         params.hasTwoCards = /sim|2|dois|ambos/.test(txt);
         if (/apenas\s*um|1|só\s*um|so\s*um/.test(txt)) {
             params.hasTwoCards = false;
         }
     }
     // Banco atual
-    if (prev.includes('banco') && (prev.includes('atual') || prev.includes('contrato'))) {
+    if (!params.bancoAtual && prev.includes('banco') && (prev.includes('atual') || prev.includes('contrato'))) {
         params.bancoAtual = userMsg.trim();
     }
     // Prazo total
-    if (prev.includes('prazo total') || prev.includes('prazo do contrato') || (prev.includes('quantas') && prev.includes('total'))) {
+    if (!params.prazoTotal && (prev.includes('prazo total') || prev.includes('prazo do contrato') || (prev.includes('quantas') && prev.includes('total')))) {
         const m = txt.match(/(\d+)/);
         if (m) params.prazoTotal = parseInt(m[1]);
     }
     // Prazo restante
-    if (prev.includes('restante') || prev.includes('faltam') || prev.includes('restantes') || (prev.includes('quantas') && prev.includes('resta'))) {
+    if (!params.parcelasRestantes && (prev.includes('restante') || prev.includes('faltam') || prev.includes('restantes') || (prev.includes('quantas') && prev.includes('resta')))) {
         const m = txt.match(/(\d+)/);
         if (m) params.parcelasRestantes = parseInt(m[1]);
     }
     // Valor da parcela
-    if (prev.includes('parcela') && (prev.includes('valor') || prev.includes('quanto') || prev.includes('mensal'))) {
+    if (!params.valorParcela && prev.includes('parcela') && (prev.includes('valor') || prev.includes('quanto') || prev.includes('mensal'))) {
         const num = parsePortugueseNumber(userMsg);
         if (num !== null) params.valorParcela = num;
     }
     // Saldo devedor
-    if (prev.includes('saldo') || prev.includes('devedor') || prev.includes('dívida') || prev.includes('divida') || prev.includes('debito') || prev.includes('débito') || txt.includes('saldo') || txt.includes('devedor')) {
+    if (!params.saldoDevedor && (prev.includes('saldo') || prev.includes('devedor') || prev.includes('dívida') || prev.includes('divida') || prev.includes('debito') || prev.includes('débito') || txt.includes('saldo') || txt.includes('devedor'))) {
         const num = parsePortugueseNumber(userMsg);
         if (num !== null) params.saldoDevedor = num;
     }
     // Taxa de juros atual
-    if (prev.includes('taxa') || prev.includes('juros') || txt.includes('taxa de juros') || txt.includes('taxa atual')) {
+    if (!params.taxaJurosMensal && (prev.includes('taxa') || prev.includes('juros') || txt.includes('taxa de juros') || txt.includes('taxa atual'))) {
         const match = txt.match(/(?:taxa|juros|atual)\s*(?:de)?\s*([0-9.,]+)%?/);
         if (match) {
             const num = parsePortugueseNumber(match[1]);
