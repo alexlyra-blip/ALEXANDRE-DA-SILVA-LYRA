@@ -223,12 +223,6 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
     if (top.taxaBase !== undefined) {
         m += `• *Taxa do Refin:* ${top.taxaBase.toFixed(2)}% a.m.\n`;
     }
-    if (top.novaTaxaPortabilidade !== undefined) {
-        m += `• *Nova Taxa Port.:* ${top.novaTaxaPortabilidade.toFixed(2)}% a.m.\n`;
-    }
-    if (top.taxaPonderada !== undefined && top.useTaxaPonderada) {
-        m += `• *Taxa Ponderada:* ${top.taxaPonderada.toFixed(2)}% a.m.\n`;
-    }
 
     m += `\n💰 *VALOR DO TROCO LIBERADO:* R$ ${fmt(top.valorTroco)}\n\n`;
 
