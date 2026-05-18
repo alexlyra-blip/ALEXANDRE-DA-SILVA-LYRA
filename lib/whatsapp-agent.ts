@@ -122,13 +122,28 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
             }
         }
     }
-    // Código do Benefício / Sub-convênio
-    if (prev.includes('benefício') || prev.includes('beneficio') || prev.includes('espécie') || prev.includes('especie') || prev.includes('sub-convênio') || prev.includes('sub-convenio') || prev.includes('órgão') || prev.includes('orgao')) {
+    // Código do Benefício / Sub-convênio / Situação Funcional
+    if (
+        prev.includes('benefício') || prev.includes('beneficio') || 
+        prev.includes('espécie') || prev.includes('especie') || 
+        prev.includes('sub-convênio') || prev.includes('sub-convenio') || 
+        prev.includes('órgão') || prev.includes('orgao') ||
+        prev.includes('funcional') || prev.includes('situação') || prev.includes('situacao')
+    ) {
         const m = txt.match(/(\d+)/);
-        if (m) {
+        if (m && !prev.includes('funcional') && !prev.includes('situação') && !prev.includes('situacao')) {
             params.codigoBeneficio = m[1];
         } else {
-            params.subConvenio = userMsg.trim();
+            let sc = userMsg.trim();
+            const scLower = sc.toLowerCase();
+            if (params.convenio === 'SIAPE') {
+                if (scLower.includes('s1') || scLower.includes('ativo') || scLower.includes('aposentado') || scLower.includes('aposentadno')) {
+                    sc = 'S1';
+                } else if (scLower.includes('s2') || scLower.includes('pensão') || scLower.includes('pensao') || scLower.includes('pensionista')) {
+                    sc = 'S2';
+                }
+            }
+            params.subConvenio = sc;
         }
     }
     // Analfabeto
@@ -415,7 +430,11 @@ VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EX
    - IMPORTANTE: Se o convênio não constar na lista de dados coletados, você DEVE pedir o convênio e listar estas 5 opções exatas de convênio para o cliente escolher.
 2. Idade
 3. Se Idade for maior ou igual a 60 anos: Pergunta em qual estado o cliente reside (AP, PB, TO ou RR)? Se idade < 60, PULE esta pergunta.
-4. Código do Benefício (se convênio for INSS) OU Sub-convênio/órgão (se convênio for SIAPE, Governo ou Forças Armadas). Se convênio for CLT Privado, PULE esta pergunta.
+4. Para o próximo dado:
+   - Se o convênio for INSS, pergunte o Código do Benefício.
+   - Se o convênio for SIAPE, pergunte exatamente: "Como o seu convênio é SIAPE, qual é a sua Situação Funcional?\nS1 - Ativo/Aposentado\nS2 - Pensionista"
+   - Se o convênio for Governo ou Forças Armadas, pergunte o Sub-convênio/órgão.
+   - Se convênio for CLT Privado, PULE esta pergunta.
 5. Se o cliente é Analfabeto? (Sim/Não)
 6. Se convênio for INSS: Possui 2 cartões de crédito consignado ativos?
 7. Banco atual onde está o contrato que deseja portar.
