@@ -63,9 +63,12 @@ async function loadRules() {
     }
 }
 
-function getRuleSummary(bankName: string): string {
-    const b = cachedBankRules.find(r => (r.name || '').toLowerCase().includes(bankName.toLowerCase()));
-    if (!b) return `Banco "${bankName}" não encontrado. Disponíveis: ${cachedBankRules.map(r => r.name).join(', ')}`;
+function getRuleSummary(ruleIdOrName: string): string {
+    let b = cachedBankRules.find(r => r.id === ruleIdOrName);
+    if (!b) {
+        b = cachedBankRules.find(r => (r.name || '').toLowerCase().includes(ruleIdOrName.toLowerCase()));
+    }
+    if (!b) return `Banco "${ruleIdOrName}" não encontrado.`;
 
     // Normalização das propriedades do banco conforme padrão do simulation-engine.ts
     const minAge = b.minAge !== undefined ? b.minAge : (b.min_age !== undefined ? b.min_age : 0);
@@ -412,56 +415,84 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     // Interceptar perguntas sobre roteiro, resumo ou regras de portabilidade de um banco
     const isAskingRules = /\b(roteiro|resumo|regras?|portabilidade)\b/i.test(lower);
     if (isAskingRules) {
-        // Encontrar se algum banco foi mencionado na mensagem
-        let matchedBank = null;
+        // Obter extractedParams da sessão por referência
+        let extracted = sessionData.extractedParams || {};
+
+        // Extrair convênio se mencionado no texto
+        let targetConvenio = '';
+        if (/\binss\b/i.test(lower)) targetConvenio = 'INSS';
+        else if (/\bsiape\b/i.test(lower)) targetConvenio = 'SIAPE';
+        else if (/\bgoverno\b/i.test(lower)) targetConvenio = 'GOVERNO';
+        else if (/for[çc]as?\s*armadas?/i.test(lower)) targetConvenio = 'FORÇAS ARMADAS';
+        else if (/\bclt\b/i.test(lower)) targetConvenio = 'CLT PRIVADO';
+
+        // Usar convênio da simulação ativa se nenhum foi fornecido na mensagem
+        if (!targetConvenio && extracted?.convenio) {
+            targetConvenio = extracted.convenio;
+        }
+
+        const BANK_CUSTOM_ALIASES: Record<string, string[]> = {
+            "c6": ["c6", "c6 consig", "c6 consignado", "c6 bank"],
+            "itau": ["itau", "itaú"],
+            "bradesco": ["bradesco"],
+            "santander": ["santander"],
+            "banco do brasil": ["bb", "banco do brasil", "bancodobrasil"],
+            "caixa": ["caixa", "cef", "caixa economica", "caixa econômica"],
+            "pan": ["pan", "banco pan"],
+            "bmg": ["bmg"],
+            "safra": ["safra"],
+            "daycoval": ["daycoval"],
+            "banrisul": ["banrisul"],
+            "picpay": ["picpay"],
+            "brb": ["brb", "banco de brasilia", "banco de brasília"],
+            "crefisa": ["crefisa"],
+            "agibank": ["agibank"],
+            "inbursa": ["inbursa"],
+            "facta": ["facta"],
+            "icred": ["icred"],
+            "happy": ["happy"],
+            "havecred": ["havecred"],
+            "finanto": ["finanto"],
+            "digio": ["digio"],
+            "qualibanking": ["qualibanking"],
+            "total cash": ["total cash", "totalcash"]
+        };
+
+        // Encontrar regras candidatas no banco de dados baseado no nome ou alias
+        let matchingRules: any[] = [];
         for (const b of cachedBankRules) {
             const bName = (b.name || '').toLowerCase();
-            // Evitar matches excessivamente curtos para não ter falsos positivos
-            if (bName.length > 2 && lower.includes(bName)) {
-                matchedBank = b;
-                break;
-            }
             
-            // Verificar também nos aliases
-            const bankCode = b.id?.split('-')[0];
-            const LOCAL_BANK_ALIASES: Record<string, string[]> = {
-              "237": ["bradesco"],
-              "341": ["itau", "itaú"],
-              "033": ["santander"],
-              "001": ["bb", "banco do brasil"],
-              "104": ["caixa"],
-              "623": ["pan", "banco pan"],
-              "311": ["bmg"],
-              "422": ["safra"],
-              "626": ["c6", "c6 consig", "c6 bank"],
-              "707": ["daycoval"],
-              "041": ["banrisul"],
-              "012": ["inbursa"],
-              "069": ["crefisa"],
-              "121": ["agibank"],
-              "079": ["picpay"],
-              "336": ["c6"],
-              "003": ["amazonia", "bas"],
-              "004": ["nordeste", "bnb"],
-              "070": ["brb"],
-            };
-            const aliases = LOCAL_BANK_ALIASES[bankCode] || [];
-            for (const alias of aliases) {
-                if (alias.length > 1 && lower.includes(alias.toLowerCase())) {
-                    matchedBank = b;
-                    break;
+            // 1. Correspondência por nome completo
+            if (bName.length > 2 && lower.includes(bName)) {
+                matchingRules.push(b);
+                continue;
+            }
+
+            // 2. Correspondência por aliases customizados
+            let matchedByAlias = false;
+            for (const [key, aliases] of Object.entries(BANK_CUSTOM_ALIASES)) {
+                if (bName.includes(key)) {
+                    const hasAliasMatch = aliases.some(alias => {
+                        const regex = new RegExp(`\\b${alias}\\b`, 'i');
+                        return regex.test(lower);
+                    });
+                    if (hasAliasMatch) {
+                        matchingRules.push(b);
+                        matchedByAlias = true;
+                        break;
+                    }
                 }
             }
-            if (matchedBank) break;
         }
 
         // Tentar extrair pelo padrão do texto caso não encontrou por correspondência direta
-        if (!matchedBank) {
+        if (matchingRules.length === 0) {
             const match = lower.match(/(?:roteiro|resumo|regras?(?:\s+de\s+portabilidade)?)\s+(?:do\s+|da\s+|de\s+|do\s+banco\s+|da\s+tabela\s+)?([a-z0-9\sáéíóúçãõâêô]+)/i);
             if (match) {
                 const searchName = match[1].trim();
                 if (searchName.length >= 2) {
-                    matchedBank = cachedBankRules.find(b => 
+                    matchingRules = cachedBankRules.filter(b => 
                         (b.name || '').toLowerCase().includes(searchName) || 
                         searchName.includes((b.name || '').toLowerCase())
                     );
@@ -469,20 +500,46 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
             }
         }
 
-        if (matchedBank) {
-            return getRuleSummary(matchedBank.name);
+        // Se encontramos correspondências
+        if (matchingRules.length > 0) {
+            // Se houver apenas uma regra cadastrada para este banco
+            if (matchingRules.length === 1) {
+                return getRuleSummary(matchingRules[0].id);
+            }
+
+            // Se houver múltiplas regras e temos convênio (seja extraído da mensagem ou da sessão ativa)
+            if (targetConvenio) {
+                const rule = matchingRules.find(r => (r.convenio || 'INSS').trim().toUpperCase() === targetConvenio.toUpperCase());
+                if (rule) {
+                    return getRuleSummary(rule.id);
+                }
+            }
+
+            // Se houver múltiplas regras e não sabemos o convênio, perguntamos ao usuário de forma amigável
+            const conveniosDisponiveis = Array.from(new Set(matchingRules.map(r => r.convenio || 'INSS')));
+            const bankName = matchingRules[0].name.toUpperCase();
+            
+            let m = `📋 Encontrei o banco *${bankName}* cadastrado para mais de um convênio.\n\n`;
+            m += `Por favor, digite qual convênio você gostaria de consultar:\n`;
+            conveniosDisponiveis.forEach(c => {
+                m += `👉 *${c}*\n`;
+            });
+            m += `\n_(Exemplo: digite "${bankName} ${conveniosDisponiveis[0]}")_`;
+            return m;
         }
 
         // Se identificou a pergunta sobre regras/roteiro/resumo mas não encontrou o banco ou o banco não está cadastrado no sistema
         const extractMatch = lower.match(/(?:roteiro|resumo|regras?(?:\s+de\s+portabilidade)?)\s+(?:do\s+|da\s+|de\s+|do\s+banco\s+|da\s+tabela\s+)?([a-z0-9\sáéíóúçãõâêô]+)/i);
         const attemptedBank = extractMatch ? extractMatch[1].trim() : '';
         if (attemptedBank && attemptedBank.length >= 2) {
-            return `O banco "${attemptedBank}" não foi encontrado no sistema com regras cadastradas. Bancos disponíveis para consulta:\n${cachedBankRules.map(b => `• ${b.name}`).join('\n')}`;
+            const uniqueNames = Array.from(new Set(cachedBankRules.map(b => b.name.toUpperCase()))).sort();
+            return `O banco "${attemptedBank}" não foi encontrado no sistema com regras cadastradas. Bancos disponíveis para consulta:\n${uniqueNames.map(name => `• ${name}`).join('\n')}`;
         }
     }
 
     if (/\b(bancos|lista)\b/.test(lower) && !history.some(h => h.content?.includes('Troco Estimado'))) {
-        return `🏦 *Bancos Cadastrados:* ${cachedBankRules.map(b => b.name).join(', ')}\n\nDigite: *Regras do [banco]* para ver as regras detalhadas de portabilidade.`;
+        const uniqueNames = Array.from(new Set(cachedBankRules.map(b => b.name.toUpperCase()))).sort();
+        return `🏦 *Bancos Cadastrados:* ${uniqueNames.join(', ')}\n\nDigite: *Regras do [banco]* para ver as regras detalhadas de portabilidade.`;
     }
 
     // Validar telefone e carregar estado da sessão
