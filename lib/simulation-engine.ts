@@ -115,6 +115,7 @@ export function calculateOffers(
 ): Offer[] {
   const {
     idade,
+    convenio,
     codigoBeneficio,
     dataConcessao,
     bancoAtual,

@@ -371,14 +371,15 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     let lastExtracted = sessionData.lastExtractedParams;
 
     // Resetar parâmetros se palavras-chave de reinício forem encontradas
-    const restartKeywords = ['simular', 'nova simulação', 'começar', 'reiniciar', 'iniciar', 'resetar', 'oi', 'olá', 'ola'];
-    const isRestart = restartKeywords.includes(lower) && history.length > 0 && history[history.length - 1].content?.includes('Simulação concluída');
+    const restartKeywords = ['simular', 'nova simulação', 'começar', 'reiniciar', 'iniciar', 'resetar'];
+    const isRestart = restartKeywords.some(kw => lower.includes(kw));
 
-    if (isRestart || lower === 'simular' || lower === 'reiniciar') {
+    if (isRestart) {
         extracted = {};
         sessionData.extractedParams = {};
         sessionData.lastExtractedParams = null;
         console.log(`[Gutto] Resetting session parameters.`);
+        return `Perfeito! Reiniciei a simulação para você.\n\nPara começarmos do zero, qual é o seu *convênio*?\n\n👉 INSS\n👉 SIAPE\n👉 Governo\n👉 Forças Armadas\n👉 CLT Privado`;
     } else {
         // Se temos lastExtracted e o usuário digitou o nome de um banco
         const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
