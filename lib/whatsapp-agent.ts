@@ -66,11 +66,62 @@ async function loadRules() {
 function getRuleSummary(bankName: string): string {
     const b = cachedBankRules.find(r => (r.name || '').toLowerCase().includes(bankName.toLowerCase()));
     if (!b) return `Banco "${bankName}" não encontrado. Disponíveis: ${cachedBankRules.map(r => r.name).join(', ')}`;
-    let t = `📋 *Regras do ${b.name}*:\n• Idade: ${b.minAge || 18} a ${b.maxAge || 80}\n`;
-    if (b.portabilityRate) t += `• Taxa Port: ${b.portabilityRate}%\n`;
-    if (b.refinRate) t += `• Taxa Refin: ${b.refinRate}%\n`;
-    if (b.minBalance) t += `• Saldo mín: R$ ${b.minBalance}\n`;
-    if (b.minTroco) t += `• Troco mín: R$ ${b.minTroco}\n`;
+
+    // Normalização das propriedades do banco conforme padrão do simulation-engine.ts
+    const minAge = b.minAge !== undefined ? b.minAge : (b.min_age !== undefined ? b.min_age : 0);
+    const maxAge = b.maxAge !== undefined ? b.maxAge : (b.max_age !== undefined ? b.max_age : 0);
+    const minInstallmentValue = b.minInstallmentValue !== undefined ? b.minInstallmentValue : (b.min_installment_value !== undefined ? b.min_installment_value : 0);
+    const minBalance = b.minBalance !== undefined ? b.minBalance : (b.min_balance !== undefined ? b.min_balance : 0);
+    const minTroco = b.minTroco !== undefined ? b.minTroco : (b.min_troco !== undefined ? b.min_troco : 0);
+    const portabilityRate = b.portabilityRate !== undefined ? b.portabilityRate : (b.portability_rate !== undefined ? b.portability_rate : 0);
+    const refinRate = b.refinRate !== undefined ? b.refinRate : (b.refin_rate !== undefined ? b.refin_rate : 0);
+    const acceptsIlliterate = b.acceptsIlliterate !== undefined ? b.acceptsIlliterate : (b.accepts_illiterate !== undefined ? b.accepts_illiterate : false);
+    const accepts60Mais = b.accepts60Mais !== undefined ? b.accepts60Mais : (b.accepts_60_mais !== undefined ? b.accepts_60_mais : false);
+    const nonAcceptedBanks = b.nonAcceptedBanks !== undefined ? b.nonAcceptedBanks : (b.non_accepted_banks !== undefined ? b.non_accepted_banks : []);
+    const specificInstallmentRules = b.specificInstallmentRules !== undefined ? b.specificInstallmentRules : (b.specific_installment_rules !== undefined ? b.specific_installment_rules : []);
+
+    // Formatadores
+    const formatCurrency = (val: number) => {
+        if (val === undefined || val === null || val === 0) return 'R$ 0,00';
+        return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    const formatRate = (val: number) => {
+        if (val === undefined || val === null || val === 0) return 'Não cadastrada';
+        return `${val.toString().replace('.', ',')}%`;
+    };
+
+    const formatYesNo = (val: boolean) => val ? 'SIM' : 'Não';
+
+    // Bancos que Porta
+    let bancoportStr = 'Todos';
+    if (nonAcceptedBanks && nonAcceptedBanks.length > 0) {
+        bancoportStr = `Todos, exceto: ${nonAcceptedBanks.join(', ')}`;
+    }
+
+    // Bancos com Regras específicas
+    let regrasEspecificasStr = 'Nenhum';
+    if (specificInstallmentRules && specificInstallmentRules.length > 0) {
+        regrasEspecificasStr = specificInstallmentRules.map((r: any) => `${r.bank} (${r.installments} parcelas)`).join(', ');
+    }
+
+    const convenioStr = `${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}`;
+
+    let t = `📋 *Resumo de Regras de Portabilidade*\n\n`;
+    t += `*Banco:* ${b.name}\n`;
+    t += `*Convênio:* ${convenioStr}\n`;
+    t += `*Idade Mínima:* ${minAge}\n`;
+    t += `*Idade Máxima:* ${maxAge}\n`;
+    t += `*Aceita Analfabeto:* ${formatYesNo(acceptsIlliterate)}\n`;
+    t += `*Aceita 60+:* ${formatYesNo(accepts60Mais)}\n`;
+    t += `*Parcela Mínima:* ${formatCurrency(minInstallmentValue)}\n`;
+    t += `*Saldo Mínimo:* ${formatCurrency(minBalance)}\n`;
+    t += `*Troco Mínimo:* ${formatCurrency(minTroco)}\n`;
+    t += `*Taxa Mínimo Port:* ${formatRate(portabilityRate)}\n`;
+    t += `*Taxa Mínima Refin/Port:* ${formatRate(refinRate)}\n`;
+    t += `*Bancos que Porta:* ${bancoportStr}\n`;
+    t += `*Bancos com Regras específicas:* ${regrasEspecificasStr}`;
+
     return t;
 }
 
@@ -341,11 +392,81 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         return `Por nada! 😊 Fico extremamente feliz em ajudar na sua busca pelas melhores taxas.\n\nEstou à sua total disposição sempre que precisar de uma nova simulação ou tirar dúvidas sobre portabilidade. Tenha um excelente dia e ótimos negócios! 🚀💼`;
     }
 
-    // Consulta de regras por banco
-    const rulesMatch = lower.match(/regras?\s+(?:do\s+)?(.+)/i);
-    if (rulesMatch) return getRuleSummary(rulesMatch[1].trim());
-    if (/\b(bancos|lista)\b/.test(lower) && !history.some(h => h.content?.includes('Troco Estimado')))
-        return `🏦 *Bancos:* ${cachedBankRules.map(b => b.name).join(', ')}\n\nDigite: *Regras do [banco]*`;
+    // Interceptar perguntas sobre roteiro, resumo ou regras de portabilidade de um banco
+    const isAskingRules = /\b(roteiro|resumo|regras?|portabilidade)\b/i.test(lower);
+    if (isAskingRules) {
+        // Encontrar se algum banco foi mencionado na mensagem
+        let matchedBank = null;
+        for (const b of cachedBankRules) {
+            const bName = (b.name || '').toLowerCase();
+            // Evitar matches excessivamente curtos para não ter falsos positivos
+            if (bName.length > 2 && lower.includes(bName)) {
+                matchedBank = b;
+                break;
+            }
+            
+            // Verificar também nos aliases
+            const bankCode = b.id?.split('-')[0];
+            const LOCAL_BANK_ALIASES: Record<string, string[]> = {
+              "237": ["bradesco"],
+              "341": ["itau", "itaú"],
+              "033": ["santander"],
+              "001": ["bb", "banco do brasil"],
+              "104": ["caixa"],
+              "623": ["pan", "banco pan"],
+              "311": ["bmg"],
+              "422": ["safra"],
+              "626": ["c6", "c6 consig", "c6 bank"],
+              "707": ["daycoval"],
+              "041": ["banrisul"],
+              "012": ["inbursa"],
+              "069": ["crefisa"],
+              "121": ["agibank"],
+              "079": ["picpay"],
+              "336": ["c6"],
+              "003": ["amazonia", "bas"],
+              "004": ["nordeste", "bnb"],
+              "070": ["brb"],
+            };
+            const aliases = LOCAL_BANK_ALIASES[bankCode] || [];
+            for (const alias of aliases) {
+                if (alias.length > 1 && lower.includes(alias.toLowerCase())) {
+                    matchedBank = b;
+                    break;
+                }
+            }
+            if (matchedBank) break;
+        }
+
+        // Tentar extrair pelo padrão do texto caso não encontrou por correspondência direta
+        if (!matchedBank) {
+            const match = lower.match(/(?:roteiro|resumo|regras?(?:\s+de\s+portabilidade)?)\s+(?:do\s+|da\s+|de\s+|do\s+banco\s+|da\s+tabela\s+)?([a-z0-9\sáéíóúçãõâêô]+)/i);
+            if (match) {
+                const searchName = match[1].trim();
+                if (searchName.length >= 2) {
+                    matchedBank = cachedBankRules.find(b => 
+                        (b.name || '').toLowerCase().includes(searchName) || 
+                        searchName.includes((b.name || '').toLowerCase())
+                    );
+                }
+            }
+        }
+
+        if (matchedBank) {
+            return getRuleSummary(matchedBank.name);
+        }
+
+        // Se identificou a pergunta sobre regras/roteiro/resumo mas não encontrou o banco ou o banco não está cadastrado no sistema
+        const extractMatch = lower.match(/(?:roteiro|resumo|regras?(?:\s+de\s+portabilidade)?)\s+(?:do\s+|da\s+|de\s+|do\s+banco\s+|da\s+tabela\s+)?([a-z0-9\sáéíóúçãõâêô]+)/i);
+        const attemptedBank = extractMatch ? extractMatch[1].trim() : '';
+        if (attemptedBank && attemptedBank.length >= 2) {
+            return `O banco "${attemptedBank}" não foi encontrado no sistema com regras cadastradas. Bancos disponíveis para consulta:\n${cachedBankRules.map(b => `• ${b.name}`).join('\n')}`;
+        }
+    }
+
+    if (/\b(bancos|lista)\b/.test(lower) && !history.some(h => h.content?.includes('Troco Estimado'))) {
+        return `🏦 *Bancos Cadastrados:* ${cachedBankRules.map(b => b.name).join(', ')}\n\nDigite: *Regras do [banco]* para ver as regras detalhadas de portabilidade.`;
+    }
 
     // Validar telefone e carregar estado da sessão
     let userProfile = { role: 'admin' } as any;
@@ -421,6 +542,11 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     if (extracted.taxaJurosMensal) dataSummary += `• Taxa de Juros: ${(extracted.taxaJurosMensal * 100).toFixed(2)}%\n`;
 
     const sysInst = `Você é o Gutto, assistente especialista em portabilidade do portal.
+
+SOBRE REGRAS, ROTEIROS OU RESUMOS DE PORTABILIDADE:
+- Caso o usuário pergunte sobre roteiro, resumo ou regras de portabilidade de um banco, NUNCA utilize ou invente informações de fontes externas.
+- O sistema já possui um interceptador de código que cuida de responder as regras cadastradas estruturadamente.
+- Se o usuário pedir para você listar os bancos, ou perguntar de forma genérica sobre as regras de algum banco sem fornecer o nome de um banco cadastrado no sistema, instrua-o amigavelmente a perguntar especificando o banco no formato: "Regras do [Nome do Banco]" ou "Roteiro do [Nome do Banco]" (ex: "Regras do Bradesco").
 
 REGRA CRÍTICA ABSOLUTA: Faça APENAS UMA pergunta por vez. Nunca pergunte dois ou mais dados na mesma mensagem.
 
