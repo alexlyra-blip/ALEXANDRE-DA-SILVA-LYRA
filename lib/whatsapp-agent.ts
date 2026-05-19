@@ -664,7 +664,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         );
         if (matchedCachedBank && lastExtracted) {
             console.log(`[Gutto] User selected bank ${matchedCachedBank.name} from previous calculation.`);
-            return await doCalculation(lastExtracted as SimulationParams, userProfile, matchedCachedBank.name);
+            return await doCalculation(lastExtracted as SimulationParams, userProfile, matchedCachedBank.name, sessionData);
         }
 
         const lastBotMessage = history.length > 0 ? history[history.length - 1].content || '' : '';
@@ -679,7 +679,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     // Se temos tudo necessário, calcula imediatamente e limpa o estado para uma próxima simulação
     if (hasAllRequired(extracted)) {
         console.log(`[Gutto] All required data present! Performing simulation...`);
-        const res = await doCalculation(extracted as SimulationParams, userProfile);
+        const res = await doCalculation(extracted as SimulationParams, userProfile, undefined, sessionData);
         sessionData.lastExtractedParams = { ...extracted }; // Salva no histórico da sessão
         sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
         return res;
