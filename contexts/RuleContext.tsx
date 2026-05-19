@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { collection, getDocs, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useAuth } from './AuthContext';
+import { getBankRules, getGeneralRules, saveBankRule, deleteBankRule, saveGeneralRule, deleteGeneralRule } from '@/lib/data-service';
+import { safeLocalStorageSet } from '@/lib/utils';
 
 export interface Tabela {
   nome: string;
@@ -95,9 +97,6 @@ interface RuleContextType {
 }
 
 const RuleContext = createContext<RuleContextType | undefined>(undefined);
-
-import { getBankRules, getGeneralRules, saveBankRule, deleteBankRule, saveGeneralRule, deleteGeneralRule } from '@/lib/data-service';
-import { safeLocalStorageSet } from '@/lib/utils';
 
 export function RuleProvider({ children }: { children: React.ReactNode }) {
   const [banks, setBanks] = useState<BankRule[]>([]);

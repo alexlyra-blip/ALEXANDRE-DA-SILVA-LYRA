@@ -353,6 +353,15 @@ export default function Recomendacoes() {
         "070": ["brb"],
       };
 
+      const normalizeStr = (s: string) => {
+        if (!s) return '';
+        return s
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim();
+      };
+
       const checkBankMatch = (ruleBank: string, currentBank: string) => {
         if (!ruleBank || !currentBank) return false;
         const rule = ruleBank.trim().toLowerCase();
@@ -426,13 +435,15 @@ export default function Recomendacoes() {
           return;
         }
         
-        const bankConvenio = (bank.convenio || 'INSS').trim().toUpperCase();
-        const simConvenio = (currentSim.convenio || 'INSS').trim().toUpperCase();
+        const bankConvenio = normalizeStr(bank.convenio || 'INSS');
+        const simConvenio = normalizeStr(currentSim.convenio || 'INSS');
         if (bankConvenio !== simConvenio) {
           return;
         }
-        if (bank.subConvenio && bank.subConvenio !== currentSim.subConvenio) {
-          return;
+        if (bank.subConvenio) {
+          if (normalizeStr(bank.subConvenio) !== normalizeStr(currentSim.subConvenio || '')) {
+            return;
+          }
         }
 
         const isInvalidity = ['4', '04', '5', '05', '11', '30', '32', '33', '34', '92'].includes(cleanBeneficio);

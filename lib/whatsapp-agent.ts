@@ -2,9 +2,64 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { getAI } from '@/lib/ai-config';
 import { getAdminDb } from "@/lib/firebase-admin";
 import { calculateOffers, SimulationParams } from "@/lib/simulation-engine";
-import { randomUUID } from "crypto";
 
 const ai = getAI();
+
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+const BANK_ALIASES: Record<string, string[]> = {
+    "237": ["bradesco"],
+    "341": ["itau", "itaú"],
+    "033": ["santander"],
+    "001": ["bb", "banco do brasil"],
+    "104": ["caixa"],
+    "623": ["pan", "banco pan"],
+    "311": ["bmg"],
+    "422": ["safra"],
+    "626": ["c6", "c6 consig", "c6 bank"],
+    "707": ["daycoval"],
+    "041": ["banrisul"],
+    "012": ["inbursa"],
+    "069": ["crefisa"],
+    "121": ["agibank"],
+    "079": ["picpay"],
+    "336": ["c6"],
+    "003": ["amazonia", "bas"],
+    "004": ["nordeste", "bnb"],
+    "070": ["brb"],
+};
+
+function checkBankMatch(ruleBank: string, currentBank: string): boolean {
+    if (!ruleBank || !currentBank) return false;
+    const rule = ruleBank.trim().toLowerCase();
+    const current = currentBank.trim().toLowerCase();
+    if (current === rule) return true;
+
+    const ruleCodeMatch = rule.match(/^\d{1,4}/);
+    const currentCodeMatch = current.match(/^\d{1,4}/);
+    const ruleCode = ruleCodeMatch ? ruleCodeMatch[0].padStart(3, '0') : null;
+    const currentCode = currentCodeMatch ? currentCodeMatch[0].padStart(3, '0') : null;
+
+    if (ruleCode && currentCode && ruleCode === currentCode) return true;
+
+    for (const [code, aliases] of Object.entries(BANK_ALIASES)) {
+        const ruleHasCode = ruleCode === code || aliases.some(a => rule.includes(a));
+        const currentHasCode = currentCode === code || aliases.some(a => current.includes(a));
+        if (ruleHasCode && currentHasCode) return true;
+    }
+
+    const parts = current.split('-');
+    if (parts.length >= 2) {
+        const name = parts.slice(1).join('-').trim();
+        if (rule.length >= 2 && name.includes(rule)) return true;
+    }
+    return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
+}
 
 const calculateLoanOffersTool = {
     name: "calculate_client_loan_offers",
@@ -137,8 +192,7 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
     if (lastOffers.length > 0) {
         // Encontrar as ofertas específicas calculadas e válidas para este banco
         const simulatedOffers = lastOffers.filter((o: any) =>
-            o.name.toLowerCase().includes(b.name.toLowerCase()) ||
-            b.name.toLowerCase().includes(o.name.toLowerCase())
+            checkBankMatch(b.name, o.name)
         );
 
         if (simulatedOffers.length > 0) {
@@ -465,7 +519,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
         }
 
         try {
-            await db.collection('simulations').doc(randomUUID()).set({
+            await db.collection('simulations').doc(generateUUID()).set({
                 userId: userProfile.uid || 'bot', userName: userProfile.name || 'WhatsApp',
                 userAvatar: userProfile.logoUrl || userProfile.avatarUrl || '',
                 convenio: params.convenio, bancoAtual: params.bancoAtual, valorParcela: params.valorParcela,
@@ -503,7 +557,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         }
         
         // Filter offers for the last bank that was simulated/offered
-        const bankOffers = lastOffers.filter((o: any) => o.name.toLowerCase() === lastBank.toLowerCase());
+        const bankOffers = lastOffers.filter((o: any) => checkBankMatch(o.name, lastBank));
         
         if (bankOffers.length === 0) {
             return `Não foram encontradas outras tabelas disponíveis para o banco *${lastBank.toUpperCase()}* na simulação recente.`;
@@ -548,8 +602,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         // Garantir que não é apenas o comando "tabelas" (da simulação recente)
         if (searchName.length >= 2 && searchName !== 'disponíveis' && searchName !== 'do refin' && searchName !== 'da portabilidade') {
             const matchingBanks = cachedBankRules.filter(b =>
-                (b.name || '').toLowerCase().includes(searchName) ||
-                searchName.includes((b.name || '').toLowerCase())
+                checkBankMatch(b.name, searchName)
             );
             if (matchingBanks.length > 0) {
                 return getBankTablesSummary(matchingBanks[0].id, sessionData);
@@ -719,7 +772,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         // Se temos lastExtracted e o usuário digitou o nome de um banco
         const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
         const matchedCachedBank = lastExtracted && cachedBankRules.find(b =>
-            b.name.toLowerCase().includes(cleanMsg) || cleanMsg.includes(b.name.toLowerCase())
+            checkBankMatch(b.name, cleanMsg)
         );
         if (matchedCachedBank && lastExtracted) {
             console.log(`[Gutto] User selected bank ${matchedCachedBank.name} from previous calculation.`);
