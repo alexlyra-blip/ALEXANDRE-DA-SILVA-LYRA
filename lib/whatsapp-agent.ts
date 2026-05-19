@@ -188,85 +188,31 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
     
     const lastOffers = sessionData.lastOffers || [];
     
-    // Se houver uma simulação ativa com ofertas calculadas nesta sessão
-    if (lastOffers.length > 0) {
-        // Encontrar as ofertas específicas calculadas e válidas para este banco
-        const simulatedOffers = lastOffers.filter((o: any) =>
-            checkBankMatch(b.name, o.name)
-        );
+    // Encontrar as ofertas específicas calculadas e válidas para este banco
+    const simulatedOffers = lastOffers.filter((o: any) =>
+        checkBankMatch(b.name, o.name)
+    );
 
-        if (simulatedOffers.length > 0) {
-            let t = `📈 *Tabelas de Refin da Portabilidade: ${b.name.toUpperCase()}*\n`;
-            t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n`;
-            t += `_Exibindo apenas as tabelas elegíveis com base nos filtros aplicados (Taxa Ponderada Mesa, Idade, etc.)_\n\n`;
-            
-            // Ordenar por troco decrescente
-            const sortedSimulated = simulatedOffers.sort((x: any, y: any) => y.valorTroco - x.valorTroco);
-            sortedSimulated.forEach((o: any) => {
-                t += `• *${o.tabela}* | Taxa: ${o.taxaBase.toString().replace('.', ',')}%`;
-                t += ` | Novo Contrato: R$ ${fmt(o.valorContrato)}`;
-                t += ` | Troco: R$ ${fmt(o.valorTroco)}\n`;
-            });
-            return t;
-        } else {
-            // Se o banco foi simulado mas todas as tabelas foram reprovadas pelos filtros
-            return `O banco *${b.name.toUpperCase()}* não possui nenhuma tabela de Refin da Portabilidade disponível/elegível para o perfil atual do cliente devido aos critérios de *Taxa Ponderada Mesa* ou restrições de idade.`;
-        }
-    }
-    
-    const tablesArray = b.tabelas || b.tables || [];
-    const clientAge = sessionData.extractedParams?.idade;
-    const valorParcela = sessionData.extractedParams?.valorParcela;
-    
-    // Filtrar tabelas se houver simulação ativa
-    const filteredTables = tablesArray.filter((tab: any) => {
-        const idMin = tab.idadeMinima || tab.minAge || 0;
-        const idMax = tab.idadeMaxima || tab.maxAge || 0;
-        if (clientAge > 0) {
-            const parsedMin = typeof idMin === 'number' ? idMin : parseFloat(idMin) || 0;
-            const parsedMax = typeof idMax === 'number' ? idMax : parseFloat(idMax) || 0;
-            if (parsedMin > 0 && clientAge < parsedMin) return false;
-            if (parsedMax > 0 && clientAge > parsedMax) return false;
-        }
+    if (simulatedOffers.length > 0) {
+        const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
+        let t = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${b.name.toUpperCase()}*\n`;
+        t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n\n`;
         
-        const minInst = tab.minInstallmentValue ? parseFloat(tab.minInstallmentValue) : 0;
-        const maxInst = tab.maxInstallmentValue ? parseFloat(tab.maxInstallmentValue) : 0;
-        if (valorParcela > 0) {
-            if (minInst > 0 && valorParcela < minInst) return false;
-            if (maxInst > 0 && valorParcela > maxInst) return false;
-        }
-        return true;
-    });
-
-    if (filteredTables.length === 0) {
-        if (clientAge > 0) {
-            return `O banco *${b.name.toUpperCase()}* não possui tabelas de Refin da Portabilidade disponíveis para o perfil atual do cliente (Idade: ${clientAge} anos${valorParcela > 0 ? `, Parcela: R$ ${valorParcela.toFixed(2)}` : ''}).`;
-        }
-        return `O banco *${b.name.toUpperCase()}* não possui tabelas de Refin da Portabilidade cadastradas no momento.`;
+        // Ordenar por menor troco (x.valorTroco - y.valorTroco)
+        const sortedSimulated = simulatedOffers.sort((x: any, y: any) => x.valorTroco - y.valorTroco);
+        sortedSimulated.forEach((o: any, idx: number) => {
+            t += `${idx === 0 ? '⭐ ' : '👉 '}*Tabela:* ${o.tabela}\n`;
+            t += `• *Valor da Parcela:* R$ ${fmt(valParcela)}\n`;
+            t += `• *Prazo:* ${o.prazoRefinPort || o.parcelasRestantes || 96} meses\n`;
+            t += `• *Novo Contrato:* R$ ${fmt(o.valorContrato)}\n`;
+            t += `• *Saldo Devedor:* R$ ${fmt(o.saldoDevedor || sessionData.lastExtractedParams?.saldoDevedor || 0)}\n`;
+            t += `• *Taxa do Refin:* ${o.taxaBase.toFixed(2)}% a.m.\n`;
+            t += `• *Troco Liberado:* R$ ${fmt(o.valorTroco)}\n\n`;
+        });
+        return t;
+    } else {
+        return `⚠️ O banco *${b.name.toUpperCase()}* não possui nenhuma oferta ou tabela de Refin da Portabilidade elegível para a simulação atual (ou você ainda não realizou uma simulação nesta sessão).`;
     }
-    
-    let t = `📈 *Tabelas de Refin da Portabilidade: ${b.name.toUpperCase()}*\n`;
-    t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n`;
-    if (clientAge > 0) {
-        t += `_Filtros aplicados para a idade do cliente: ${clientAge} anos_\n`;
-    }
-    t += `\n`;
-    
-    filteredTables.forEach((tab: any) => {
-        const tax = tab.taxaTabela !== undefined ? tab.taxaTabela : (tab.taxa_tabela !== undefined ? tab.taxa_tabela : 0);
-        const minTicket = tab.minTicket !== undefined ? tab.minTicket : (tab.min_ticket !== undefined ? tab.min_ticket : 0);
-        const idMin = tab.idadeMinima || 0;
-        const idMax = tab.idadeMaxima || 0;
-        t += `• *${tab.nome}* | Taxa: ${tax.toString().replace('.', ',')}%`;
-        if (minTicket > 0) {
-            t += ` | Valor Mínimo: R$ ${minTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        }
-        if (idMin > 0 || idMax > 0) {
-            t += ` | Idade: ${idMin > 0 ? idMin : '0'}-${idMax > 0 ? idMax : '99'} anos`;
-        }
-        t += `\n`;
-    });
-    return t;
 }
 
 function parsePortugueseNumber(valStr: string): number | null {
@@ -483,12 +429,12 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
 
         const groups = offers.reduce((a, o) => { if (!a[o.name]) a[o.name] = { bankName: o.name, offers: [] }; a[o.name].offers.push(o); return a; }, {} as Record<string, any>);
 
-        // Ordenar ofertas de cada banco pelo MAIOR troco (b.valorTroco - a.valorTroco)
+        // Ordenar ofertas de cada banco pelo MENOR troco (a.valorTroco - b.valorTroco)
         const sorted = Object.values(groups).map((g: any) => {
-            const s = g.offers.sort((a: any, b: any) => b.valorTroco - a.valorTroco);
+            const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
             return { ...g, offers: s, topOffer: s[0] };
         })
-            // Ordenar bancos pela prioridade e depois pelo MAIOR troco
+            // Ordenar bancos pela prioridade e depois pelo MENOR troco
             .sort((a: any, b: any) => {
                 const bankIdA = a.topOffer.id?.split('-')[0];
                 const bankIdB = b.topOffer.id?.split('-')[0];
@@ -497,7 +443,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
                 const finalPA = pA === 0 ? 999 : pA;
                 const finalPB = pB === 0 ? 999 : pB;
                 if (finalPA !== finalPB) return finalPA - finalPB;
-                return b.topOffer.valorTroco - a.topOffer.valorTroco;
+                return a.topOffer.valorTroco - b.topOffer.valorTroco;
             });
 
         const matchedBank = targetBankName
@@ -639,15 +585,17 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
             return `Não foram encontradas outras tabelas disponíveis para o banco *${lastBank.toUpperCase()}* na simulação recente.`;
         }
         
-        // Sort by troco descending
-        const sortedOffers = bankOffers.sort((a: any, b: any) => b.valorTroco - a.valorTroco);
+        // Sort by troco ascending (menor troco)
+        const sortedOffers = bankOffers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
         
-        let m = `📊 *TODAS AS TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}*\n\n`;
+        const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
+        let m = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}*\n\n`;
         sortedOffers.forEach((o: any, idx: number) => {
             m += `${idx === 0 ? '⭐ ' : '👉 '}*Tabela:* ${o.tabela}\n`;
-            m += `• *Valor da Parcela:* R$ ${fmt(o.valorParcela || 0)}\n`;
+            m += `• *Valor da Parcela:* R$ ${fmt(valParcela)}\n`;
             m += `• *Prazo:* ${o.prazoRefinPort || o.parcelasRestantes || 96} meses\n`;
             m += `• *Novo Contrato:* R$ ${fmt(o.valorContrato)}\n`;
+            m += `• *Saldo Devedor:* R$ ${fmt(o.saldoDevedor || sessionData.lastExtractedParams?.saldoDevedor || 0)}\n`;
             m += `• *Taxa do Refin:* ${o.taxaBase.toFixed(2)}% a.m.\n`;
             m += `• *Troco Liberado:* R$ ${fmt(o.valorTroco)}\n\n`;
         });
