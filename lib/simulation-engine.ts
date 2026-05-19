@@ -99,6 +99,53 @@ const normalizeStr = (s: string) => {
     .trim();
 };
 
+const SUB_CONVENIO_MAP: Record<string, string[]> = {
+  "01": ["exercito", "exército"],
+  "02": ["aeronautica", "aeronáutica"],
+  "03": ["marinha"],
+  "AC": ["acre"],
+  "AL": ["alagoas"],
+  "AP": ["amapa", "amapá"],
+  "AM": ["amazonas"],
+  "BA": ["bahia"],
+  "CE": ["ceara", "ceará"],
+  "DF": ["distrito federal", "df"],
+  "ES": ["espirito santo", "espírito santo", "es"],
+  "GO": ["goias", "goiás"],
+  "MA": ["maranhao", "maranhão"],
+  "MT": ["mato grosso"],
+  "MS": ["mato grosso do sul"],
+  "MG": ["minas gerais", "mg"],
+  "PA": ["para", "pará"],
+  "PB": ["paraiba", "paraíba"],
+  "PR": ["parana", "paraná"],
+  "PE": ["pernambuco"],
+  "PI": ["piaui", "piauí"],
+  "RJ": ["rio de janeiro", "rj"],
+  "RN": ["rio grande do norte"],
+  "RS": ["rio grande do sul"],
+  "RO": ["rondonia", "rondônia"],
+  "RR": ["roraima"],
+  "SC": ["santa catarina"],
+  "SP": ["sao paulo", "são paulo", "sp"],
+  "SE": ["sergipe"],
+  "TO": ["tocantins"],
+};
+
+function checkSubConvenioMatch(ruleSub: string, currentSub: string): boolean {
+  if (!ruleSub || !currentSub) return true;
+  const r = normalizeStr(ruleSub);
+  const c = normalizeStr(currentSub);
+  if (r === c) return true;
+  for (const [code, aliases] of Object.entries(SUB_CONVENIO_MAP)) {
+    const normCode = code.toLowerCase();
+    const ruleMatches = r === normCode || aliases.some(a => r.includes(a) || a.includes(r));
+    const currentMatches = c === normCode || aliases.some(a => c.includes(a) || a.includes(c));
+    if (ruleMatches && currentMatches) return true;
+  }
+  return r.includes(c) || c.includes(r);
+}
+
 function calculateRate(pv: number, pmt: number, n: number) {
   if (pmt <= 0 || pv <= 0 || n <= 0) return 0;
   if (pmt * n <= pv) return 0;
@@ -211,8 +258,8 @@ export function calculateOffers(
     if (bankConvenio !== simConvenio) return;
 
     // Sub-Convenio Filter
-    if (bank.subConvenio) {
-      if (normalizeStr(bank.subConvenio) !== normalizeStr(params.subConvenio || '')) return;
+    if (bank.subConvenio && params.subConvenio) {
+      if (!checkSubConvenioMatch(bank.subConvenio, params.subConvenio)) return;
     }
 
     // Invalidez Rule
