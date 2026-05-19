@@ -125,6 +125,37 @@ function getRuleSummary(ruleIdOrName: string): string {
     return t;
 }
 
+function getBankTablesSummary(ruleIdOrName: string): string {
+    let b = cachedBankRules.find(r => r.id === ruleIdOrName);
+    if (!b) {
+        b = cachedBankRules.find(r => (r.name || '').toLowerCase().includes(ruleIdOrName.toLowerCase()));
+    }
+    if (!b) return `Banco "${ruleIdOrName}" não encontrado.`;
+    
+    if (!b.tables || b.tables.length === 0) {
+        return `O banco *${b.name.toUpperCase()}* não possui tabelas de Refin da Portabilidade cadastradas no momento.`;
+    }
+    
+    let t = `📈 *Tabelas de Refin da Portabilidade: ${b.name.toUpperCase()}*\n`;
+    t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n\n`;
+    
+    b.tables.forEach((tab: any) => {
+        const tax = tab.taxaTabela !== undefined ? tab.taxaTabela : (tab.taxa_tabela !== undefined ? tab.taxa_tabela : 0);
+        const minTicket = tab.minTicket !== undefined ? tab.minTicket : (tab.min_ticket !== undefined ? tab.min_ticket : 0);
+        const idMin = tab.idadeMinima || 0;
+        const idMax = tab.idadeMaxima || 0;
+        t += `• *${tab.nome}* | Taxa: ${tax.toString().replace('.', ',')}%`;
+        if (minTicket > 0) {
+            t += ` | Valor Mínimo: R$ ${minTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+        if (idMin > 0 || idMax > 0) {
+            t += ` | Idade: ${idMin > 0 ? idMin : '0'}-${idMax > 0 ? idMax : '99'} anos`;
+        }
+        t += `\n`;
+    });
+    return t;
+}
+
 function parsePortugueseNumber(valStr: string): number | null {
     if (!valStr) return null;
     const match = valStr.match(/[\d.,]+/);
@@ -300,10 +331,14 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
     }
 
     m += `\n_Caso queira ver a oferta de outro banco listado, digite o nome dele (Ex: "Itau", "Pan")._`;
+
+    if (tables > 1) {
+        m += `\n\n💡 *Dica:* Encontramos *${tables}* tabelas com ofertas viáveis para o banco *${top.name.toUpperCase()}*. Se quiser ver as outras opções de tabelas para este banco, basta digitar *tabelas*!`;
+    }
     return m;
 }
 
-async function doCalculation(params: SimulationParams, userProfile: any, targetBankName?: string): Promise<string> {
+async function doCalculation(params: SimulationParams, userProfile: any, targetBankName?: string, sessionData: any = {}): Promise<string> {
     try {
         if (params.taxaJurosMensal && params.taxaJurosMensal > 0.1) {
             params.taxaJurosMensal = params.taxaJurosMensal / 100;
@@ -365,6 +400,11 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
         const top = matchedBank ? matchedBank.topOffer : (sorted.length > 0 ? sorted[0].topOffer : null);
         const bankNames = sorted.map((g: any) => g.bankName);
 
+        if (top) {
+            sessionData.lastOffers = offers;
+            sessionData.lastOfertadoBank = top.name;
+        }
+
         try {
             await db.collection('simulations').doc(randomUUID()).set({
                 userId: userProfile.uid || 'bot', userName: userProfile.name || 'WhatsApp',
@@ -394,6 +434,39 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
 
     const lower = message.toLowerCase().trim();
 
+    // Interceptar comando "tabelas" ou "tabela"
+    if (lower === 'tabelas' || lower === 'tabela' || lower === 'tabelas disponíveis' || lower === 'outras tabelas') {
+        const lastOffers = sessionData.lastOffers || [];
+        const lastBank = sessionData.lastOfertadoBank || '';
+        
+        if (lastOffers.length === 0 || !lastBank) {
+            return `Você ainda não possui uma simulação ativa nesta sessão. Por favor, inicie informando o seu *convênio* para simularmos!`;
+        }
+        
+        // Filter offers for the last bank that was simulated/offered
+        const bankOffers = lastOffers.filter((o: any) => o.name.toLowerCase() === lastBank.toLowerCase());
+        
+        if (bankOffers.length === 0) {
+            return `Não foram encontradas outras tabelas disponíveis para o banco *${lastBank.toUpperCase()}* na simulação recente.`;
+        }
+        
+        // Sort by troco descending
+        const sortedOffers = bankOffers.sort((a: any, b: any) => b.valorTroco - a.valorTroco);
+        
+        let m = `📊 *TODAS AS TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}*\n\n`;
+        sortedOffers.forEach((o: any, idx: number) => {
+            m += `${idx === 0 ? '⭐ ' : '👉 '}*Tabela:* ${o.tabela}\n`;
+            m += `• *Valor da Parcela:* R$ ${fmt(o.valorParcela || 0)}\n`;
+            m += `• *Prazo:* ${o.prazoRefinPort || o.parcelasRestantes || 96} meses\n`;
+            m += `• *Novo Contrato:* R$ ${fmt(o.valorContrato)}\n`;
+            m += `• *Taxa do Refin:* ${o.taxaBase.toFixed(2)}% a.m.\n`;
+            m += `• *Troco Liberado:* R$ ${fmt(o.valorTroco)}\n\n`;
+        });
+        
+        m += `_Caso queira ver mais informações ou seguir com alguma das opções acima, é só me dizer!_`;
+        return m;
+    }
+
     // Verificar agradecimentos / encerramento se a última mensagem do bot foi uma simulação
     const thanksKeywords = ['obrigado', 'obrigada', 'valeu', 'agradeço', 'grato', 'grata', 'tchau', 'obg', 'perfeito', 'show', 'blz', 'beleza', 'excelente', 'resolvido', 'ajudou', 'satisfeito'];
     const lastBotMsgContent = history.length > 0 ? history[history.length - 1].content || '' : '';
@@ -407,6 +480,22 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         sessionData.extractedParams = {}; // Limpa parâmetros
         sessionData.lastExtractedParams = null; // Limpa histórico
         return `Por nada! 😊 Fico extremamente feliz em ajudar na sua busca pelas melhores taxas.\n\nEstou à sua total disposição sempre que precisar de uma nova simulação ou tirar dúvidas sobre portabilidade. Tenha um excelente dia e ótimos negócios! 🚀💼`;
+    }
+
+    // Interceptar consulta específica de tabelas de um determinado banco (ex: "tabelas do C6", "tabelas Daycoval")
+    const tableRequestMatch = lower.match(/\btabelas?\s+(?:do\s+|da\s+|de\s+|do\s+banco\s+)?([a-z0-9\sáéíóúçãõâêô]+)/i);
+    if (tableRequestMatch) {
+        const searchName = tableRequestMatch[1].trim();
+        // Garantir que não é apenas o comando "tabelas" (da simulação recente)
+        if (searchName.length >= 2 && searchName !== 'disponíveis' && searchName !== 'do refin' && searchName !== 'da portabilidade') {
+            const matchingBanks = cachedBankRules.filter(b =>
+                (b.name || '').toLowerCase().includes(searchName) ||
+                searchName.includes((b.name || '').toLowerCase())
+            );
+            if (matchingBanks.length > 0) {
+                return getBankTablesSummary(matchingBanks[0].id);
+            }
+        }
     }
 
     // Interceptar perguntas sobre roteiro, resumo ou regras de portabilidade de um banco
@@ -617,11 +706,50 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         ? "3. Se Idade for maior ou igual a 60 anos e o Estado ainda NÃO foi coletado: Pergunta em qual estado o cliente reside (Amapá - AP, Paraíba - PB, Tocantins - TO ou Roraima - RR? Se for outro, pode apenas dizer qual)."
         : "3. (PULADO - Estado não necessário ou já coletado)";
 
+    // Construir contexto de regras reais dos bancos cadastrados no sistema
+    let bankRulesContext = '';
+    cachedBankRules.forEach(b => {
+        const minAge = b.minAge ?? b.min_age ?? 0;
+        const maxAge = b.maxAge ?? b.max_age ?? 0;
+        const minInstallment = b.minInstallmentValue ?? b.min_installment_value ?? 0;
+        const acceptsIlliterate = b.acceptsIlliterate ?? b.accepts_illiterate ?? false;
+        const accepts60Mais = b.accepts60Mais ?? b.accepts_60_mais ?? false;
+        const refinRate = b.refinRate ?? b.refin_rate ?? 0;
+        const portabilityRate = b.portabilityRate ?? b.portability_rate ?? 0;
+        const nonAccepted = b.nonAcceptedBanks ?? b.non_accepted_banks ?? [];
+        
+        bankRulesContext += `\n- BANCO: ${b.name} (Convênio: ${b.convenio || 'INSS'}${b.subConvenio ? ' - ' + b.subConvenio : ''})
+  * Idade Mínima: ${minAge} anos
+  * Idade Máxima: ${maxAge} anos
+  * Aceita Analfabeto: ${acceptsIlliterate ? 'SIM' : 'NÃO'}
+  * Aceita 60+: ${accepts60Mais ? 'SIM' : 'NÃO'}
+  * Parcela Mínima: R$ ${minInstallment.toFixed(2)}
+  * Taxa Mínima Portabilidade: ${portabilityRate}%
+  * Taxa Mínima Refin/Port: ${refinRate}%
+  * Bancos Não Portados (origem): ${nonAccepted.join(', ') || 'Nenhum'}`;
+        
+        if (b.tables && b.tables.length > 0) {
+            bankRulesContext += `\n  * Tabelas de Refin da Portabilidade Cadastradas:`;
+            b.tables.forEach((t: any) => {
+                const taxa = t.taxaTabela ?? t.taxa_tabela ?? t.coeficiente ?? 0;
+                const minTicket = t.minTicket ?? t.min_ticket ?? 0;
+                const idadeMin = t.idadeMinima || 0;
+                const idadeMax = t.idadeMaxima || 0;
+                bankRulesContext += `\n    - Tabela: "${t.nome}" | Taxa Base/Tabela: ${taxa}%${minTicket > 0 ? ` | Valor Mínimo da Operação: R$ ${minTicket.toFixed(2)}` : ''}${idadeMin > 0 ? ` | Idade Mínima: ${idadeMin} anos` : ''}${idadeMax > 0 ? ` | Idade Máxima: ${idadeMax} anos` : ''}`;
+            });
+        }
+    });
+
     const sysInst = `Você é o Gutto, assistente especialista em portabilidade do portal.
 
+REGRAS DE PORTABILIDADE E TABELAS DOS BANCOS CADASTRADOS NO SISTEMA:
+Use APENAS as regras abaixo para responder perguntas individuais sobre roteiro, regras, idade mínima/máxima, tabelas ou resumos de cada banco (NUNCA use ou invente dados externos):
+${bankRulesContext}
+
 SOBRE REGRAS, ROTEIROS OU RESUMOS DE PORTABILIDADE:
-- Caso o usuário pergunte sobre roteiro, resumo ou regras de portabilidade de um banco, NUNCA utilize ou invente informações de fontes externas.
-- O sistema já possui um interceptador de código que cuida de responder as regras cadastradas estruturadamente.
+- Se o usuário perguntar sobre roteiro, resumo ou regras de um banco, use os dados acima para responder com absoluta precisão científica e de forma super amigável!
+- Se ele perguntar se um banco aceita analfabeto, qual a idade mínima, ou as taxas de uma tabela específica, responda citando diretamente os valores reais cadastrados listados acima.
+- Se o usuário pedir para listar as tabelas de Refin de um banco, liste cada tabela informando a taxa e o valor mínimo da operação (se houver valor mínimo configurado na tabela; caso não haja valor mínimo listado acima para a tabela, NÃO exiba nem mencione o texto "valor mínimo" ou "operação mínima").
 - Se o usuário pedir para você listar os bancos, ou perguntar de forma genérica sobre as regras de algum banco sem fornecer o nome de um banco cadastrado no sistema, instrua-o amigavelmente a perguntar especificando o banco no formato: "Regras do [Nome do Banco]" ou "Roteiro do [Nome do Banco]" (ex: "Regras do Bradesco").
 
 REGRA CRÍTICA ABSOLUTA: Faça APENAS UMA pergunta por vez. Nunca pergunte dois ou mais dados na mesma mensagem.
@@ -640,6 +768,7 @@ ${step3Text}
    - Se o convênio for Governo ou Forças Armadas, pergunte o Sub-convênio/órgão.
    - Se convênio for CLT Privado, PULE esta pergunta.
 5. Se o cliente é Analfabeto? (Sim/Não)
+   - IMPORTANTE: Para esta pergunta, você DEVE usar EXATAMENTE esta frase com as palavras em negrito usando asteriscos: "Você se considera *analfabeto* ou possui alguma *dificuldade para ler e escrever*? (Responda com *Sim* ou *Não*)"
 6. Se convênio for INSS: Possui 2 cartões de crédito consignado ativos?
 7. Banco atual onde está o contrato que deseja portar.
 8. Prazo total do contrato original (em meses, ex: 84 ou 96).
@@ -677,7 +806,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato (incluind
                 params.valorParcela = Math.max(0, (params.valorParcela || 0) - ((params as any).negativeCardValue || 81.05));
             sessionData.lastExtractedParams = { ...params }; // Salva no histórico da sessão
             sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
-            return await doCalculation(params, userProfile);
+            return await doCalculation(params, userProfile, undefined, sessionData);
         }
 
         const text = parts.find((p: any) => p.text)?.text || (result as any).text;
@@ -686,7 +815,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato (incluind
     } catch (error: any) {
         console.error("Agent Error:", error);
         if (hasAllRequired(extracted)) {
-            const res = await doCalculation(extracted as SimulationParams, userProfile);
+            const res = await doCalculation(extracted as SimulationParams, userProfile, undefined, sessionData);
             sessionData.lastExtractedParams = { ...extracted }; // Salva no histórico da sessão
             sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
             return res;
