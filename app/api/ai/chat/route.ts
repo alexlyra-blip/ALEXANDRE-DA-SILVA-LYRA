@@ -29,7 +29,15 @@ export async function POST(req: Request) {
         sessionRef = db.collection('whatsappSessions').doc(sessionId);
         const sessionSnap = await sessionRef.get();
         if (sessionSnap.exists) {
-          sessionData = sessionSnap.data();
+          const data = sessionSnap.data();
+          const lastUpdate = data.lastUpdate?.toDate ? data.lastUpdate.toDate() : (data.lastUpdate ? new Date(data.lastUpdate) : null);
+          const now = new Date();
+          if (lastUpdate && (now.getTime() - lastUpdate.getTime() > 3 * 60 * 1000)) {
+            // EXPIRED after 3 minutes! Start fresh
+            sessionData = { history: [], extractedParams: {} };
+          } else {
+            sessionData = data;
+          }
         }
       } catch (e) {
         console.error('Error loading session in chat route:', e);
@@ -53,10 +61,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ reply });
   } catch (error: any) {
     console.error('Chat API Error:', error);
-    try {
-      const fs = await import('fs');
-      fs.writeFileSync('c:\\Users\\alexa\\SIMULADOR\\chat_error.txt', `[${new Date().toISOString()}] ${error.message}\n${error.stack}`);
-    } catch (e) {}
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

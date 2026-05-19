@@ -53,14 +53,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isPending, setIsPending] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [blockedError, setBlockedError] = useState<string | null>(null);
-  const [inactivityTimeLeft, setInactivityTimeLeft] = useState(30 * 60);
+  const [inactivityTimeLeft, setInactivityTimeLeft] = useState(15 * 60);
   const router = useRouter();
   const pathname = usePathname();
 
   // Reset timer on page navigation
   useEffect(() => {
     if (user) {
-      setInactivityTimeLeft(30 * 60);
+      setInactivityTimeLeft(15 * 60);
     }
   }, [pathname, user]);
 
@@ -81,15 +81,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(timeoutId); 
       clearTimeout(timeoutSnapId);
       
-      setUser(firebaseUser);
-      
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = undefined;
       }
       
       if (firebaseUser) {
+        // ALWAYS require manual login on fresh page load (not from current active session cache)
+        const isSessionActive = typeof window !== 'undefined' && sessionStorage.getItem('isLoggedInThisSession') === 'true';
+        if (!isSessionActive) {
+          console.log("AuthContext: Cached user detected without active session. Force logging out.");
+          setUser(null);
+          setProfile(null);
+          setIsAuthReady(true);
+          signOut(auth);
+          return;
+        }
+
+        setUser(firebaseUser);
         const userRef = doc(db, 'users', firebaseUser.uid);
+        
+        // Handle Session Token generation for simultaneous login check
+        let localSessionToken = typeof window !== 'undefined' ? sessionStorage.getItem('userSessionToken') : null;
+        if (!localSessionToken) {
+          localSessionToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('userSessionToken', localSessionToken);
+          }
+          // Update Firestore with the new session ID
+          setDoc(userRef, { currentSessionId: localSessionToken }, { merge: true }).catch(console.error);
+        }
+
         const isFirstAdmin = 
           firebaseUser.email === 'alexandrelyra@msn.com' || 
           firebaseUser.email === 'alexlyra@gmail.com' || 
@@ -99,10 +121,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Tentar buscar perfil imediatamente para rapidez
         try {
-          // Use getDocFromServer specifically to ensure we bypass cache if needed for initial check
           const initDoc = await getDoc(userRef);
           if (initDoc.exists()) {
-            const data = initDoc.data() as UserProfile;
+            const data = initDoc.data() as UserProfile & { currentSessionId?: string };
+            
+            // Check for simultaneous logins
+            if (data.currentSessionId && localSessionToken && data.currentSessionId !== localSessionToken) {
+              console.warn("AuthContext: Simultaneous login detected. Force logging out.");
+              setBlockedError("Acesso simultâneo detectado. Este usuário foi conectado em outro dispositivo.");
+              logout();
+              return;
+            }
+
             console.log("AuthContext: Perfil carregado inicialmente via getDoc");
             setProfile({ ...data, uid: firebaseUser.uid });
             setIsPending(data.status !== 'active');
@@ -115,9 +145,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Sempre usar onSnapshot para atualizações em tempo real
         unsubscribeProfile = onSnapshot(userRef, async (userDoc) => {
           if (userDoc.exists()) {
-            const data = userDoc.data() as UserProfile;
+            const data = userDoc.data() as UserProfile & { currentSessionId?: string };
             console.log("AuthContext: Atualização de perfil via snapshot:", data.role, "| Status:", data.status);
             
+            // Check for simultaneous logins
+            const currentLocalToken = typeof window !== 'undefined' ? sessionStorage.getItem('userSessionToken') : null;
+            if (data.currentSessionId && currentLocalToken && data.currentSessionId !== currentLocalToken) {
+              console.warn("AuthContext: Simultaneous login detected. Force logging out.");
+              setBlockedError("Acesso simultâneo detectado. Este usuário foi conectado em outro dispositivo.");
+              logout();
+              return;
+            }
+
             let updatedData = { ...data, uid: firebaseUser.uid };
             
             // Check for account expiration
@@ -209,15 +248,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Inactivity Timeout (30 minutes)
+  // Inactivity Timeout (15 minutes)
   useEffect(() => {
     if (!user) {
-      setInactivityTimeLeft(30 * 60);
+      setInactivityTimeLeft(15 * 60);
       return;
     }
 
     let inactivityInterval: NodeJS.Timeout;
-    const TIMEOUT_SECONDS = 30 * 60;
+    const TIMEOUT_SECONDS = 15 * 60;
 
     const resetTimer = () => {
       setInactivityTimeLeft(TIMEOUT_SECONDS);
@@ -227,7 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setInactivityTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(inactivityInterval);
-          console.log("AuthContext: User inactive for 30 minutes. Logging out.");
+          console.log("AuthContext: User inactive for 15 minutes. Logging out.");
           logout();
           return 0;
         }
@@ -260,7 +299,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, pass: string) => {
     try {
+      const { setPersistence, browserSessionPersistence } = await import('firebase/auth');
+      await setPersistence(auth, browserSessionPersistence);
       await signInWithEmailAndPassword(auth, email, pass);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('isLoggedInThisSession', 'true');
+      }
     } catch (error) {
       console.error("Error signing in:", error);
       throw error;
@@ -294,6 +338,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('isLoggedInThisSession');
+        sessionStorage.removeItem('userSessionToken');
+      }
       await signOut(auth);
       router.push('/');
     } catch (error) {
@@ -312,8 +360,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithGoogle = async () => {
     try {
+      const { setPersistence, browserSessionPersistence } = await import('firebase/auth');
+      await setPersistence(auth, browserSessionPersistence);
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('isLoggedInThisSession', 'true');
+      }
     } catch (error: any) {
       console.error("Error signing in with Google:", error.code, error.message);
       throw error;

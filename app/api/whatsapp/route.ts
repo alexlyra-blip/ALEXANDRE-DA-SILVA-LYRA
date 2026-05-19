@@ -131,18 +131,19 @@ export async function POST(req: NextRequest) {
     let sessionSnap = await sessionRef.get();
     let sessionData = sessionSnap.exists ? sessionSnap.data() : { history: [] };
     
-    // Time out sessions after 5 minutes of inactivity
+    // Time out sessions after 3 minutes of inactivity
     const now = new Date();
     if (sessionData?.lastUpdate) {
       const lastUpdateDate = sessionData.lastUpdate.toDate ? sessionData.lastUpdate.toDate() : new Date(sessionData.lastUpdate);
       const diffMinutes = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60);
-      if (diffMinutes > 5) {
+      if (diffMinutes > 3) {
         sessionData.history = []; // Reset session
-        console.log(`WhatsApp Session for ${senderNumber} timed out after 5 minutes.`);
+        sessionData.extractedParams = {}; // Wipe parameters so we start completely fresh
+        console.log(`WhatsApp Session for ${senderNumber} timed out after 3 minutes.`);
       }
     }
 
-    if (!sessionData?.history) sessionData = { ...sessionData, history: [] };
+    if (!sessionData?.history) sessionData = { ...sessionData, history: [], extractedParams: {} };
 
     // 1. Usar o Agente de IA consolidado
     const { processWhatsAppMessage } = await import('@/lib/whatsapp-agent');
