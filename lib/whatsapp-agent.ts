@@ -428,7 +428,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     await loadRules();
 
     if (history.length === 0) {
-        return `Olá! Eu sou o *Gutto*, especialista em portabilidade.\n\nPara iniciarmos a sua simulação, qual é o seu *convênio*?\n\n*Opções disponíveis:*\n👉 INSS\n👉 SIAPE\n👉 Governo\n👉 Forças Armadas\n👉 CLT Privado\n\n(Ou pergunte as regras de algum banco, ex: "Regras do Bradesco")`;
+        return `Olá! Eu sou o *Gutto*, especialista em portabilidade.\n\nPara iniciarmos a sua simulação, qual é o seu *convênio*?\n\n*Opções disponíveis:*\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**\n\n(Ou pergunte as regras de algum banco, ex: "Regras do Bradesco")`;
     }
 
     const lower = message.toLowerCase().trim();
@@ -774,7 +774,12 @@ ${dataSummary || 'Nenhum dado coletado ainda.'}
 
 VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EXATA ABAIXO:
 1. Convênio (INSS, SIAPE, Governo, Forças Armadas ou CLT Privado)
-   - IMPORTANTE: Se o convênio não constar na lista de dados coletados, você DEVE pedir o convênio e listar estas 5 opções exatas de convênio para o cliente escolher.
+   - IMPORTANTE: Se o convênio não constar na lista de dados coletados, você DEVE pedir o convênio e listar obrigatoriamente as opções com o emoji de apontar e em letras maiúsculas exatamente assim:
+     👉 **INSS**
+     👉 **SIAPE**
+     👉 **GOVERNO**
+     👉 **FORÇAS ARMADAS**
+     👉 **CLT PRIVADO**
 2. Idade
 ${step3Text}
 4. Para o próximo dado:
