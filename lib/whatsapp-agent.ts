@@ -456,12 +456,6 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
         if (params.taxaJurosMensal && params.taxaJurosMensal > 0.1) {
             params.taxaJurosMensal = params.taxaJurosMensal / 100;
         }
-        if (!params.taxaJurosMensal) {
-            const n = params.parcelasRestantes || ((params.prazoTotal || 0) - (params.parcelasPagas || 0));
-            if ((params.valorParcela || 0) > 0 && (params.saldoDevedor || 0) > 0 && n > 0) {
-                params.taxaJurosMensal = calcRate(params.saldoDevedor!, params.valorParcela!, n);
-            }
-        }
 
         // Set parcelas pagas for simulation engine
         if (params.prazoTotal && params.parcelasRestantes && !params.parcelasPagas) {

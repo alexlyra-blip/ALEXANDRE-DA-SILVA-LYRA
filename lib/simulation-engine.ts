@@ -386,7 +386,7 @@ export function calculateOffers(
         const bankPortRate = parseRate(bank.portabilityRate);
         const bankAdjustment = parseRate(bank.ajusteTaxa);
 
-        const defaultRate = convenio === 'SIAPE' ? 1.70 : (convenio === 'INSS' ? 1.85 : 2.05);
+        const defaultRate = convenio?.toUpperCase() === 'SIAPE' ? 1.70 : (convenio?.toUpperCase() === 'INSS' ? 1.85 : 2.05);
         const origRateCalculated = originalRate > 0 ? originalRate : (parseRate(bank.taxaPortabilidadeOrigem) || defaultRate);
 
         // Dynamic calculation: client rate + bank adjustment

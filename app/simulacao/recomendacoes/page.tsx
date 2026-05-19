@@ -74,6 +74,111 @@ function calculateRate(pv: number, pmt: number, n: number) {
   return rate;
 }
 
+const BANK_ALIASES: Record<string, string[]> = {
+  "237": ["bradesco"],
+  "341": ["itau", "itaú"],
+  "033": ["santander"],
+  "001": ["bb", "banco do brasil"],
+  "104": ["caixa"],
+  "623": ["pan", "banco pan"],
+  "311": ["bmg"],
+  "422": ["safra"],
+  "626": ["c6", "c6 consig", "c6 bank"],
+  "707": ["daycoval"],
+  "041": ["banrisul"],
+  "012": ["inbursa"],
+  "069": ["crefisa"],
+  "121": ["agibank"],
+  "079": ["picpay"],
+  "336": ["c6"],
+  "003": ["amazonia", "bas"],
+  "004": ["nordeste", "bnb"],
+  "070": ["brb"],
+};
+
+const normalizeStr = (s: string) => {
+  if (!s) return '';
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+};
+
+const SUB_CONVENIO_MAP: Record<string, string[]> = {
+  "01": ["exercito", "exército"],
+  "02": ["aeronautica", "aeronáutica"],
+  "03": ["marinha"],
+  "AC": ["acre"],
+  "AL": ["alagoas"],
+  "AP": ["amapa", "amapá"],
+  "AM": ["amazonas"],
+  "BA": ["bahia"],
+  "CE": ["ceara", "ceará"],
+  "DF": ["distrito federal", "df"],
+  "ES": ["espirito santo", "espírito santo", "es"],
+  "GO": ["goias", "goiás"],
+  "MA": ["maranhao", "maranhão"],
+  "MT": ["mato grosso"],
+  "MS": ["mato grosso do sul"],
+  "MG": ["minas gerais", "mg"],
+  "PA": ["para", "pará"],
+  "PB": ["paraiba", "paraíba"],
+  "PR": ["parana", "paraná"],
+  "PE": ["pernambuco"],
+  "PI": ["piaui", "piauí"],
+  "RJ": ["rio de janeiro", "rj"],
+  "RN": ["rio grande do norte"],
+  "RS": ["rio grande do sul"],
+  "RO": ["rondonia", "rondônia"],
+  "RR": ["roraima"],
+  "SC": ["santa catarina"],
+  "SP": ["sao paulo", "são paulo", "sp"],
+  "SE": ["sergipe"],
+  "TO": ["tocantins"],
+};
+
+const checkSubConvenioMatch = (ruleSub: string, currentSub: string): boolean => {
+  if (!ruleSub || !currentSub) return true;
+  const r = normalizeStr(ruleSub);
+  const c = normalizeStr(currentSub);
+  if (r === c) return true;
+  for (const [code, aliases] of Object.entries(SUB_CONVENIO_MAP)) {
+    const normCode = code.toLowerCase();
+    const ruleMatches = r === normCode || aliases.some(a => r.includes(a) || a.includes(r));
+    const currentMatches = c === normCode || aliases.some(a => c.includes(a) || a.includes(c));
+    if (ruleMatches && currentMatches) return true;
+  }
+  return r.includes(c) || c.includes(r);
+};
+
+const checkBankMatch = (ruleBank: string, currentBank: string) => {
+  if (!ruleBank || !currentBank) return false;
+  const rule = ruleBank.trim().toLowerCase();
+  const current = currentBank.trim().toLowerCase();
+  if (current === rule) return true;
+
+  const ruleCodeMatch = rule.match(/^\d{1,4}/);
+  const currentCodeMatch = current.match(/^\d{1,4}/);
+  const ruleCode = ruleCodeMatch ? ruleCodeMatch[0].padStart(3, '0') : null;
+  const currentCode = currentCodeMatch ? currentCodeMatch[0].padStart(3, '0') : null;
+
+  if (ruleCode && currentCode && ruleCode === currentCode) return true;
+
+  for (const [code, aliases] of Object.entries(BANK_ALIASES)) {
+    const ruleHasCode = ruleCode === code || aliases.some(a => rule.includes(a));
+    const currentHasCode = currentCode === code || aliases.some(a => current.includes(a));
+    if (ruleHasCode && currentHasCode) return true;
+  }
+
+  const parts = current.split('-');
+  if (parts.length >= 2) {
+    const name = parts.slice(1).join('-').trim();
+    if (rule.length >= 2 && name.includes(rule)) return true;
+  }
+  return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
+};
+
 export default function Recomendacoes() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -331,110 +436,7 @@ export default function Recomendacoes() {
 
       const cleanBeneficio = codigoBeneficio ? String(codigoBeneficio).replace(/^0+/, '') : '';
 
-      const BANK_ALIASES: Record<string, string[]> = {
-        "237": ["bradesco"],
-        "341": ["itau", "itaú"],
-        "033": ["santander"],
-        "001": ["bb", "banco do brasil"],
-        "104": ["caixa"],
-        "623": ["pan", "banco pan"],
-        "311": ["bmg"],
-        "422": ["safra"],
-        "626": ["c6", "c6 consig", "c6 bank"],
-        "707": ["daycoval"],
-        "041": ["banrisul"],
-        "012": ["inbursa"],
-        "069": ["crefisa"],
-        "121": ["agibank"],
-        "079": ["picpay"],
-        "336": ["c6"],
-        "003": ["amazonia", "bas"],
-        "004": ["nordeste", "bnb"],
-        "070": ["brb"],
-      };
 
-      const normalizeStr = (s: string) => {
-        if (!s) return '';
-        return s
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .trim();
-      };
-
-      const SUB_CONVENIO_MAP: Record<string, string[]> = {
-        "01": ["exercito", "exército"],
-        "02": ["aeronautica", "aeronáutica"],
-        "03": ["marinha"],
-        "AC": ["acre"],
-        "AL": ["alagoas"],
-        "AP": ["amapa", "amapá"],
-        "AM": ["amazonas"],
-        "BA": ["bahia"],
-        "CE": ["ceara", "ceará"],
-        "DF": ["distrito federal", "df"],
-        "ES": ["espirito santo", "espírito santo", "es"],
-        "GO": ["goias", "goiás"],
-        "MA": ["maranhao", "maranhão"],
-        "MT": ["mato grosso"],
-        "MS": ["mato grosso do sul"],
-        "MG": ["minas gerais", "mg"],
-        "PA": ["para", "pará"],
-        "PB": ["paraiba", "paraíba"],
-        "PR": ["parana", "paraná"],
-        "PE": ["pernambuco"],
-        "PI": ["piaui", "piauí"],
-        "RJ": ["rio de janeiro", "rj"],
-        "RN": ["rio grande do norte"],
-        "RS": ["rio grande do sul"],
-        "RO": ["rondonia", "rondônia"],
-        "RR": ["roraima"],
-        "SC": ["santa catarina"],
-        "SP": ["sao paulo", "são paulo", "sp"],
-        "SE": ["sergipe"],
-        "TO": ["tocantins"],
-      };
-
-      const checkSubConvenioMatch = (ruleSub: string, currentSub: string): boolean => {
-        if (!ruleSub || !currentSub) return true;
-        const r = normalizeStr(ruleSub);
-        const c = normalizeStr(currentSub);
-        if (r === c) return true;
-        for (const [code, aliases] of Object.entries(SUB_CONVENIO_MAP)) {
-          const normCode = code.toLowerCase();
-          const ruleMatches = r === normCode || aliases.some(a => r.includes(a) || a.includes(r));
-          const currentMatches = c === normCode || aliases.some(a => c.includes(a) || a.includes(c));
-          if (ruleMatches && currentMatches) return true;
-        }
-        return r.includes(c) || c.includes(r);
-      };
-
-      const checkBankMatch = (ruleBank: string, currentBank: string) => {
-        if (!ruleBank || !currentBank) return false;
-        const rule = ruleBank.trim().toLowerCase();
-        const current = currentBank.trim().toLowerCase();
-        if (current === rule) return true;
-
-        const ruleCodeMatch = rule.match(/^\d{1,4}/);
-        const currentCodeMatch = current.match(/^\d{1,4}/);
-        const ruleCode = ruleCodeMatch ? ruleCodeMatch[0].padStart(3, '0') : null;
-        const currentCode = currentCodeMatch ? currentCodeMatch[0].padStart(3, '0') : null;
-
-        if (ruleCode && currentCode && ruleCode === currentCode) return true;
-
-        for (const [code, aliases] of Object.entries(BANK_ALIASES)) {
-          const ruleHasCode = ruleCode === code || aliases.some(a => rule.includes(a));
-          const currentHasCode = currentCode === code || aliases.some(a => current.includes(a));
-          if (ruleHasCode && currentHasCode) return true;
-        }
-
-        const parts = current.split('-');
-        if (parts.length >= 2) {
-          const name = parts.slice(1).join('-').trim();
-          if (rule.length >= 2 && name.includes(rule)) return true;
-        }
-        return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
-      };
 
       banks.forEach(rawBank => {
         const bank = {
@@ -668,7 +670,7 @@ export default function Recomendacoes() {
             const bankAdjustment = parseRate(bank.ajusteTaxa);
             const bankPortRate = parseRate(bank.portabilityRate);
             
-            const defaultRate = bankConvenio === 'SIAPE' ? 1.70 : (bankConvenio === 'INSS' ? 1.85 : 2.05);
+            const defaultRate = bankConvenio === 'siape' ? 1.70 : (bankConvenio === 'inss' ? 1.85 : 2.05);
             const orig = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || defaultRate);
             
             // Dynamic calculation: client rate + bank adjustment
