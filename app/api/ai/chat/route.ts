@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const reply = await processWhatsAppMessage(message, history || [], phoneFlag, sessionData);
+    const reply = await processWhatsAppMessage(message, history || [], phoneFlag, sessionData, userId);
 
     // Save session back to database to persist extractedParams
     if (sessionRef) {

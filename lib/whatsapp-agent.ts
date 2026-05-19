@@ -295,12 +295,12 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
     const prev = lastQuestion.toLowerCase();
 
     // Convênio
-    if (!params.convenio && (prev === '' || prev.includes('convênio') || prev.includes('convenio'))) {
-        if (/\binss\b/.test(txt)) params.convenio = 'INSS';
-        else if (/\bsiape\b/.test(txt)) params.convenio = 'SIAPE';
-        else if (/\bgoverno\b/.test(txt)) params.convenio = 'GOVERNO';
-        else if (/for[çc]as?\s*armadas?/.test(txt)) params.convenio = 'FORÇAS ARMADAS';
-        else if (/\bclt\b/.test(txt)) params.convenio = 'CLT PRIVADO';
+    if (!params.convenio) {
+        if (/\binss\b/i.test(txt)) params.convenio = 'INSS';
+        else if (/\bsiape\b/i.test(txt)) params.convenio = 'SIAPE';
+        else if (/\bgoverno\b/i.test(txt)) params.convenio = 'GOVERNO';
+        else if (/for[çc]as?\s*armadas?/i.test(txt)) params.convenio = 'FORÇAS ARMADAS';
+        else if (/\bclt\b/i.test(txt)) params.convenio = 'CLT PRIVADO';
     }
     // Idade
     if (!params.idade && (prev.includes('idade') || prev.includes('anos'))) {
@@ -537,7 +537,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
     }
 }
 
-export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}) {
+export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserId: string = '') {
     const ai = getAI();
     await loadRules();
 
@@ -547,11 +547,93 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
 
     const lower = message.toLowerCase().trim();
 
+    // Validar telefone/UID e carregar estado da sessão
+    let userProfile = { role: 'admin' } as any;
+    const db = getAdminDb();
+    if (db) {
+        if (webUserId) {
+            try {
+                const userDoc = await db.collection('users').doc(webUserId).get();
+                if (userDoc.exists) {
+                    userProfile = { uid: userDoc.id, ...userDoc.data() };
+                }
+            } catch (e) { console.error("Error loading web user profile:", e); }
+        } else if (currentPhone) {
+            const clean = currentPhone.replace(/\D/g, '');
+            try {
+                const snap = await db.collection('users').get();
+                let found = null;
+                snap.forEach(doc => { const d = doc.data(); if (d.phone) { const cp = d.phone.replace(/\D/g, ''); if (cp.length >= 8 && clean.endsWith(cp)) found = { uid: doc.id, ...d }; } });
+                if (!found) return "Desculpe, seu número de telefone não está cadastrado ou autorizado no sistema.";
+                userProfile = found;
+            } catch (e) { console.error("Error loading phone user profile:", e); }
+        }
+    }
+
     // Interceptar comando "tabelas" ou "tabela"
     if (lower === 'tabelas' || lower === 'tabela' || lower === 'tabelas disponíveis' || lower === 'outras tabelas') {
-        const lastOffers = sessionData.lastOffers || [];
-        const lastBank = sessionData.lastOfertadoBank || '';
+        let lastOffers = sessionData.lastOffers || [];
+        let lastBank = sessionData.lastOfertadoBank || '';
         
+        if (lastOffers.length === 0 || !lastBank) {
+            // Tentar recuperar do Firestore (coletando a última simulação ativa na web ou whatsapp)
+            if (db && userProfile?.uid) {
+                try {
+                    const simSnap = await db.collection('simulations')
+                        .where('userId', '==', userProfile.uid)
+                        .orderBy('createdAt', 'desc')
+                        .limit(1)
+                        .get();
+                    if (!simSnap.empty) {
+                        const simDoc = simSnap.docs[0].data();
+                        
+                        // Obter as regras e prioridades do Firestore para recalcular com precisão in-memory
+                        const promotoraId = userProfile?.role === 'admin' ? 'admin' : (userProfile?.role === 'promotora' ? userProfile?.uid : userProfile?.createdBy || 'admin');
+                        const [bSnap, rSnap, sSnap] = await Promise.all([
+                            db.collection('bankRules').get(), db.collection('generalRules').get(), db.collection('settings').doc(promotoraId).get()
+                        ]);
+                        const banks = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        const rules = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        const sd = sSnap.exists ? sSnap.data() : {};
+                        
+                        const cleanParams = (simDoc && simDoc.simData) ? simDoc.simData : {
+                            idade: simDoc?.idade,
+                            convenio: simDoc?.convenio,
+                            subConvenio: simDoc?.subConvenio,
+                            bancoAtual: simDoc?.bancoAtual,
+                            valorParcela: simDoc?.valorParcela,
+                            saldoDevedor: simDoc?.saldoDevedor,
+                            prazoTotal: simDoc?.prazoTotal,
+                            parcelasRestantes: simDoc?.parcelasRestantes,
+                        };
+
+                        if (cleanParams && cleanParams.convenio) {
+                            const recalcOffers = calculateOffers(
+                                cleanParams as SimulationParams, 
+                                banks, 
+                                rules, 
+                                sd?.bankPriorities || {}, 
+                                sd?.bankInstallments || {}, 
+                                userProfile, 
+                                sd?.nonPortableBanks || []
+                            );
+                            if (recalcOffers.length > 0) {
+                                sessionData.lastOffers = recalcOffers;
+                                lastOffers = recalcOffers;
+                                
+                                // Determinar o top bank com maior troco da simulação
+                                const sortedRecalc = [...recalcOffers].sort((a: any, b: any) => b.valorTroco - a.valorTroco);
+                                sessionData.lastOfertadoBank = sortedRecalc[0].name;
+                                lastBank = sortedRecalc[0].name;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Erro ao recuperar simulação recente para tabelas:", e);
+                }
+            }
+        }
+
         if (lastOffers.length === 0 || !lastBank) {
             return `Você ainda não possui uma simulação ativa nesta sessão. Por favor, inicie informando o seu *convênio* para simularmos!`;
         }
@@ -738,20 +820,6 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     if (/\b(bancos|lista)\b/.test(lower) && !history.some(h => h.content?.includes('Troco Estimado'))) {
         const uniqueNames = Array.from(new Set(cachedBankRules.map(b => b.name.toUpperCase()))).sort();
         return `🏦 *Bancos Cadastrados:* ${uniqueNames.join(', ')}\n\nDigite: *Regras do [banco]* para ver as regras detalhadas de portabilidade.`;
-    }
-
-    // Validar telefone e carregar estado da sessão
-    let userProfile = { role: 'admin' } as any;
-    if (currentPhone) {
-        const clean = currentPhone.replace(/\D/g, '');
-        const db = getAdminDb();
-        if (db) {
-            const snap = await db.collection('users').get();
-            let found = null;
-            snap.forEach(doc => { const d = doc.data(); if (d.phone) { const cp = d.phone.replace(/\D/g, ''); if (cp.length >= 8 && clean.endsWith(cp)) found = { uid: doc.id, ...d }; } });
-            if (!found) return "Desculpe, seu número de telefone não está cadastrado ou autorizado no sistema.";
-            userProfile = found;
-        }
     }
 
     // Carrega extractedParams diretamente de sessionData (passado por referência do route.ts)
