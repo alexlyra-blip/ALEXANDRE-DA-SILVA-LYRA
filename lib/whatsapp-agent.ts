@@ -124,22 +124,81 @@ function getRuleSummary(ruleIdOrName: string): string {
     return t;
 }
 
-function getBankTablesSummary(ruleIdOrName: string): string {
+function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): string {
     let b = cachedBankRules.find(r => r.id === ruleIdOrName);
     if (!b) {
         b = cachedBankRules.find(r => (r.name || '').toLowerCase().includes(ruleIdOrName.toLowerCase()));
     }
     if (!b) return `Banco "${ruleIdOrName}" não encontrado.`;
     
+    const lastOffers = sessionData.lastOffers || [];
+    
+    // Se houver uma simulação ativa com ofertas calculadas nesta sessão
+    if (lastOffers.length > 0) {
+        // Encontrar as ofertas específicas calculadas e válidas para este banco
+        const simulatedOffers = lastOffers.filter((o: any) =>
+            o.name.toLowerCase().includes(b.name.toLowerCase()) ||
+            b.name.toLowerCase().includes(o.name.toLowerCase())
+        );
+
+        if (simulatedOffers.length > 0) {
+            let t = `📈 *Tabelas de Refin da Portabilidade: ${b.name.toUpperCase()}*\n`;
+            t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n`;
+            t += `_Exibindo apenas as tabelas elegíveis com base nos filtros aplicados (Taxa Ponderada Mesa, Idade, etc.)_\n\n`;
+            
+            // Ordenar por troco decrescente
+            const sortedSimulated = simulatedOffers.sort((x: any, y: any) => y.valorTroco - x.valorTroco);
+            sortedSimulated.forEach((o: any) => {
+                t += `• *${o.tabela}* | Taxa: ${o.taxaBase.toString().replace('.', ',')}%`;
+                t += ` | Novo Contrato: R$ ${fmt(o.valorContrato)}`;
+                t += ` | Troco: R$ ${fmt(o.valorTroco)}\n`;
+            });
+            return t;
+        } else {
+            // Se o banco foi simulado mas todas as tabelas foram reprovadas pelos filtros
+            return `O banco *${b.name.toUpperCase()}* não possui nenhuma tabela de Refin da Portabilidade disponível/elegível para o perfil atual do cliente devido aos critérios de *Taxa Ponderada Mesa* ou restrições de idade.`;
+        }
+    }
+    
     const tablesArray = b.tabelas || b.tables || [];
-    if (tablesArray.length === 0) {
+    const clientAge = sessionData.extractedParams?.idade;
+    const valorParcela = sessionData.extractedParams?.valorParcela;
+    
+    // Filtrar tabelas se houver simulação ativa
+    const filteredTables = tablesArray.filter((tab: any) => {
+        const idMin = tab.idadeMinima || tab.minAge || 0;
+        const idMax = tab.idadeMaxima || tab.maxAge || 0;
+        if (clientAge > 0) {
+            const parsedMin = typeof idMin === 'number' ? idMin : parseFloat(idMin) || 0;
+            const parsedMax = typeof idMax === 'number' ? idMax : parseFloat(idMax) || 0;
+            if (parsedMin > 0 && clientAge < parsedMin) return false;
+            if (parsedMax > 0 && clientAge > parsedMax) return false;
+        }
+        
+        const minInst = tab.minInstallmentValue ? parseFloat(tab.minInstallmentValue) : 0;
+        const maxInst = tab.maxInstallmentValue ? parseFloat(tab.maxInstallmentValue) : 0;
+        if (valorParcela > 0) {
+            if (minInst > 0 && valorParcela < minInst) return false;
+            if (maxInst > 0 && valorParcela > maxInst) return false;
+        }
+        return true;
+    });
+
+    if (filteredTables.length === 0) {
+        if (clientAge > 0) {
+            return `O banco *${b.name.toUpperCase()}* não possui tabelas de Refin da Portabilidade disponíveis para o perfil atual do cliente (Idade: ${clientAge} anos${valorParcela > 0 ? `, Parcela: R$ ${valorParcela.toFixed(2)}` : ''}).`;
+        }
         return `O banco *${b.name.toUpperCase()}* não possui tabelas de Refin da Portabilidade cadastradas no momento.`;
     }
     
     let t = `📈 *Tabelas de Refin da Portabilidade: ${b.name.toUpperCase()}*\n`;
-    t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n\n`;
+    t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n`;
+    if (clientAge > 0) {
+        t += `_Filtros aplicados para a idade do cliente: ${clientAge} anos_\n`;
+    }
+    t += `\n`;
     
-    tablesArray.forEach((tab: any) => {
+    filteredTables.forEach((tab: any) => {
         const tax = tab.taxaTabela !== undefined ? tab.taxaTabela : (tab.taxa_tabela !== undefined ? tab.taxa_tabela : 0);
         const minTicket = tab.minTicket !== undefined ? tab.minTicket : (tab.min_ticket !== undefined ? tab.min_ticket : 0);
         const idMin = tab.idadeMinima || 0;
@@ -493,7 +552,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
                 searchName.includes((b.name || '').toLowerCase())
             );
             if (matchingBanks.length > 0) {
-                return getBankTablesSummary(matchingBanks[0].id);
+                return getBankTablesSummary(matchingBanks[0].id, sessionData);
             }
         }
     }
