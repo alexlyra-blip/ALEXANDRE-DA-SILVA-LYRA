@@ -131,14 +131,15 @@ function getBankTablesSummary(ruleIdOrName: string): string {
     }
     if (!b) return `Banco "${ruleIdOrName}" não encontrado.`;
     
-    if (!b.tables || b.tables.length === 0) {
+    const tablesArray = b.tabelas || b.tables || [];
+    if (tablesArray.length === 0) {
         return `O banco *${b.name.toUpperCase()}* não possui tabelas de Refin da Portabilidade cadastradas no momento.`;
     }
     
     let t = `📈 *Tabelas de Refin da Portabilidade: ${b.name.toUpperCase()}*\n`;
     t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n\n`;
     
-    b.tables.forEach((tab: any) => {
+    tablesArray.forEach((tab: any) => {
         const tax = tab.taxaTabela !== undefined ? tab.taxaTabela : (tab.taxa_tabela !== undefined ? tab.taxa_tabela : 0);
         const minTicket = tab.minTicket !== undefined ? tab.minTicket : (tab.min_ticket !== undefined ? tab.min_ticket : 0);
         const idMin = tab.idadeMinima || 0;
@@ -732,9 +733,10 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
   * Bancos Não Portados (origem): ${nonAccepted.join(', ') || 'Nenhum'}
   * Bancos com Regras específicas: ${specificRulesStr}`;
         
-        if (b.tables && b.tables.length > 0) {
+        const tablesArray = b.tabelas || b.tables || [];
+        if (tablesArray.length > 0) {
             bankRulesContext += `\n  * Tabelas de Refin da Portabilidade Cadastradas:`;
-            b.tables.forEach((t: any) => {
+            tablesArray.forEach((t: any) => {
                 const taxa = t.taxaTabela ?? t.taxa_tabela ?? t.coeficiente ?? 0;
                 const minTicket = t.minTicket ?? t.min_ticket ?? 0;
                 const idadeMin = t.idadeMinima || 0;
