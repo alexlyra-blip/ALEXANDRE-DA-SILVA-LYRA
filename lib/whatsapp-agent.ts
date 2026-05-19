@@ -108,19 +108,18 @@ function getRuleSummary(ruleIdOrName: string): string {
     const convenioStr = `${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}`;
 
     let t = `📋 *Resumo de Regras de Portabilidade*\n\n`;
-    t += `*Banco:* ${b.name}\n`;
-    t += `*Convênio:* ${convenioStr}\n`;
-    t += `*Idade Mínima:* ${minAge}\n`;
-    t += `*Idade Máxima:* ${maxAge}\n`;
-    t += `*Aceita Analfabeto:* ${formatYesNo(acceptsIlliterate)}\n`;
-    t += `*Aceita 60+:* ${formatYesNo(accepts60Mais)}\n`;
-    t += `*Parcela Mínima:* ${formatCurrency(minInstallmentValue)}\n`;
-    t += `*Saldo Mínimo:* ${formatCurrency(minBalance)}\n`;
-    t += `*Troco Mínimo:* ${formatCurrency(minTroco)}\n`;
-    t += `*Taxa Mínimo Port:* ${formatRate(portabilityRate)}\n`;
-    t += `*Taxa Mínima Refin/Port:* ${formatRate(refinRate)}\n`;
-    t += `*Bancos que Porta:* ${bancoportStr}\n`;
-    t += `*Bancos com Regras específicas:* ${regrasEspecificasStr}`;
+    t += `🏛️ *Banco:* ${b.name}\n`;
+    t += `💼 *Convênio:* ${convenioStr}\n`;
+    t += `👵 *Idade:* De ${minAge} a ${maxAge} anos\n`;
+    t += `✍️ *Aceita Analfabeto:* ${formatYesNo(acceptsIlliterate)}\n`;
+    t += `🕒 *Aceita 60+:* ${formatYesNo(accepts60Mais)}\n`;
+    t += `💵 *Parcela Mínima:* ${formatCurrency(minInstallmentValue)}\n`;
+    t += `💰 *Troco Mínimo:* ${formatCurrency(minTroco)}\n`;
+    t += `📊 *Saldo Mínimo:* ${formatCurrency(minBalance)}\n`;
+    t += `📉 *Taxa Mínimo Port:* ${formatRate(portabilityRate)}\n`;
+    t += `🔄 *Taxa Mínima Refin/Port:* ${formatRate(refinRate)}\n`;
+    t += `🚫 *Bancos Não Portados (Origem):* ${bancoportStr}\n`;
+    t += `⚠️ *Bancos com Regras específicas:* ${regrasEspecificasStr}`;
 
     return t;
 }
@@ -712,11 +711,14 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         const minAge = b.minAge ?? b.min_age ?? 0;
         const maxAge = b.maxAge ?? b.max_age ?? 0;
         const minInstallment = b.minInstallmentValue ?? b.min_installment_value ?? 0;
+        const minTroco = b.minTroco !== undefined ? b.minTroco : (b.min_troco !== undefined ? b.min_troco : 0);
         const acceptsIlliterate = b.acceptsIlliterate ?? b.accepts_illiterate ?? false;
         const accepts60Mais = b.accepts60Mais ?? b.accepts_60_mais ?? false;
         const refinRate = b.refinRate ?? b.refin_rate ?? 0;
         const portabilityRate = b.portabilityRate ?? b.portability_rate ?? 0;
         const nonAccepted = b.nonAcceptedBanks ?? b.non_accepted_banks ?? [];
+        const specificRules = b.specificInstallmentRules !== undefined ? b.specificInstallmentRules : (b.specific_installment_rules !== undefined ? b.specific_installment_rules : []);
+        const specificRulesStr = specificRules.length > 0 ? specificRules.map((r: any) => `${r.bank} (${r.installments} parcelas)`).join(', ') : 'Nenhum';
         
         bankRulesContext += `\n- BANCO: ${b.name} (Convênio: ${b.convenio || 'INSS'}${b.subConvenio ? ' - ' + b.subConvenio : ''})
   * Idade Mínima: ${minAge} anos
@@ -724,9 +726,11 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
   * Aceita Analfabeto: ${acceptsIlliterate ? 'SIM' : 'NÃO'}
   * Aceita 60+: ${accepts60Mais ? 'SIM' : 'NÃO'}
   * Parcela Mínima: R$ ${minInstallment.toFixed(2)}
+  * Troco Mínimo: R$ ${minTroco.toFixed(2)}
   * Taxa Mínima Portabilidade: ${portabilityRate}%
   * Taxa Mínima Refin/Port: ${refinRate}%
-  * Bancos Não Portados (origem): ${nonAccepted.join(', ') || 'Nenhum'}`;
+  * Bancos Não Portados (origem): ${nonAccepted.join(', ') || 'Nenhum'}
+  * Bancos com Regras específicas: ${specificRulesStr}`;
         
         if (b.tables && b.tables.length > 0) {
             bankRulesContext += `\n  * Tabelas de Refin da Portabilidade Cadastradas:`;
@@ -747,7 +751,18 @@ Use APENAS as regras abaixo para responder perguntas individuais sobre roteiro, 
 ${bankRulesContext}
 
 SOBRE REGRAS, ROTEIROS OU RESUMOS DE PORTABILIDADE:
-- Se o usuário perguntar sobre roteiro, resumo ou regras de um banco, use os dados acima para responder com absoluta precisão científica e de forma super amigável!
+- Se o usuário solicitar o resumo, regras ou roteiro de um banco, use os dados acima para responder com absoluta precisão científica e com a seguinte estrutura de layout e emojis premium:
+  🏛️ **Banco**: [Nome do Banco]
+  👵 **Idade**: De [Idade Mínima] a [Idade Máxima] anos
+  ✍️ **Aceita Analfabeto**: [SIM/NÃO]
+  🕒 **Aceita 60+**: [SIM/NÃO]
+  💵 **Parcela Mínima**: R$ [Valor formatado, ex: 20,00]
+  💰 **Troco Mínimo**: R$ [Valor formatado, ex: 100,00]
+  📉 **Taxa Mínima Portabilidade**: [Taxa]%
+  🔄 **Taxa Mínima Refin/Port**: [Taxa]%
+  🚫 **Bancos Não Portados (Origem)**: [Lista de Bancos Não Portados]
+  ⚠️ **Bancos com Regras específicas**: [Lista de Bancos com Regras específicas]
+
 - Se ele perguntar se um banco aceita analfabeto, qual a idade mínima, ou as taxas de uma tabela específica, responda citando diretamente os valores reais cadastrados listados acima.
 - Se o usuário pedir para listar as tabelas de Refin de um banco, liste cada tabela informando a taxa e o valor mínimo da operação (se houver valor mínimo configurado na tabela; caso não haja valor mínimo listado acima para a tabela, NÃO exiba nem mencione o texto "valor mínimo" ou "operação mínima").
 - Se o usuário pedir para você listar os bancos, ou perguntar de forma genérica sobre as regras de algum banco sem fornecer o nome de um banco cadastrado no sistema, instrua-o amigavelmente a perguntar especificando o banco no formato: "Regras do [Nome do Banco]" ou "Roteiro do [Nome do Banco]" (ex: "Regras do Bradesco").
