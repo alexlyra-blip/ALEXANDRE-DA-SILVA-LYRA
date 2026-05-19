@@ -255,7 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    let inactivityInterval: NodeJS.Timeout;
+    var inactivityInterval: any = null;
     const TIMEOUT_SECONDS = 15 * 60;
 
     const resetTimer = () => {

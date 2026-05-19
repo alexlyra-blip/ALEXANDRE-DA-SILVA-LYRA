@@ -90,6 +90,15 @@ const checkBankMatch = (ruleBank: string, currentBank: string) => {
   return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
 };
 
+const normalizeStr = (s: string) => {
+  if (!s) return '';
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+};
+
 function calculateRate(pv: number, pmt: number, n: number) {
   if (pmt <= 0 || pv <= 0 || n <= 0) return 0;
   if (pmt * n <= pv) return 0;
@@ -197,12 +206,14 @@ export function calculateOffers(
     }
 
     // Convenio Filter
-    const bankConvenio = bank.convenio || 'INSS';
-    const simConvenio = params.convenio || 'INSS';
+    const bankConvenio = normalizeStr(bank.convenio || 'INSS');
+    const simConvenio = normalizeStr(params.convenio || 'INSS');
     if (bankConvenio !== simConvenio) return;
 
     // Sub-Convenio Filter
-    if (bank.subConvenio && bank.subConvenio !== params.subConvenio) return;
+    if (bank.subConvenio) {
+      if (normalizeStr(bank.subConvenio) !== normalizeStr(params.subConvenio || '')) return;
+    }
 
     // Invalidez Rule
     const isInvalidity = ['4', '04', '5', '05', '11', '30', '32', '33', '34', '92'].includes(cleanBeneficio);
