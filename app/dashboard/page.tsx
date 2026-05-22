@@ -571,7 +571,7 @@ export default function Dashboard() {
     return (
       <div className="flex flex-col min-h-screen bg-background">
         <DashboardSkeleton />
-        {(!profile && isAuthReady) && (
+        {(!profile && isAuthReady && user) && (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">
               <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />

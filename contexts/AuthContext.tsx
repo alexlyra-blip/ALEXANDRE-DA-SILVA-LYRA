@@ -234,6 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsAuthReady(true);
         });
       } else {
+        setUser(null);
         setProfile(null);
         setIsPending(false);
         setIsAuthReady(true);
@@ -301,11 +302,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { setPersistence, browserSessionPersistence } = await import('firebase/auth');
       await setPersistence(auth, browserSessionPersistence);
-      await signInWithEmailAndPassword(auth, email, pass);
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('isLoggedInThisSession', 'true');
       }
+      await signInWithEmailAndPassword(auth, email, pass);
     } catch (error) {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('isLoggedInThisSession');
+      }
       console.error("Error signing in:", error);
       throw error;
     }
@@ -313,6 +317,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (email: string, pass: string, name: string, phone?: string) => {
     try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('isLoggedInThisSession', 'true');
+      }
       const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, email, pass);
       
       const isFirstAdmin = email === 'alexandrelyra@msn.com' || email === 'alexlyra@gmail.com';
@@ -331,6 +338,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
       setProfile(newProfile);
     } catch (error) {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('isLoggedInThisSession');
+      }
       console.error("Error registering:", error);
       throw error;
     }
@@ -362,12 +372,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { setPersistence, browserSessionPersistence } = await import('firebase/auth');
       await setPersistence(auth, browserSessionPersistence);
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('isLoggedInThisSession', 'true');
       }
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
     } catch (error: any) {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('isLoggedInThisSession');
+      }
       console.error("Error signing in with Google:", error.code, error.message);
       throw error;
     }

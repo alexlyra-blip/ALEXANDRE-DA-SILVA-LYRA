@@ -1,0 +1,79 @@
+[1mdiff --git a/app/dashboard/page.tsx b/app/dashboard/page.tsx[m
+[1mindex 165f858..6f362b6 100644[m
+[1m--- a/app/dashboard/page.tsx[m
+[1m+++ b/app/dashboard/page.tsx[m
+[36m@@ -571,7 +571,7 @@[m [mexport default function Dashboard() {[m
+     return ([m
+       <div className="flex flex-col min-h-screen bg-background">[m
+         <DashboardSkeleton />[m
+[31m-        {(!profile && isAuthReady) && ([m
+[32m+[m[32m        {(!profile && isAuthReady && user) && ([m
+           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">[m
+             <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">[m
+               <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />[m
+[1mdiff --git a/contexts/AuthContext.tsx b/contexts/AuthContext.tsx[m
+[1mindex ddc24ba..209fee1 100644[m
+[1m--- a/contexts/AuthContext.tsx[m
+[1m+++ b/contexts/AuthContext.tsx[m
+[36m@@ -234,6 +234,7 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+           setIsAuthReady(true);[m
+         });[m
+       } else {[m
+[32m+[m[32m        setUser(null);[m
+         setProfile(null);[m
+         setIsPending(false);[m
+         setIsAuthReady(true);[m
+[36m@@ -301,11 +302,14 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+     try {[m
+       const { setPersistence, browserSessionPersistence } = await import('firebase/auth');[m
+       await setPersistence(auth, browserSessionPersistence);[m
+[31m-      await signInWithEmailAndPassword(auth, email, pass);[m
+       if (typeof window !== 'undefined') {[m
+         sessionStorage.setItem('isLoggedInThisSession', 'true');[m
+       }[m
+[32m+[m[32m      await signInWithEmailAndPassword(auth, email, pass);[m
+     } catch (error) {[m
+[32m+[m[32m      if (typeof window !== 'undefined') {[m
+[32m+[m[32m        sessionStorage.removeItem('isLoggedInThisSession');[m
+[32m+[m[32m      }[m
+       console.error("Error signing in:", error);[m
+       throw error;[m
+     }[m
+[36m@@ -313,6 +317,9 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+ [m
+   const register = async (email: string, pass: string, name: string, phone?: string) => {[m
+     try {[m
+[32m+[m[32m      if (typeof window !== 'undefined') {[m
+[32m+[m[32m        sessionStorage.setItem('isLoggedInThisSession', 'true');[m
+[32m+[m[32m      }[m
+       const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, email, pass);[m
+       [m
+       const isFirstAdmin = email === 'alexandrelyra@msn.com' || email === 'alexlyra@gmail.com';[m
+[36m@@ -331,6 +338,9 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+       await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);[m
+       setProfile(newProfile);[m
+     } catch (error) {[m
+[32m+[m[32m      if (typeof window !== 'undefined') {[m
+[32m+[m[32m        sessionStorage.removeItem('isLoggedInThisSession');[m
+[32m+[m[32m      }[m
+       console.error("Error registering:", error);[m
+       throw error;[m
+     }[m
+[36m@@ -362,12 +372,15 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+     try {[m
+       const { setPersistence, browserSessionPersistence } = await import('firebase/auth');[m
+       await setPersistence(auth, browserSessionPersistence);[m
+[31m-      const provider = new GoogleAuthProvider();[m
+[31m-      await signInWithPopup(auth, provider);[m
+       if (typeof window !== 'undefined') {[m
+         sessionStorage.setItem('isLoggedInThisSession', 'true');[m
+       }[m
+[32m+[m[32m      const provider = new GoogleAuthProvider();[m
+[32m+[m[32m      await signInWithPopup(auth, provider);[m
+     } catch (error: any) {[m
+[32m+[m[32m      if (typeof window !== 'undefined') {[m
+[32m+[m[32m        sessionStorage.removeItem('isLoggedInThisSession');[m
+[32m+[m[32m      }[m
+       console.error("Error signing in with Google:", error.code, error.message);[m
+       throw error;[m
+     }[m
