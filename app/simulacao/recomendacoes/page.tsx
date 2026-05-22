@@ -190,6 +190,7 @@ export default function Recomendacoes() {
   const [filterReasonsMap, setFilterReasonsMap] = useState<Record<string, {bankName: string, reason: string, tabela?: string}[]>>({});
   const [showAllOffers, setShowAllOffers] = useState(false);
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('all');
+  const [selectedPrazoFilter, setSelectedPrazoFilter] = useState<number>(108);
   const [simData, setSimData] = useState<any>(null);
   const [allSimulations, setAllSimulations] = useState<any[]>([]);
   const [activeSimulationIndex, setActiveSimulationIndex] = useState(0);
@@ -204,6 +205,10 @@ export default function Recomendacoes() {
     allCalculatedOffersMap[simData?.id] || [], 
     [allCalculatedOffersMap, simData?.id]
   );
+
+  const offersWithPrazo = useMemo(() => {
+    return allCalculatedOffers.filter(o => o.prazoRefinPort === selectedPrazoFilter);
+  }, [allCalculatedOffers, selectedPrazoFilter]);
 
   const filterReasons = useMemo(() => 
     filterReasonsMap[simData?.id] || [],
@@ -805,16 +810,16 @@ export default function Recomendacoes() {
 
   }, [banks, generalRules, isLoaded, profile, promotoraPriorities, promotoraInstallments, allSimulations]);
 
-  // Update 'Principais Ofertas' (offers) whenever allCalculatedOffers or sortBy changes
+  // Update 'Principais Ofertas' (offers) whenever offersWithPrazo or sortBy changes
   useEffect(() => {
-    if (allCalculatedOffers.length === 0) {
+    if (offersWithPrazo.length === 0) {
       setOffers([]);
       return;
     }
 
-    let filteredForTop = allCalculatedOffers;
+    let filteredForTop = offersWithPrazo;
     if (selectedBankFilter !== 'all') {
-      filteredForTop = allCalculatedOffers.filter(o => o.name === selectedBankFilter);
+      filteredForTop = offersWithPrazo.filter(o => o.name === selectedBankFilter);
     }
 
     const sorted = [...filteredForTop].sort((a, b) => {
@@ -890,19 +895,19 @@ export default function Recomendacoes() {
 
     // We keep all unique bank offers
     setOffers(uniqueBankOffers);
-  }, [allCalculatedOffers, sortBy, selectedBankFilter, promotoraPriorities]);
+  }, [offersWithPrazo, sortBy, selectedBankFilter, promotoraPriorities]);
 
   const currentOffers = showAllOffers 
     ? offers
     : offers.slice(0, 3);
   
-  const allCalculatedOffersCount = Array.from(new Set(allCalculatedOffers.map(o => o.name))).length;
+  const allCalculatedOffersCount = Array.from(new Set(offersWithPrazo.map(o => o.name))).length;
   
   const maxValorTroco = currentOffers.length > 0 ? Math.max(...currentOffers.map(b => b.valorTroco)) : 0;
   const minValorTroco = currentOffers.length > 0 ? Math.min(...currentOffers.map(b => b.valorTroco)) : 0;
   const maxValorContrato = currentOffers.length > 0 ? Math.max(...currentOffers.map(b => b.valorTroco + b.saldoDevedor)) : 0;
 
-  const uniqueBanks = Array.from(new Set(allCalculatedOffers.map(o => o.name))).sort();
+  const uniqueBanks = Array.from(new Set(offersWithPrazo.map(o => o.name))).sort();
 
   const sortedBanks = [...currentOffers].sort((a, b) => {
     // PRIORIDADE MESTRE: Primeiro respeitamos o ranking dos bancos
@@ -1405,6 +1410,24 @@ export default function Recomendacoes() {
             </button>
           </div>
         </div>
+
+        {/* Filtro Prazo Refin de Port */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center mt-2">
+          <div className="flex flex-1 bg-slate-100 dark:bg-slate-800/50 p-0.5 rounded-lg border border-slate-200/50 dark:border-slate-800/50">
+            {[108, 96, 84].map(prazo => {
+              const countForPrazo = allCalculatedOffers.filter(o => o.prazoRefinPort === prazo).length;
+              return (
+                <button
+                  key={prazo}
+                  onClick={() => setSelectedPrazoFilter(prazo)}
+                  className={`flex-1 py-1.5 text-[10px] font-black rounded-md transition-all duration-300 uppercase tracking-tight ${selectedPrazoFilter === prazo ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  {prazo}X ({countForPrazo})
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Recommendations List */}
@@ -1448,7 +1471,7 @@ export default function Recomendacoes() {
         <>
           {sortedBanks.map((bank, index) => {
             // Get all offers for this specific bank
-            const bankOffers = allCalculatedOffers
+            const bankOffers = offersWithPrazo
               .filter(o => o.name === bank.name)
               .sort((a, b) => {
                 if (bank.convenio === 'SIAPE' && bank.name.toUpperCase() === 'BRB') {
@@ -1592,7 +1615,7 @@ export default function Recomendacoes() {
                         {bankOffers.length > 1 && (
                           <div className="flex items-center gap-2 mt-0.5">
                             <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
-                              {bankOffers.length} ofertas disponíveis
+                              {bankOffers.length} tabelas em {selectedPrazoFilter}X
                             </p>
                             <div className="flex gap-1.5 items-center">
                               <button 
