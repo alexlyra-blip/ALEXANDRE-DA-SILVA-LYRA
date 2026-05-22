@@ -676,8 +676,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
             "havecred": ["havecred"],
             "finanto": ["finanto"],
             "digio": ["digio"],
-            "qualibanking": ["qualibanking"],
-            "total cash": ["total cash", "totalcash"]
+            "qualibanking": ["qualibanking"]
         };
 
         // Encontrar regras candidatas no banco de dados baseado no nome ou alias

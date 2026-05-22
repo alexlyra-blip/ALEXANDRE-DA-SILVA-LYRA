@@ -64,7 +64,7 @@ export default function TransitionAnimation({ onComplete, availableBanks }: { on
           // Use provided context banks - they are already populated and fast
           uniqueBanks = Array.from(new Map(
             availableBanks
-              .filter(r => r.logoUrl)
+              .filter(r => r.logoUrl && !r.name.toLowerCase().includes('total cash') && !r.name.toLowerCase().includes('totalcash'))
               .map(r => [r.name, { name: r.name, logo: r.logoUrl }])
           ).values());
         } else {
@@ -72,7 +72,7 @@ export default function TransitionAnimation({ onComplete, availableBanks }: { on
           const rules = await getBankRules();
           uniqueBanks = Array.from(new Map(
             rules
-              .filter(r => r.logoUrl)
+              .filter(r => r.logoUrl && !r.name.toLowerCase().includes('total cash') && !r.name.toLowerCase().includes('totalcash'))
               .map(r => [r.name, { name: r.name, logo: r.logoUrl }])
           ).values());
         }
@@ -89,7 +89,7 @@ export default function TransitionAnimation({ onComplete, availableBanks }: { on
 
   // Progress and step logic
   useEffect(() => {
-    const duration = 3000; // Increased to at least 3 seconds as requested
+    const duration = 4000; // Set animation to exactly 4 seconds (4000ms) before the offers page appears
     const intervalTime = 25;
     const totalSteps = duration / intervalTime;
     const increment = 100 / totalSteps;
@@ -99,7 +99,7 @@ export default function TransitionAnimation({ onComplete, availableBanks }: { on
         const next = prev + increment;
         if (next >= 100) {
           clearInterval(interval);
-          setTimeout(onComplete, 400); // Reduced delay at 100%
+          setTimeout(onComplete, 0); // Open offers immediately at 100% completion
           return 100;
         }
         return next;
