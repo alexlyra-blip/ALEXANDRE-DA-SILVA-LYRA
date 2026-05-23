@@ -1,6 +1,6 @@
 import { db } from '@/firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import { calculateOffers, SimulationParams } from './simulation-engine';
+import { calculateOffers, SimulationParams, calculateRate } from './simulation-engine';
 
 export interface SimulationInput {
   valorParcela: number;
@@ -54,6 +54,11 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
   const pp = adminSettings.bankPriorities || {};
   const pi = adminSettings.bankInstallments || {};
 
+  let tJurosMensal = input.taxaJurosMensal;
+  if (!tJurosMensal && input.saldoDevedor > 0 && input.valorParcela > 0 && input.parcelasRestantes > 0) {
+    tJurosMensal = calculateRate(input.saldoDevedor, input.valorParcela, input.parcelasRestantes) * 100;
+  }
+
   // Construct SimulationParams for the core engine
   const params: SimulationParams = {
     idade: input.idade,
@@ -67,7 +72,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
     parcelasPagas: input.parcelasPagas,
     prazoTotal: (input.parcelasPagas || 0) + (input.parcelasRestantes || 0),
     parcelasRestantes: input.parcelasRestantes,
-    taxaJurosMensal: input.taxaJurosMensal && input.taxaJurosMensal > 0.1 ? input.taxaJurosMensal / 100 : input.taxaJurosMensal,
+    taxaJurosMensal: tJurosMensal && tJurosMensal > 0.1 ? tJurosMensal / 100 : tJurosMensal,
     isCliente60Mais: input.isCliente60Mais ?? undefined,
     isAnalfabeto: input.isAnalfabeto
   };

@@ -146,7 +146,7 @@ function checkSubConvenioMatch(ruleSub: string, currentSub: string): boolean {
   return r.includes(c) || c.includes(r);
 }
 
-function calculateRate(pv: number, pmt: number, n: number) {
+export function calculateRate(pv: number, pmt: number, n: number) {
   if (pmt <= 0 || pv <= 0 || n <= 0) return 0;
   if (pmt * n <= pv) return 0;
   let low = 0.0001; let high = 1; let rate = 0.05; let diff = 1;
