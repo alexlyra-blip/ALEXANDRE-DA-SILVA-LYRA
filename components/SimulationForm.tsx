@@ -227,7 +227,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
        const r = ruleSub.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
        const code = stateOption.value.toLowerCase();
        const name = stateOption.label.split(' - ')[1].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-       return r === code || r === name || r.includes(name) || name.includes(r);
+       return r === code || r === name || r.includes(name);
     };
 
     const activeGovernoStates = baseBeneficios.GOVERNO.filter(state => {
