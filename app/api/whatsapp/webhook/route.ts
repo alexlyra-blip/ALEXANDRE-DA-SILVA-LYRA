@@ -20,10 +20,6 @@ const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const simulationSchema = {
   type: Type.OBJECT,
   properties: {
-    isSimulationData: {
-      type: Type.BOOLEAN,
-      description: "Verdadeiro se a mensagem contém dados suficientes para uma simulação."
-    },
     data: {
       type: Type.OBJECT,
       properties: {
@@ -42,16 +38,19 @@ const simulationSchema = {
         isAnalfabeto: { type: Type.BOOLEAN },
         bancoAtual: { type: Type.STRING },
         taxaJurosMensal: { type: Type.NUMBER, description: "Taxa de juros mensal atual do contrato (ex: 1.85)" },
-        bancoDesejado: { type: Type.STRING, description: "Nome do banco que o cliente deseja ver o resultado (ex: 'C6', 'Banrisul'). Retorne apenas o nome." }
+        bancoDesejado: { type: Type.STRING, description: "Nome do banco que o cliente deseja ver. Retorne NULO se o cliente não citar o nome de um banco na nova mensagem." }
       }
+    },
+    wantsMoreOptions: {
+      type: Type.BOOLEAN,
+      description: "True se o cliente pediu para ver 'tabelas', 'mais', 'outras opções' ou 'próximas'."
     },
     missingFields: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "Lista de campos que ainda faltam para completar a simulação."
+      description: "Lista de campos PRINCIPAIS que ainda faltam no histórico. (Principais: Convênio, Valor da Parcela, Saldo Devedor)"
     }
-  },
-  required: ["isSimulationData"]
+  }
 };
 
 export async function GET(request: Request) {
@@ -98,7 +97,7 @@ export async function POST(request: Request) {
       // Buscar sessão anterior no Firestore
       const sessionRef = doc(db, 'whatsapp_sessions', from);
       const sessionSnap = await getDoc(sessionRef);
-      const previousSession = sessionSnap.exists() ? sessionSnap.data() : { simulationData: {} };
+      const previousSession = sessionSnap.exists() ? sessionSnap.data() : { simulationData: {}, pageIndex: 0 };
       const previousData = previousSession.simulationData || {};
 
       // 1. Usar a IA para extrair dados ou gerar resposta
@@ -108,10 +107,12 @@ export async function POST(request: Request) {
       
       O histórico de dados já informados pelo cliente nesta conversa é: ${JSON.stringify(previousData)}.
       
-      Extraia os dados para simulação de portabilidade, MESCLANDO os novos dados com os do histórico. Se a nova mensagem não informar um dado que já está no histórico, use o do histórico.
-      Campos necessários: Idade, Convênio (ex: INSS, SIAPE), Banco Atual, Valor da Parcela, Saldo Devedor, Parcelas Pagas, Parcelas Restantes, Código do Benefício, Taxa de Juros Atual (se mencionada).
-      Além disso, se o cliente disser "mostrar as tabelas do C6" ou algo similar pedindo as ofertas de um banco específico, preencha o campo bancoDesejado com o nome desse banco.
-      Se o cliente não enviou (nem no histórico nem na nova mensagem) todos os dados principais (Idade, Convênio, Banco Atual, Valor da Parcela e Saldo Devedor), preencha o missingFields.`;
+      REGRAS DE EXTRAÇÃO:
+      1. Extraia os dados da nova mensagem e MESCLE com os do histórico.
+      2. Se a nova mensagem NÃO INFORMAR um dado que já está no histórico, MANTENHA o valor do histórico. Nunca apague um dado que já foi fornecido.
+      3. Se o cliente disser APENAS o nome de um banco (ex: "C6", "Pan") ou pedir para ver de um banco ("mostra tabelas do C6"), preencha bancoDesejado com o nome. Se ele não mencionar NENHUM banco na NOVA mensagem, bancoDesejado DEVE ser null/vazio.
+      4. Se o cliente disser "tabelas", "mais", "ver outras", preencha wantsMoreOptions = true.
+      5. Se ainda faltar Convênio, Valor da Parcela ou Saldo Devedor no histórico mesclado, preencha missingFields. Senão, deixe vazio.`;
 
       const result = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -124,21 +125,35 @@ export async function POST(request: Request) {
       const extraction = JSON.parse(result.text);
       
       // Merge extraction data to ensure defaults and clean state
+      // We don't want to overwrite bancoDesejado from history unless the user explicitly requested a new one,
+      // actually, bancoDesejado is stateless (only applies to current request).
       const mergedData = {
         ...previousData,
-        ...extraction.data
+        ...extraction.data,
       };
+      
+      // Keep bancoDesejado isolated to the current request
+      mergedData.bancoDesejado = extraction.data?.bancoDesejado;
+
+      // Handle pagination
+      let currentPage = extraction.wantsMoreOptions ? (previousSession.pageIndex || 0) + 1 : 0;
+      if (extraction.data?.bancoDesejado) {
+        currentPage = 0; // Reset pagination if searching a specific bank
+      }
 
       // Salvar a nova sessão atualizada
       await setDoc(sessionRef, {
         simulationData: mergedData,
+        pageIndex: currentPage,
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
       let replyText = "";
+      
+      const isReadyToSimulate = Boolean(mergedData.valorParcela && mergedData.saldoDevedor && mergedData.convenio);
 
       // Verificar se possui os campos mínimos para simular
-      if (extraction.isSimulationData && mergedData.valorParcela && mergedData.saldoDevedor && mergedData.convenio) {
+      if (isReadyToSimulate) {
         // 2. Executar a simulação
         const allOffers = await runSimulation(mergedData as SimulationInput);
         
@@ -169,23 +184,40 @@ export async function POST(request: Request) {
               offersWithPrazo = offersToProcess.filter(o => o.prazoRefinPort === selectedPrazo);
             }
             
-            const topOffers = offersWithPrazo.slice(0, 3);
+            const startIndex = currentPage * 3;
+            const endIndex = startIndex + 3;
+            const topOffers = offersWithPrazo.slice(startIndex, endIndex);
             
-            if (requestedBank) {
-              replyText = `✅ Encontrei ${offersWithPrazo.length} ofertas do banco *${requestedBank}* para você no prazo de ${selectedPrazo || 'atual'}X!\n\n`;
-            } else if (selectedPrazo) {
-              replyText = `✅ Encontrei ${offersWithPrazo.length} tabelas disponíveis para você no prazo de ${selectedPrazo}X!\n\n`;
+            if (topOffers.length === 0 && currentPage > 0) {
+               replyText = `Você já viu todas as ofertas disponíveis para esse filtro! 🏁\n\nDeseja simular outro valor ou ver ofertas de outro banco?`;
             } else {
-              replyText = `✅ Encontrei ${offersWithPrazo.length} ofertas disponíveis para você!\n\n`;
+              if (requestedBank) {
+                replyText = `✅ Encontrei ${offersWithPrazo.length} ofertas do banco *${requestedBank}* para você no prazo de ${selectedPrazo || 'atual'}X!\n`;
+                if (currentPage > 0) replyText += `Mostrando opções ${startIndex + 1} a ${Math.min(endIndex, offersWithPrazo.length)}:\n\n`;
+                else replyText += `\n`;
+              } else if (selectedPrazo) {
+                replyText = `✅ Encontrei ${offersWithPrazo.length} tabelas disponíveis para você no prazo de ${selectedPrazo}X!\n`;
+                if (currentPage > 0) replyText += `Mostrando opções ${startIndex + 1} a ${Math.min(endIndex, offersWithPrazo.length)}:\n\n`;
+                else replyText += `\n`;
+              } else {
+                replyText = `✅ Encontrei ${offersWithPrazo.length} ofertas disponíveis para você!\n`;
+                if (currentPage > 0) replyText += `Mostrando opções ${startIndex + 1} a ${Math.min(endIndex, offersWithPrazo.length)}:\n\n`;
+                else replyText += `\n`;
+              }
+              
+              topOffers.forEach((offer, i) => {
+                replyText += `*${startIndex + i + 1}ª Opção: ${offer.name}*\n`;
+                replyText += `💰 Troco estimado: R$ ${offer.valorTroco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
+                replyText += `📉 Nova Taxa: ${offer.novaTaxaPortabilidade.toFixed(2)}%\n`;
+                replyText += `📋 Tabela: ${offer.tabela}\n\n`;
+              });
+
+              if (offersWithPrazo.length > endIndex) {
+                replyText += `Deseja prosseguir com alguma dessas opções ou quer ver **mais tabelas**? Digite "mais" para ver as próximas.`;
+              } else {
+                replyText += `Deseja prosseguir com alguma dessas opções? Digite o número da opção.`;
+              }
             }
-            
-            topOffers.forEach((offer, i) => {
-              replyText += `*${i+1}ª Opção: ${offer.name}*\n`;
-              replyText += `💰 Troco estimado: R$ ${offer.valorTroco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
-              replyText += `📉 Nova Taxa: ${offer.novaTaxaPortabilidade.toFixed(2)}%\n`;
-              replyText += `📋 Tabela: ${offer.tabela}\n\n`;
-            });
-            replyText += `Deseja prosseguir com alguma dessas opções? Digite o número da opção.`;
           }
         } else {
           replyText = `Poxa, com os dados informados não encontrei ofertas liberadas nos bancos parceiros no momento. 😕\n\nIsso pode acontecer por causa da idade, tempo de benefício ou saldo devedor.`;
