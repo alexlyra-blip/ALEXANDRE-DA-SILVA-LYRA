@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI, Type } from '@google/genai';
 import { runSimulation, SimulationInput } from '@/lib/simulation-service';
+import { db } from '@/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +41,8 @@ const simulationSchema = {
         dataConcessao: { type: Type.STRING, description: "Formato YYYY-MM-DD" },
         isAnalfabeto: { type: Type.BOOLEAN },
         bancoAtual: { type: Type.STRING },
-        taxaJurosMensal: { type: Type.NUMBER, description: "Taxa de juros mensal atual do contrato (ex: 1.85)" }
+        taxaJurosMensal: { type: Type.NUMBER, description: "Taxa de juros mensal atual do contrato (ex: 1.85)" },
+        bancoDesejado: { type: Type.STRING, description: "Nome do banco que o cliente deseja ver o resultado (ex: 'C6', 'Banrisul'). Retorne apenas o nome." }
       }
     },
     missingFields: {
@@ -92,12 +95,23 @@ export async function POST(request: Request) {
         console.error('ERRO: NEXT_PUBLIC_GEMINI_API_KEY não configurada nos Secrets!');
       }
 
+      // Buscar sessão anterior no Firestore
+      const sessionRef = doc(db, 'whatsapp_sessions', from);
+      const sessionSnap = await getDoc(sessionRef);
+      const previousSession = sessionSnap.exists() ? sessionSnap.data() : { simulationData: {} };
+      const previousData = previousSession.simulationData || {};
+
       // 1. Usar a IA para extrair dados ou gerar resposta
       const ai = getAI();
-      const prompt = `Você é um assistente especialista em crédito consignado no Brasil. Analise a mensagem do cliente em Português: "${text}".
-      Extraia os dados para simulação de portabilidade. 
+      const prompt = `Você é um assistente especialista em crédito consignado no Brasil chamado "Gutto".
+      Analise a mensagem do cliente em Português: "${text}".
+      
+      O histórico de dados já informados pelo cliente nesta conversa é: ${JSON.stringify(previousData)}.
+      
+      Extraia os dados para simulação de portabilidade, MESCLANDO os novos dados com os do histórico. Se a nova mensagem não informar um dado que já está no histórico, use o do histórico.
       Campos necessários: Idade, Convênio (ex: INSS, SIAPE), Banco Atual, Valor da Parcela, Saldo Devedor, Parcelas Pagas, Parcelas Restantes, Código do Benefício, Taxa de Juros Atual (se mencionada).
-      Se o cliente não enviou tudo, identifique o que falta.`;
+      Além disso, se o cliente disser "mostrar as tabelas do C6" ou algo similar pedindo as ofertas de um banco específico, preencha o campo bancoDesejado com o nome desse banco.
+      Se o cliente não enviou (nem no histórico nem na nova mensagem) todos os dados principais (Idade, Convênio, Banco Atual, Valor da Parcela e Saldo Devedor), preencha o missingFields.`;
 
       const result = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -108,23 +122,71 @@ export async function POST(request: Request) {
         },
       });
       const extraction = JSON.parse(result.text);
+      
+      // Merge extraction data to ensure defaults and clean state
+      const mergedData = {
+        ...previousData,
+        ...extraction.data
+      };
+
+      // Salvar a nova sessão atualizada
+      await setDoc(sessionRef, {
+        simulationData: mergedData,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
 
       let replyText = "";
 
-      if (extraction.isSimulationData && extraction.data.valorParcela && extraction.data.saldoDevedor) {
+      // Verificar se possui os campos mínimos para simular
+      if (extraction.isSimulationData && mergedData.valorParcela && mergedData.saldoDevedor && mergedData.convenio) {
         // 2. Executar a simulação
-        const offers = await runSimulation(extraction.data as SimulationInput);
+        const allOffers = await runSimulation(mergedData as SimulationInput);
         
-        if (offers.length > 0) {
-          const topOffers = offers.slice(0, 3);
-          replyText = `✅ Encontrei as melhores ofertas para você!\n\n`;
-          topOffers.forEach((offer, i) => {
-            replyText += `*${i+1}ª Opção: ${offer.name}*\n`;
-            replyText += `💰 Troco estimado: R$ ${offer.valorTroco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
-            replyText += `📉 Nova Taxa: ${offer.novaTaxaPortabilidade.toFixed(2)}%\n`;
-            replyText += `📋 Tabela: ${offer.tabela}\n\n`;
-          });
-          replyText += `Deseja prosseguir com alguma dessas opções? Digite o número da opção.`;
+        if (allOffers.length > 0) {
+          // Filtrar pelo banco desejado, se houver
+          let offersToProcess = allOffers;
+          const requestedBank = extraction.data?.bancoDesejado;
+          
+          if (requestedBank) {
+            offersToProcess = allOffers.filter(o => o.name.toLowerCase().includes(requestedBank.toLowerCase()));
+          }
+
+          if (offersToProcess.length === 0) {
+            replyText = `Encontrei ofertas, mas infelizmente nenhuma delas é do banco ${requestedBank}. Deseja ver as opções disponíveis de outros bancos?`;
+          } else {
+            // Filtrar pelo maior prazo disponível nas ofertas que sobraram
+            const prazos = new Set<number>();
+            offersToProcess.forEach(o => {
+              if (o.prazoRefinPort) prazos.add(o.prazoRefinPort);
+            });
+            const availablePrazos = Array.from(prazos).sort((a, b) => b - a);
+            
+            let offersWithPrazo = offersToProcess;
+            let selectedPrazo: number | null = null;
+            
+            if (availablePrazos.length > 0) {
+              selectedPrazo = availablePrazos[0];
+              offersWithPrazo = offersToProcess.filter(o => o.prazoRefinPort === selectedPrazo);
+            }
+            
+            const topOffers = offersWithPrazo.slice(0, 3);
+            
+            if (requestedBank) {
+              replyText = `✅ Encontrei ${offersWithPrazo.length} ofertas do banco *${requestedBank}* para você no prazo de ${selectedPrazo || 'atual'}X!\n\n`;
+            } else if (selectedPrazo) {
+              replyText = `✅ Encontrei ${offersWithPrazo.length} tabelas disponíveis para você no prazo de ${selectedPrazo}X!\n\n`;
+            } else {
+              replyText = `✅ Encontrei ${offersWithPrazo.length} ofertas disponíveis para você!\n\n`;
+            }
+            
+            topOffers.forEach((offer, i) => {
+              replyText += `*${i+1}ª Opção: ${offer.name}*\n`;
+              replyText += `💰 Troco estimado: R$ ${offer.valorTroco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n`;
+              replyText += `📉 Nova Taxa: ${offer.novaTaxaPortabilidade.toFixed(2)}%\n`;
+              replyText += `📋 Tabela: ${offer.tabela}\n\n`;
+            });
+            replyText += `Deseja prosseguir com alguma dessas opções? Digite o número da opção.`;
+          }
         } else {
           replyText = `Poxa, com os dados informados não encontrei ofertas liberadas nos bancos parceiros no momento. 😕\n\nIsso pode acontecer por causa da idade, tempo de benefício ou saldo devedor.`;
         }
@@ -132,10 +194,9 @@ export async function POST(request: Request) {
         // 3. Gerar resposta conversacional pedindo o que falta
         const chatPrompt = `Você é o "Gutto", um assistente de crédito consignado cordial e prestativo. O cliente disse: "${text}". 
         Obrigatório responder em Português do Brasil (PT-BR).
-        Os dados extraídos foram: ${JSON.stringify(extraction.data)}. 
-        Os campos que faltam são: ${extraction.missingFields?.join(', ') || 'todos'}.
-        Gere uma resposta curta, amigável e profissional pedindo os seguintes dados que faltam para fazer a simulação de portabilidade. 
-        Se for apenas uma saudação (Oi, Olá), apresente-se como Gutto e peça: Idade, Convênio, Banco Atual, Valor da Parcela e Saldo Devedor.`;
+        Os dados já informados/extraídos são: ${JSON.stringify(mergedData)}. 
+        Os campos que faltam são: ${extraction.missingFields?.join(', ') || 'Idade, Convênio, Banco Atual, Valor da Parcela e Saldo Devedor'}.
+        Gere uma resposta curta, amigável e profissional pedindo os dados que faltam para fazer a simulação de portabilidade.`;
         
         const chatResult = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
