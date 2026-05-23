@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { getAI } from '@/lib/ai-config';
 import { getAdminDb } from "@/lib/firebase-admin";
-import { calculateOffers, SimulationParams } from "@/lib/simulation-engine";
+import { calculateOffers, SimulationParams, calculateRate } from "@/lib/simulation-engine";
 
 const ai = getAI();
 
@@ -198,8 +198,8 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
         let t = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${b.name.toUpperCase()}*\n`;
         t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n\n`;
         
-        // Ordenar por menor troco (x.valorTroco - y.valorTroco)
-        const sortedSimulated = simulatedOffers.sort((x: any, y: any) => x.valorTroco - y.valorTroco);
+        // Ordenar por maior troco (y.valorTroco - x.valorTroco)
+        const sortedSimulated = simulatedOffers.sort((x: any, y: any) => y.valorTroco - x.valorTroco);
         sortedSimulated.forEach((o: any, idx: number) => {
             t += `${idx === 0 ? '⭐ ' : '👉 '}*Tabela:* ${o.tabela}\n`;
             t += `• *Valor da Parcela:* R$ ${fmt(valParcela)}\n`;
@@ -408,6 +408,11 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
             params.parcelasPagas = params.prazoTotal - params.parcelasRestantes;
         }
 
+        // AUTO-CALCULATE MISSING RATE (exactly like the Web Simulator and simulation-service)
+        if (!params.taxaJurosMensal && params.saldoDevedor > 0 && params.valorParcela > 0 && params.parcelasRestantes > 0) {
+            params.taxaJurosMensal = calculateRate(params.saldoDevedor, params.valorParcela, params.parcelasRestantes);
+        }
+
         const db = getAdminDb();
         if (!db) return "⚠️ Erro de conexão com o banco de dados.";
         const promotoraId = userProfile?.role === 'admin' ? 'admin' : (userProfile?.role === 'promotora' ? userProfile?.uid : userProfile?.createdBy || 'admin');
@@ -427,34 +432,64 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
             return "❌ Infelizmente, analisando as regras dos bancos, não encontramos nenhuma oferta vantajosa ou compatível com esses dados no momento.";
         }
 
-        const groups = offers.reduce((a, o) => { if (!a[o.name]) a[o.name] = { bankName: o.name, offers: [] }; a[o.name].offers.push(o); return a; }, {} as Record<string, any>);
+        // 1. Filtrar pelo maior prazo disponível nas ofertas elegíveis (exatamente como a Web e o webhook)
+        const prazos = new Set<number>();
+        offers.forEach(o => {
+            if (o.prazoRefinPort) prazos.add(o.prazoRefinPort);
+        });
+        const availablePrazos = Array.from(prazos).sort((a, b) => b - a);
+        
+        let offersWithPrazo = offers;
+        let selectedPrazo: number | null = null;
+        if (availablePrazos.length > 0) {
+            selectedPrazo = availablePrazos[0];
+            offersWithPrazo = offers.filter(o => o.prazoRefinPort === selectedPrazo);
+        }
 
-        // Ordenar ofertas de cada banco pelo MENOR troco (a.valorTroco - b.valorTroco)
-        const sorted = Object.values(groups).map((g: any) => {
-            const s = g.offers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
-            return { ...g, offers: s, topOffer: s[0] };
-        })
-            // Ordenar bancos pela prioridade e depois pelo MENOR troco
+        // 2. Ordenar todas as ofertas por prioridade (crescente) e depois por troco (decrescente/maior primeiro)
+        const sortedOffers = [...offersWithPrazo].sort((a: any, b: any) => {
+            const bankIdA = a.id?.split('-')[0];
+            const bankIdB = b.id?.split('-')[0];
+            const pA = pp[bankIdA] ?? a.priority ?? 999;
+            const pB = pp[bankIdB] ?? b.priority ?? 999;
+            const finalPA = pA === 0 ? 999 : pA;
+            const finalPB = pB === 0 ? 999 : pB;
+            if (finalPA !== finalPB) return finalPA - finalPB;
+            return b.valorTroco - a.valorTroco; // MAIOR troco primeiro!
+        });
+
+        if (sortedOffers.length === 0) {
+            return "❌ Infelizmente, não encontramos nenhuma oferta elegível para o prazo selecionado no momento.";
+        }
+
+        // 3. Montar agrupamento compatível com o formatResult
+        const groups = sortedOffers.reduce((acc, o) => {
+            if (!acc[o.name]) acc[o.name] = { bankName: o.name, offers: [] };
+            acc[o.name].offers.push(o);
+            return acc;
+        }, {} as Record<string, any>);
+
+        const sorted = Object.values(groups)
             .sort((a: any, b: any) => {
-                const bankIdA = a.topOffer.id?.split('-')[0];
-                const bankIdB = b.topOffer.id?.split('-')[0];
-                const pA = pp[bankIdA] ?? a.topOffer.priority ?? 999;
-                const pB = pp[bankIdB] ?? b.topOffer.priority ?? 999;
+                const bankIdA = a.offers[0].id?.split('-')[0];
+                const bankIdB = b.offers[0].id?.split('-')[0];
+                const pA = pp[bankIdA] ?? a.offers[0].priority ?? 999;
+                const pB = pp[bankIdB] ?? b.offers[0].priority ?? 999;
                 const finalPA = pA === 0 ? 999 : pA;
                 const finalPB = pB === 0 ? 999 : pB;
                 if (finalPA !== finalPB) return finalPA - finalPB;
-                return a.topOffer.valorTroco - b.topOffer.valorTroco;
+                return b.offers[0].valorTroco - a.offers[0].valorTroco;
             });
 
         const matchedBank = targetBankName
-            ? sorted.find((g: any) => g.bankName.toLowerCase().includes(targetBankName.toLowerCase()) || targetBankName.toLowerCase().includes(g.bankName.toLowerCase()))
+            ? sortedOffers.find((o: any) => o.name.toLowerCase().includes(targetBankName.toLowerCase()) || targetBankName.toLowerCase().includes(o.name.toLowerCase()))
             : null;
 
-        const top = matchedBank ? matchedBank.topOffer : (sorted.length > 0 ? sorted[0].topOffer : null);
-        const bankNames = sorted.map((g: any) => g.bankName);
+        const top = matchedBank ? matchedBank : sortedOffers[0];
+        const bankNames = Array.from(new Set(sortedOffers.map((o: any) => o.name)));
 
         if (top) {
-            sessionData.lastOffers = offers;
+            sessionData.lastOffers = sortedOffers;
             sessionData.lastOfertadoBank = top.name;
         }
 
@@ -585,8 +620,8 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
             return `Não foram encontradas outras tabelas disponíveis para o banco *${lastBank.toUpperCase()}* na simulação recente.`;
         }
         
-        // Sort by troco ascending (menor troco)
-        const sortedOffers = bankOffers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
+        // Sort by troco descending (maior troco primeiro, assim como o simulador web)
+        const sortedOffers = bankOffers.sort((a: any, b: any) => b.valorTroco - a.valorTroco);
         
         const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
         let m = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}*\n\n`;
