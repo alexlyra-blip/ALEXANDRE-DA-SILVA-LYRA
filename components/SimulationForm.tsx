@@ -129,97 +129,121 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       return nameA.localeCompare(nameB);
     });
 
-  const beneficios = {
-    INSS: [
-      { value: "01", label: "01 - Pensão por morte do trabalhador rural" },
-      { value: "02", label: "02 - Pensão por morte por acidente do trabalho do trabalhador rural" },
-      { value: "03", label: "03 - Pensão por morte do empregador rural" },
-      { value: "04", label: "04 - Aposentadoria por invalidez do trabalhador rural" },
-      { value: "05", label: "05 - Aposentadoria por invalidez, por acidente do trabalhador rural" },
-      { value: "06", label: "06 - Aposentadoria por idade do trabalhador rural" },
-      { value: "07", label: "07 - Aposentadoria por idade por idade do trabalhador rural" },
-      { value: "08", label: "08 - Aposentadoria por tempo de serviço do trabalhador rural" },
-      { value: "11", label: "11 - Renda Mensal Vitalícia por invalidez do trabalhador rural" },
-      { value: "12", label: "12 - Renda Mensal Vitalícia por idade do trabalhador rural" },
-      { value: "21", label: "21 - Pensão por morte previdenciária (LOPS)" },
-      { value: "22", label: "22 - Pensão por morte estatutária" },
-      { value: "23", label: "23 - Pensão por morte de ex-combatente" },
-      { value: "26", label: "26 - Pensão especial" },
-      { value: "27", label: "27 - Pensão por morte de servidor público federal com dupla aposentadoria" },
-      { value: "28", label: "28 - Pensão por morte, do Regime Geral" },
-      { value: "29", label: "29 - Pensão por morte de ex-combatente marítimo" },
-      { value: "30", label: "30 - Renda Mensal Vitalícia por invalidez" },
-      { value: "32", label: "32 - Aposentadoria por invalidez previdenciária (LOPS)" },
-      { value: "33", label: "33 - Aposentadoria por invalidez de aeronauta" },
-      { value: "34", label: "34 - Aposentadoria por invalidez de ex-combatente marítimo" },
-      { value: "37", label: "37 - Aposentadoria de extranumerário da União" },
-      { value: "38", label: "38 - Aposentadoria da extinta CAPIN" },
-      { value: "40", label: "40 - Renda Mensal Vitalícia por idade" },
-      { value: "41", label: "41 - Aposentadoria por idade" },
-      { value: "42", label: "42 - Aposentadoria por tempo de contribuição previdenciária" },
-      { value: "43", label: "43 - Aposentadoria por tempo de contribuição de ex-combatente" },
-      { value: "44", label: "44 - Aposentadoria por tempo de contribuição de aeronauta" },
-      { value: "45", label: "45 - Aposentadoria por tempo de contribuição de jornalista profissional" },
-      { value: "46", label: "46 - Aposentadoria por tempo de contribuição especial" },
-      { value: "49", label: "49 - Aposentadoria por tempo de contribuição ordinária" },
-      { value: "54", label: "54 - Pensão especial vitalícia" },
-      { value: "56", label: "56 - Pensão mensal vitalícia por síndrome de talidomida" },
-      { value: "57", label: "57 - Aposentadoria por tempo de contribuição de professor" },
-      { value: "58", label: "58 - Aposentadoria excepcional do anistiado" },
-      { value: "59", label: "59 - Pensão por morte excepcional do anistiado" },
-      { value: "60", label: "60 - Pensão especial mensal vitalícia" },
-      { value: "72", label: "72 - Aposentadoria por tempo de contribuição de ex-combatente marítimo" },
-      { value: "78", label: "78 - Aposentadoria por idade por idade de ex-combatente marítimo" },
-      { value: "81", label: "81 - Aposentadoria por idade por idade compulsória" },
-      { value: "87", label: "87 - Amparo social à pessoa com deficiência (BPC/LOAS)" },
-      { value: "88", label: "88 - Amparo social ao idoso (BPC/LOAS)" },
-      { value: "89", label: "89 - Pensão especial aos dependentes de vítimas fatais por contaminação na hemodiálise" },
-      { value: "92", label: "92 - Aposentadoria por invalidez por acidente do trabalho" },
-      { value: "93", label: "93 - Pensão por morte por acidente do trabalho" },
-      { value: "96", label: "96 - Pensão especial para pessoas atingidas por Hanseníase" },
-    ],
-    SIAPE: [
-      { value: "S1", label: "S1 - Ativo/Aposentado" },
-      { value: "S2", label: "S2 - Beneficiário de Pensão" },
-    ],
-    GOVERNO: [
-      { value: "AC", label: "AC - Acre" },
-      { value: "AL", label: "AL - Alagoas" },
-      { value: "AP", label: "AP - Amapá" },
-      { value: "AM", label: "AM - Amazonas" },
-      { value: "BA", label: "BA - Bahia" },
-      { value: "CE", label: "CE - Ceará" },
-      { value: "DF", label: "DF - Distrito Federal" },
-      { value: "ES", label: "ES - Espírito Santo" },
-      { value: "GO", label: "GO - Goiás" },
-      { value: "MA", label: "MA - Maranhão" },
-      { value: "MT", label: "MT - Mato Grosso" },
-      { value: "MS", label: "MS - Mato Grosso do Sul" },
-      { value: "MG", label: "MG - Minas Gerais" },
-      { value: "PA", label: "PA - Pará" },
-      { value: "PB", label: "PB - Paraíba" },
-      { value: "PR", label: "PR - Paraná" },
-      { value: "PE", label: "PE - Pernambuco" },
-      { value: "PI", label: "PI - Piauí" },
-      { value: "RJ", label: "RJ - Rio de Janeiro" },
-      { value: "RN", label: "RN - Rio Grande do Norte" },
-      { value: "RS", label: "RS - Rio Grande do Sul" },
-      { value: "RO", label: "RO - Rondônia" },
-      { value: "RR", label: "RR - Roraima" },
-      { value: "SC", label: "SC - Santa Catarina" },
-      { value: "SP", label: "SP - São Paulo" },
-      { value: "SE", label: "SE - Sergipe" },
-      { value: "TO", label: "TO - Tocantins" },
-    ],
-    'FORÇAS ARMADAS': [
-      { value: "01", label: "01 - Exército" },
-      { value: "02", label: "02 - Aeronáutica" },
-      { value: "03", label: "03 - Marinha" },
-    ],
-    'CLT PRIVADO': [
-      { value: "CP", label: "CP - CLT PRIVADO" },
-    ]
-  };
+  const beneficios = useMemo(() => {
+    const baseBeneficios = {
+      INSS: [
+        { value: "01", label: "01 - Pensão por morte do trabalhador rural" },
+        { value: "02", label: "02 - Pensão por morte por acidente do trabalho do trabalhador rural" },
+        { value: "03", label: "03 - Pensão por morte do empregador rural" },
+        { value: "04", label: "04 - Aposentadoria por invalidez do trabalhador rural" },
+        { value: "05", label: "05 - Aposentadoria por invalidez, por acidente do trabalhador rural" },
+        { value: "06", label: "06 - Aposentadoria por idade do trabalhador rural" },
+        { value: "07", label: "07 - Aposentadoria por idade por idade do trabalhador rural" },
+        { value: "08", label: "08 - Aposentadoria por tempo de serviço do trabalhador rural" },
+        { value: "11", label: "11 - Renda Mensal Vitalícia por invalidez do trabalhador rural" },
+        { value: "12", label: "12 - Renda Mensal Vitalícia por idade do trabalhador rural" },
+        { value: "21", label: "21 - Pensão por morte previdenciária (LOPS)" },
+        { value: "22", label: "22 - Pensão por morte estatutária" },
+        { value: "23", label: "23 - Pensão por morte de ex-combatente" },
+        { value: "26", label: "26 - Pensão especial" },
+        { value: "27", label: "27 - Pensão por morte de servidor público federal com dupla aposentadoria" },
+        { value: "28", label: "28 - Pensão por morte, do Regime Geral" },
+        { value: "29", label: "29 - Pensão por morte de ex-combatente marítimo" },
+        { value: "30", label: "30 - Renda Mensal Vitalícia por invalidez" },
+        { value: "32", label: "32 - Aposentadoria por invalidez previdenciária (LOPS)" },
+        { value: "33", label: "33 - Aposentadoria por invalidez de aeronauta" },
+        { value: "34", label: "34 - Aposentadoria por invalidez de ex-combatente marítimo" },
+        { value: "37", label: "37 - Aposentadoria de extranumerário da União" },
+        { value: "38", label: "38 - Aposentadoria da extinta CAPIN" },
+        { value: "40", label: "40 - Renda Mensal Vitalícia por idade" },
+        { value: "41", label: "41 - Aposentadoria por idade" },
+        { value: "42", label: "42 - Aposentadoria por tempo de contribuição previdenciária" },
+        { value: "43", label: "43 - Aposentadoria por tempo de contribuição de ex-combatente" },
+        { value: "44", label: "44 - Aposentadoria por tempo de contribuição de aeronauta" },
+        { value: "45", label: "45 - Aposentadoria por tempo de contribuição de jornalista profissional" },
+        { value: "46", label: "46 - Aposentadoria por tempo de contribuição especial" },
+        { value: "49", label: "49 - Aposentadoria por tempo de contribuição ordinária" },
+        { value: "54", label: "54 - Pensão especial vitalícia" },
+        { value: "56", label: "56 - Pensão mensal vitalícia por síndrome de talidomida" },
+        { value: "57", label: "57 - Aposentadoria por tempo de contribuição de professor" },
+        { value: "58", label: "58 - Aposentadoria excepcional do anistiado" },
+        { value: "59", label: "59 - Pensão por morte excepcional do anistiado" },
+        { value: "60", label: "60 - Pensão especial mensal vitalícia" },
+        { value: "72", label: "72 - Aposentadoria por tempo de contribuição de ex-combatente marítimo" },
+        { value: "78", label: "78 - Aposentadoria por idade por idade de ex-combatente marítimo" },
+        { value: "81", label: "81 - Aposentadoria por idade por idade compulsória" },
+        { value: "87", label: "87 - Amparo social à pessoa com deficiência (BPC/LOAS)" },
+        { value: "88", label: "88 - Amparo social ao idoso (BPC/LOAS)" },
+        { value: "89", label: "89 - Pensão especial aos dependentes de vítimas fatais por contaminação na hemodiálise" },
+        { value: "92", label: "92 - Aposentadoria por invalidez por acidente do trabalho" },
+        { value: "93", label: "93 - Pensão por morte por acidente do trabalho" },
+        { value: "96", label: "96 - Pensão especial para pessoas atingidas por Hanseníase" },
+      ],
+      SIAPE: [
+        { value: "S1", label: "S1 - Ativo/Aposentado" },
+        { value: "S2", label: "S2 - Beneficiário de Pensão" },
+      ],
+      GOVERNO: [
+        { value: "AC", label: "AC - Acre" },
+        { value: "AL", label: "AL - Alagoas" },
+        { value: "AP", label: "AP - Amapá" },
+        { value: "AM", label: "AM - Amazonas" },
+        { value: "BA", label: "BA - Bahia" },
+        { value: "CE", label: "CE - Ceará" },
+        { value: "DF", label: "DF - Distrito Federal" },
+        { value: "ES", label: "ES - Espírito Santo" },
+        { value: "GO", label: "GO - Goiás" },
+        { value: "MA", label: "MA - Maranhão" },
+        { value: "MT", label: "MT - Mato Grosso" },
+        { value: "MS", label: "MS - Mato Grosso do Sul" },
+        { value: "MG", label: "MG - Minas Gerais" },
+        { value: "PA", label: "PA - Pará" },
+        { value: "PB", label: "PB - Paraíba" },
+        { value: "PR", label: "PR - Paraná" },
+        { value: "PE", label: "PE - Pernambuco" },
+        { value: "PI", label: "PI - Piauí" },
+        { value: "RJ", label: "RJ - Rio de Janeiro" },
+        { value: "RN", label: "RN - Rio Grande do Norte" },
+        { value: "RS", label: "RS - Rio Grande do Sul" },
+        { value: "RO", label: "RO - Rondônia" },
+        { value: "RR", label: "RR - Roraima" },
+        { value: "SC", label: "SC - Santa Catarina" },
+        { value: "SP", label: "SP - São Paulo" },
+        { value: "SE", label: "SE - Sergipe" },
+        { value: "TO", label: "TO - Tocantins" },
+      ],
+      'FORÇAS ARMADAS': [
+        { value: "01", label: "01 - Exército" },
+        { value: "02", label: "02 - Aeronáutica" },
+        { value: "03", label: "03 - Marinha" },
+      ],
+      'CLT PRIVADO': [
+        { value: "CP", label: "CP - CLT PRIVADO" },
+      ]
+    };
+
+    const matchState = (ruleSub: string | undefined, stateOption: {value: string, label: string}) => {
+       if (!ruleSub) return false;
+       const r = ruleSub.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+       const code = stateOption.value.toLowerCase();
+       const name = stateOption.label.split(' - ')[1].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+       return r === code || r === name || r.includes(name) || name.includes(r);
+    };
+
+    const activeGovernoStates = baseBeneficios.GOVERNO.filter(state => {
+      return rulesBanks.some(bank => 
+        bank.isActive !== false && 
+        bank.convenio === 'GOVERNO' && 
+        bank.tabelas && bank.tabelas.length > 0 &&
+        matchState(bank.subConvenio, state)
+      );
+    });
+
+    return {
+      ...baseBeneficios,
+      GOVERNO: activeGovernoStates.length > 0 ? activeGovernoStates : []
+    };
+  }, [rulesBanks]);
 
   const filteredBeneficios = beneficios[convenio].filter(b => 
     b.label.toLowerCase().includes(searchTerm.toLowerCase()) || 

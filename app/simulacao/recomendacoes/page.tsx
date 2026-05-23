@@ -206,9 +206,26 @@ export default function Recomendacoes() {
     [allCalculatedOffersMap, simData?.id]
   );
 
+  const availablePrazos = useMemo(() => {
+    const prazos = new Set<number>();
+    allCalculatedOffers.forEach(o => {
+      if (o.prazoRefinPort) {
+        prazos.add(o.prazoRefinPort);
+      }
+    });
+    return Array.from(prazos).sort((a, b) => b - a);
+  }, [allCalculatedOffers]);
+
+  useEffect(() => {
+    if (availablePrazos.length > 0 && !availablePrazos.includes(selectedPrazoFilter)) {
+      setSelectedPrazoFilter(availablePrazos[0]);
+    }
+  }, [availablePrazos, selectedPrazoFilter]);
+
   const offersWithPrazo = useMemo(() => {
+    if (availablePrazos.length === 0) return allCalculatedOffers;
     return allCalculatedOffers.filter(o => o.prazoRefinPort === selectedPrazoFilter);
-  }, [allCalculatedOffers, selectedPrazoFilter]);
+  }, [allCalculatedOffers, selectedPrazoFilter, availablePrazos]);
 
   const filterReasons = useMemo(() => 
     filterReasonsMap[simData?.id] || [],
@@ -1412,22 +1429,24 @@ export default function Recomendacoes() {
         </div>
 
         {/* Filtro Prazo Refin de Port */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center mt-2">
-          <div className="flex flex-1 bg-slate-100 dark:bg-slate-800/50 p-0.5 rounded-lg border border-slate-200/50 dark:border-slate-800/50">
-            {[108, 96, 84].map(prazo => {
-              const countForPrazo = allCalculatedOffers.filter(o => o.prazoRefinPort === prazo).length;
-              return (
-                <button
-                  key={prazo}
-                  onClick={() => setSelectedPrazoFilter(prazo)}
-                  className={`flex-1 py-1.5 text-[10px] font-black rounded-md transition-all duration-300 uppercase tracking-tight ${selectedPrazoFilter === prazo ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
-                  {prazo}X ({countForPrazo})
-                </button>
-              );
-            })}
+        {availablePrazos.length > 0 && (
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center mt-2">
+            <div className="flex flex-1 bg-slate-100 dark:bg-slate-800/50 p-0.5 rounded-lg border border-slate-200/50 dark:border-slate-800/50">
+              {availablePrazos.map(prazo => {
+                const countForPrazo = allCalculatedOffers.filter(o => o.prazoRefinPort === prazo).length;
+                return (
+                  <button
+                    key={prazo}
+                    onClick={() => setSelectedPrazoFilter(prazo)}
+                    className={`flex-1 py-1.5 text-[10px] font-black rounded-md transition-all duration-300 uppercase tracking-tight ${selectedPrazoFilter === prazo ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >
+                    {prazo}X ({countForPrazo})
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Recommendations List */}
@@ -1615,7 +1634,9 @@ export default function Recomendacoes() {
                         {bankOffers.length > 1 && (
                           <div className="flex items-center gap-2 mt-0.5">
                             <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
-                              {bankOffers.length} tabelas em {selectedPrazoFilter}X
+                              {availablePrazos.length > 0 
+                                ? `${bankOffers.length} tabelas em ${selectedPrazoFilter}X`
+                                : `${bankOffers.length} ofertas disponíveis`}
                             </p>
                             <div className="flex gap-1.5 items-center">
                               <button 

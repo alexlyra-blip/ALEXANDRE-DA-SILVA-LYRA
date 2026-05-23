@@ -379,11 +379,11 @@ export default function RegrasBanco() {
           ajusteTaxaPonderada: parseNumeric(t.ajusteTaxaPonderada),
           useMinTicket: t.useMinTicket !== false,
           useTaxaPonderada: t.useTaxaPonderada !== false,
-          prazoRefinPort: t.prazoRefinPort ? parseInt(t.prazoRefinPort as any) : undefined,
+          prazoRefinPort: t.prazoRefinPort ? parseInt(t.prazoRefinPort as any) : null,
           minInstallmentValue: parseNumeric(t.minInstallmentValue),
           maxInstallmentValue: parseNumeric(t.maxInstallmentValue),
-          idadeMinima: t.idadeMinima ? parseInt(t.idadeMinima as any) : undefined,
-          idadeMaxima: t.idadeMaxima ? parseInt(t.idadeMaxima as any) : undefined
+          idadeMinima: t.idadeMinima ? parseInt(t.idadeMinima as any) : null,
+          idadeMaxima: t.idadeMaxima ? parseInt(t.idadeMaxima as any) : null
         }))
       };
 
