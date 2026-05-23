@@ -99,6 +99,7 @@ export async function POST(request: Request) {
       const sessionSnap = await getDoc(sessionRef);
       const previousSession = sessionSnap.exists() ? sessionSnap.data() : { simulationData: {}, pageIndex: 0 };
       const previousData = previousSession.simulationData || {};
+      let lastOfferedBank = previousSession.lastOfferedBank || "";
 
       // 1. Usar a IA para extrair dados ou gerar resposta
       const ai = getAI();
@@ -141,13 +142,6 @@ export async function POST(request: Request) {
         currentPage = 0; // Reset pagination if searching a specific bank
       }
 
-      // Salvar a nova sessão atualizada
-      await setDoc(sessionRef, {
-        simulationData: mergedData,
-        pageIndex: currentPage,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-
       let replyText = "";
       
       const isReadyToSimulate = Boolean(mergedData.valorParcela && mergedData.saldoDevedor && mergedData.convenio);
@@ -158,16 +152,21 @@ export async function POST(request: Request) {
         const allOffers = await runSimulation(mergedData as SimulationInput);
         
         if (allOffers.length > 0) {
-          // Filtrar pelo banco desejado, se houver
+          // Filtrar pelo banco desejado ou pelo banco anteriormente ofertado
           let offersToProcess = allOffers;
           const requestedBank = extraction.data?.bancoDesejado;
           
-          if (requestedBank) {
-            offersToProcess = allOffers.filter(o => o.name.toLowerCase().includes(requestedBank.toLowerCase()));
+          let bankFilter = requestedBank || "";
+          if (!bankFilter && (currentPage > 0 || extraction.wantsMoreOptions) && lastOfferedBank) {
+            bankFilter = lastOfferedBank;
+          }
+
+          if (bankFilter) {
+            offersToProcess = allOffers.filter(o => o.name.toLowerCase().includes(bankFilter.toLowerCase()));
           }
 
           if (offersToProcess.length === 0) {
-            replyText = `Encontrei ofertas, mas infelizmente nenhuma delas é do banco ${requestedBank}. Deseja ver as opções disponíveis de outros bancos?`;
+            replyText = `Encontrei ofertas, mas infelizmente nenhuma delas é do banco ${bankFilter || requestedBank}. Deseja ver as opções disponíveis de outros bancos?`;
           } else {
             // Filtrar pelo maior prazo disponível nas ofertas que sobraram
             const prazos = new Set<number>();
@@ -191,8 +190,13 @@ export async function POST(request: Request) {
             if (topOffers.length === 0 && currentPage > 0) {
                replyText = `Você já viu todas as ofertas disponíveis para esse filtro! 🏁\n\nDeseja simular outro valor ou ver ofertas de outro banco?`;
             } else {
-              if (requestedBank) {
-                replyText = `✅ Encontrei ${offersWithPrazo.length} ofertas do banco *${requestedBank}* para você no prazo de ${selectedPrazo || 'atual'}X!\n`;
+              // Salvar o banco ofertado na primeira posição desta listagem
+              if (topOffers.length > 0) {
+                lastOfferedBank = topOffers[0].name;
+              }
+
+              if (bankFilter) {
+                replyText = `✅ Encontrei ${offersWithPrazo.length} ofertas do banco *${bankFilter}* para você no prazo de ${selectedPrazo || 'atual'}X!\n`;
                 if (currentPage > 0) replyText += `Mostrando opções ${startIndex + 1} a ${Math.min(endIndex, offersWithPrazo.length)}:\n\n`;
                 else replyText += `\n`;
               } else if (selectedPrazo) {
@@ -236,6 +240,14 @@ export async function POST(request: Request) {
         });
         replyText = chatResult.text;
       }
+
+      // Salvar a nova sessão atualizada no Firestore
+      await setDoc(sessionRef, {
+        simulationData: mergedData,
+        pageIndex: currentPage,
+        lastOfferedBank,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
 
       // 4. Enviar a resposta via WhatsApp
       if (WHATSAPP_TOKEN && PHONE_NUMBER_ID) {
