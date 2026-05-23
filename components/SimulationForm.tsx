@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2, AlertCircle } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
