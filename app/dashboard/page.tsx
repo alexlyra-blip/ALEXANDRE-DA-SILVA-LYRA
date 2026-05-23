@@ -72,7 +72,7 @@ export default function Dashboard() {
   };
 
   // Filters for Admin/Promotora
-  const [userFilter] = useState<string>('all');
+  const [userFilter, setUserFilter] = useState<string>('all');
   const [bankFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<'30d' | '15d' | '7d' | 'today'>('30d');
   const [searchQuery] = useState('');
@@ -298,6 +298,30 @@ export default function Dashboard() {
 
     return filtered;
   }, [simulations, profile, userFilter, bankFilter, dateRange, searchQuery]);
+
+  // Get unique users for the filter
+  const uniqueUsers = useMemo(() => {
+    if (!profile) return [];
+    
+    // First, filter ALL simulations by role just like we do for base simulations
+    // But WITHOUT applying the userFilter or bankFilter, so the dropdown always has everyone
+    let baseSims = simulations;
+    if (profile.role === 'corretor' || profile.role === 'vendedor') {
+      baseSims = baseSims.filter(sim => sim.userId === profile.uid || sim.corretorId === profile.uid);
+    } else if (profile.role === 'promotora') {
+      baseSims = baseSims.filter(sim => sim.promotoraId === profile.uid || sim.createdBy === profile.uid || sim.userId === profile.uid);
+    }
+
+    const usersMap: Record<string, { id: string, name: string }> = {};
+    baseSims.forEach(sim => {
+      if (sim.userId && sim.userName && sim.userName !== 'J2 Promotora') {
+        if (!usersMap[sim.userId]) {
+          usersMap[sim.userId] = { id: sim.userId, name: sim.userName };
+        }
+      }
+    });
+    return Object.values(usersMap).sort((a, b) => a.name.localeCompare(b.name));
+  }, [simulations, profile]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -662,6 +686,27 @@ export default function Dashboard() {
       </div>
 
       <main className="flex-1 px-6 -mt-8 relative z-20 pb-12">
+        {/* User Filter for Admin/Promotora */}
+        {(profile?.role === 'admin' || profile?.role === 'promotora') && uniqueUsers.length > 0 && (
+          <div className="mb-6 flex items-center justify-end">
+            <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              <div className="flex items-center justify-center size-8 rounded-xl bg-primary/10 text-primary">
+                <Users className="w-4 h-4" />
+              </div>
+              <select
+                value={userFilter}
+                onChange={(e) => setUserFilter(e.target.value)}
+                className="bg-transparent border-none text-sm font-bold text-slate-700 dark:text-slate-200 focus:ring-0 cursor-pointer min-w-[200px]"
+              >
+                <option value="all">Todos os Usuários</option>
+                {uniqueUsers.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <motion.div 
