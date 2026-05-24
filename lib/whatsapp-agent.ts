@@ -120,7 +120,7 @@ function getRuleSummary(ruleIdOrName: string): string {
     if (!b) {
         b = cachedBankRules.find(r => (r.name || '').toLowerCase().includes(ruleIdOrName.toLowerCase()));
     }
-    if (!b) return `Banco "${ruleIdOrName}" não encontrado.`;
+    if (!b) return `⚠️ Banco **"${ruleIdOrName}"** não encontrado.`;
 
     // Normalização das propriedades do banco conforme padrão do simulation-engine.ts
     const minAge = b.minAge !== undefined ? b.minAge : (b.min_age !== undefined ? b.min_age : 0);
@@ -160,21 +160,54 @@ function getRuleSummary(ruleIdOrName: string): string {
         regrasEspecificasStr = specificInstallmentRules.map((r: any) => `${r.bank} (${r.installments} parcelas)`).join(', ');
     }
 
-    const convenioStr = `${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}`;
+    const tablesArray = b.tabelas || b.tables || [];
+    const plazosSet = new Set<number>();
+    tablesArray.forEach((t: any) => {
+        const p = t.prazoRefinPort || t.prazo || t.prazoTotal || 0;
+        if (p > 0) plazosSet.add(p);
+    });
+    const sortedPlazos = Array.from(plazosSet).sort((x, y) => x - y);
+    
+    const formatPlazos = (plazos: number[]): string => {
+        if (!plazos || plazos.length === 0) return "Não informado";
+        const mapped = plazos.map(p => `${p}X`);
+        if (mapped.length === 1) return mapped[0];
+        if (mapped.length === 2) return `${mapped[0]} e ${mapped[1]}`;
+        return `${mapped.slice(0, -1).join(', ')} e ${mapped[mapped.length - 1]}`;
+    };
+    const prazosStr = formatPlazos(sortedPlazos);
 
-    let t = `📋 *Resumo de Regras de Portabilidade*\n\n`;
-    t += `🏛️ *Banco:* ${b.name}\n`;
-    t += `💼 *Convênio:* ${convenioStr}\n`;
-    t += `👵 *Idade:* De ${minAge} a ${maxAge} anos\n`;
-    t += `✍️ *Aceita Analfabeto:* ${formatYesNo(acceptsIlliterate)}\n`;
-    t += `🕒 *Aceita 60+:* ${formatYesNo(accepts60Mais)}\n`;
-    t += `💵 *Parcela Mínima:* ${formatCurrency(minInstallmentValue)}\n`;
-    t += `💰 *Troco Mínimo:* ${formatCurrency(minTroco)}\n`;
-    t += `📊 *Saldo Mínimo:* ${formatCurrency(minBalance)}\n`;
-    t += `📉 *Taxa Mínimo Port:* ${formatRate(portabilityRate)}\n`;
-    t += `🔄 *Taxa Mínima Refin/Port:* ${formatRate(refinRate)}\n`;
-    t += `🚫 *Bancos Não Portados (Origem):* ${bancoportStr}\n`;
-    t += `⚠️ *Bancos com Regras específicas:* ${regrasEspecificasStr}`;
+    const acceptsInvalidez = b.acceptsInvalidez !== false;
+    const invalidezAgeYears = b.invalidezAgeYears || 0;
+    const minBenefitTimeYears = b.minBenefitTimeYears || 0;
+    const minBenefitTimeMonths = b.minBenefitTimeMonths || 0;
+    
+    let invalidezStr = 'Não';
+    if (acceptsInvalidez) {
+        if (invalidezAgeYears > 0 || minBenefitTimeYears > 0 || minBenefitTimeMonths > 0) {
+            invalidezStr = `SIM (Idade: >=${invalidezAgeYears} anos e <60 anos, Tempo de Benefício: ${minBenefitTimeYears} anos e ${minBenefitTimeMonths} meses)`;
+        } else {
+            invalidezStr = 'SIM';
+        }
+    }
+
+    const convenioStr = `${b.convenio || 'INSS'}${b.subConvenio ? ' - ' + b.subConvenio : ''}`;
+
+    let t = `📋 **Resumo de Regras de Portabilidade**\n\n`;
+    t += `🏛️ **Banco:** ${b.name}\n`;
+    t += `💼 **Convênio:** ${convenioStr}\n`;
+    t += `👵 **Idade:** De ${minAge} a ${maxAge} anos\n`;
+    t += `📅 **Prazos:** ${prazosStr}\n`;
+    t += `♿ **Aceita Invalidez:** ${invalidezStr}\n`;
+    t += `✍️ **Aceita Analfabeto:** ${formatYesNo(acceptsIlliterate)}\n`;
+    t += `🕒 **Aceita 60+:** ${formatYesNo(accepts60Mais)}\n`;
+    t += `💵 **Parcela Mínima:** ${formatCurrency(minInstallmentValue)}\n`;
+    t += `💰 **Troco Mínimo:** ${formatCurrency(minTroco)}\n`;
+    t += `📊 **Saldo Mínimo:** ${formatCurrency(minBalance)}\n`;
+    t += `📉 **Taxa Mínimo Port:** ${formatRate(portabilityRate)}\n`;
+    t += `🔄 **Taxa Mínima Refin/Port:** ${formatRate(refinRate)}\n`;
+    t += `🚫 **Bancos Não Portados (Origem):** ${bancoportStr}\n`;
+    t += `⚠️ **Bancos com Regras específicas:** ${regrasEspecificasStr}`;
 
     return t;
 }
@@ -924,9 +957,40 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         const specificRules = b.specificInstallmentRules !== undefined ? b.specificInstallmentRules : (b.specific_installment_rules !== undefined ? b.specific_installment_rules : []);
         const specificRulesStr = specificRules.length > 0 ? specificRules.map((r: any) => `${r.bank} (${r.installments} parcelas)`).join(', ') : 'Nenhum';
         
+        const tablesArray = b.tabelas || b.tables || [];
+        const plazosSet = new Set<number>();
+        tablesArray.forEach((t: any) => {
+            const p = t.prazoRefinPort || t.prazo || t.prazoTotal || 0;
+            if (p > 0) plazosSet.add(p);
+        });
+        const sortedPlazos = Array.from(plazosSet).sort((x, y) => x - y);
+        const formatPlazos = (plazos: number[]): string => {
+            if (!plazos || plazos.length === 0) return "Não informado";
+            const mapped = plazos.map(p => `${p}X`);
+            if (mapped.length === 1) return mapped[0];
+            if (mapped.length === 2) return `${mapped[0]} e ${mapped[1]}`;
+            return `${mapped.slice(0, -1).join(', ')} e ${mapped[mapped.length - 1]}`;
+        };
+        const prazosStr = formatPlazos(sortedPlazos);
+
+        const acceptsInvalidez = b.acceptsInvalidez !== false;
+        const invalidezAgeYears = b.invalidezAgeYears || 0;
+        const minBenefitTimeYears = b.minBenefitTimeYears || 0;
+        const minBenefitTimeMonths = b.minBenefitTimeMonths || 0;
+        let invalidezStr = 'Não';
+        if (acceptsInvalidez) {
+            if (invalidezAgeYears > 0 || minBenefitTimeYears > 0 || minBenefitTimeMonths > 0) {
+                invalidezStr = `SIM (Idade: >=${invalidezAgeYears} anos e <60 anos, Tempo de Benefício: ${minBenefitTimeYears} anos e ${minBenefitTimeMonths} meses)`;
+            } else {
+                invalidezStr = 'SIM';
+            }
+        }
+
         bankRulesContext += `\n- BANCO: ${b.name} (Convênio: ${b.convenio || 'INSS'}${b.subConvenio ? ' - ' + b.subConvenio : ''})
   * Idade Mínima: ${minAge} anos
   * Idade Máxima: ${maxAge} anos
+  * Prazos de Refin: ${prazosStr}
+  * Aceita Invalidez: ${invalidezStr}
   * Aceita Analfabeto: ${acceptsIlliterate ? 'SIM' : 'NÃO'}
   * Aceita 60+: ${accepts60Mais ? 'SIM' : 'NÃO'}
   * Parcela Mínima: R$ ${minInstallment.toFixed(2)}
@@ -936,7 +1000,6 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
   * Bancos Não Portados (origem): ${nonAccepted.join(', ') || 'Nenhum'}
   * Bancos com Regras específicas: ${specificRulesStr}`;
         
-        const tablesArray = b.tabelas || b.tables || [];
         if (tablesArray.length > 0) {
             bankRulesContext += `\n  * Tabelas de Refin da Portabilidade Cadastradas:`;
             tablesArray.forEach((t: any) => {
@@ -959,6 +1022,8 @@ SOBRE REGRAS, ROTEIROS OU RESUMOS DE PORTABILIDADE:
 - Se o usuário solicitar o resumo, regras ou roteiro de um banco, use os dados acima para responder com absoluta precisão científica e com a seguinte estrutura de layout e emojis premium:
   🏛️ **Banco**: [Nome do Banco]
   👵 **Idade**: De [Idade Mínima] a [Idade Máxima] anos
+  📅 **Prazos**: [Prazos de Refin]
+  ♿ **Aceita Invalidez**: [Aceita Invalidez]
   ✍️ **Aceita Analfabeto**: [SIM/NÃO]
   🕒 **Aceita 60+**: [SIM/NÃO]
   💵 **Parcela Mínima**: R$ [Valor formatado, ex: 20,00]
