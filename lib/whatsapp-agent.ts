@@ -184,7 +184,7 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
     if (!b) {
         b = cachedBankRules.find(r => (r.name || '').toLowerCase().includes(ruleIdOrName.toLowerCase()));
     }
-    if (!b) return `Banco "${ruleIdOrName}" não encontrado.`;
+    if (!b) return `⚠️ Banco **"${ruleIdOrName}"** não encontrado.`;
     
     const lastOffers = sessionData.lastOffers || [];
     
@@ -195,23 +195,23 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
 
     if (simulatedOffers.length > 0) {
         const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
-        let t = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${b.name.toUpperCase()}*\n`;
-        t += `*Convênio:* ${b.convenio || 'INSS'}${b.subConvenio ? ' e ' + b.subConvenio : ''}\n\n`;
+        let t = `📊 **TABELAS E OFERTAS DISPONÍVEIS: ${b.name.toUpperCase()}** 🏛️\n`;
+        t += `🤝 **Convênio:** **${b.convenio || 'INSS'}**${b.subConvenio ? ' - ' + b.subConvenio : ''}\n\n`;
         
-        // Ordenar por maior troco (y.valorTroco - x.valorTroco)
-        const sortedSimulated = simulatedOffers.sort((x: any, y: any) => y.valorTroco - x.valorTroco);
+        // Ordenar por menor troco (x.valorTroco - y.valorTroco)
+        const sortedSimulated = simulatedOffers.sort((x: any, y: any) => x.valorTroco - y.valorTroco);
         sortedSimulated.forEach((o: any, idx: number) => {
-            t += `${idx === 0 ? '⭐ ' : '👉 '}*Tabela:* ${o.tabela}\n`;
-            t += `• *Valor da Parcela:* R$ ${fmt(valParcela)}\n`;
-            t += `• *Prazo:* ${o.prazoRefinPort || o.parcelasRestantes || 96} meses\n`;
-            t += `• *Novo Contrato:* R$ ${fmt(o.valorContrato)}\n`;
-            t += `• *Saldo Devedor:* R$ ${fmt(o.saldoDevedor || sessionData.lastExtractedParams?.saldoDevedor || 0)}\n`;
-            t += `• *Taxa do Refin:* ${o.taxaBase.toFixed(2)}% a.m.\n`;
-            t += `• *Troco Liberado:* R$ ${fmt(o.valorTroco)}\n\n`;
+            t += `${idx === 0 ? '⭐ ' : '👉 '}**Tabela:** **${o.tabela}**\n`;
+            t += `• 💵 **Valor da Parcela:** **R$ ${fmt(valParcela)}**\n`;
+            t += `• 📅 **Prazo:** **${o.prazoRefinPort || o.parcelasRestantes || 96} meses**\n`;
+            t += `• ✍️ **Novo Contrato:** **R$ ${fmt(o.valorContrato)}**\n`;
+            t += `• 🏦 **Saldo Devedor:** **R$ ${fmt(o.saldoDevedor || sessionData.lastExtractedParams?.saldoDevedor || 0)}**\n`;
+            t += `• 📈 **Taxa do Refin:** **${o.taxaBase.toFixed(2)}% a.m.**\n`;
+            t += `• 💰 **Troco Liberado:** **R$ ${fmt(o.valorTroco)}** 🤑\n\n`;
         });
         return t;
     } else {
-        return `⚠️ O banco *${b.name.toUpperCase()}* não possui nenhuma oferta ou tabela de Refin da Portabilidade elegível para a simulação atual (ou você ainda não realizou uma simulação nesta sessão).`;
+        return `⚠️ O banco **${b.name.toUpperCase()}** não possui nenhuma oferta ou tabela de Refin da Portabilidade elegível para a simulação atual (ou você ainda não realizou uma simulação nesta sessão).`;
     }
 }
 
@@ -411,35 +411,35 @@ function hasAllRequired(d: any): boolean {
 function fmt(v: number) { return v?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'; }
 
 function formatResult(top: any, banks: string[], grouped: any[], p: SimulationParams): string {
-    if (!top) return "❌ Não encontramos ofertas viáveis para o seu perfil no momento com as regras atuais dos bancos.";
+    if (!top) return "❌ *Atenção:* Infelizmente, não encontramos ofertas viáveis para o seu perfil no momento com as regras atuais dos bancos.";
     const tables = grouped.find(g => g.bankName === top.name)?.offers?.length || 1;
 
-    let m = `✅ *Simulação concluída com sucesso!*\n\n`;
-    m += `⭐ *MELHOR OFERTA ENCONTRADA: ${top.name.toUpperCase()}*\n`;
-    m += `📊 *${tables} tabela(s) disponível(is)*\n\n`;
+    let m = `🎉 *Excelente notícia! Simulação concluída com sucesso!* 🚀\n\n`;
+    m += `⭐ **MELHOR OFERTA ENCONTRADA: ${top.name.toUpperCase()}**\n`;
+    m += `📊 **${tables} tabela(s) de Refin da Portabilidade disponível(is)**\n\n`;
 
-    m += `📋 *DETALHES DA OPERAÇÃO (CONTRATO):*\n`;
-    if (top.tabela) m += `• *Tabela:* ${top.tabela}\n`;
-    m += `• *Valor da Parcela:* R$ ${fmt(p.valorParcela || 0)}\n`;
-    m += `• *Prazo:* ${top.prazoRefinPort || p.parcelasRestantes || 96} meses\n`;
-    m += `• *Novo Contrato:* R$ ${fmt(top.valorContrato)}\n`;
-    m += `• *Saldo Devedor:* R$ ${fmt(top.saldoDevedor || p.saldoDevedor || 0)}\n`;
+    m += `📋 **DETALHES DA OPERAÇÃO:**\n`;
+    if (top.tabela) m += `• 🏷️ **Tabela:** **${top.tabela}**\n`;
+    m += `• 💵 **Valor da Parcela:** **R$ ${fmt(p.valorParcela || 0)}**\n`;
+    m += `• 📅 **Prazo:** **${top.prazoRefinPort || p.parcelasRestantes || 96} meses**\n`;
+    m += `• ✍️ **Novo Contrato:** **R$ ${fmt(top.valorContrato)}**\n`;
+    m += `• 🏦 **Saldo Devedor:** **R$ ${fmt(top.saldoDevedor || p.saldoDevedor || 0)}**\n`;
 
     if (top.taxaBase !== undefined) {
-        m += `• *Taxa do Refin:* ${top.taxaBase.toFixed(2)}% a.m.\n`;
+        m += `• 📈 **Taxa do Refin:** **${top.taxaBase.toFixed(2)}% a.m.**\n`;
     }
 
-    m += `\n💰 *VALOR DO TROCO LIBERADO:* R$ ${fmt(top.valorTroco)}\n\n`;
+    m += `\n💰 **VALOR DO TROCO ESTIMADO LIBERADO: R$ ${fmt(top.valorTroco)}** 🤑💵\n\n`;
 
     const others = banks.filter(b => b !== top.name);
     if (others.length > 0) {
-        m += `🏦 *BANCOS ELEGÍVEIS COM OFERTA:* ${others.join(', ')}\n`;
+        m += `🏛️ **Outros bancos também elegíveis:** ${others.map(b => `**${b}**`).join(', ')}\n`;
     }
 
-    m += `\n_Caso queira ver a oferta de outro banco listado, digite o nome dele (Ex: "Itau", "Pan")._`;
+    m += `\n💡 _Deseja ver a oferta de outro banco elegível acima? Basta digitar o nome dele (Ex: "Itau", "Pan")!_`;
 
     if (tables > 1) {
-        m += `\n\n💡 *Dica:* Encontramos *${tables}* tabelas com ofertas viáveis para o banco *${top.name.toUpperCase()}*. Se quiser ver as outras opções de tabelas para este banco, basta digitar *tabelas*!`;
+        m += `\n\n✨ **Dica de Ouro:** Encontramos **${tables}** tabelas com ofertas elegíveis para o **${top.name.toUpperCase()}**. Para conhecer e comparar todas as opções deste banco ordenadas pelo menor troco, basta digitar **tabelas**! 📊`;
     }
     return m;
 }
@@ -493,7 +493,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
             offersWithPrazo = offers.filter(o => o.prazoRefinPort === selectedPrazo);
         }
 
-        // 2. Ordenar todas as ofertas por prioridade (crescente) e depois por troco (decrescente/maior primeiro)
+        // 2. Ordenar todas as ofertas por prioridade (crescente) e depois por troco (crescente/menor primeiro)
         const sortedOffers = [...offersWithPrazo].sort((a: any, b: any) => {
             const bankIdA = a.id?.split('-')[0];
             const bankIdB = b.id?.split('-')[0];
@@ -502,7 +502,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
             const finalPA = pA === 0 ? 999 : pA;
             const finalPB = pB === 0 ? 999 : pB;
             if (finalPA !== finalPB) return finalPA - finalPB;
-            return b.valorTroco - a.valorTroco; // MAIOR troco primeiro!
+            return a.valorTroco - b.valorTroco; // MENOR troco primeiro!
         });
 
         if (sortedOffers.length === 0) {
@@ -525,7 +525,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
                 const finalPA = pA === 0 ? 999 : pA;
                 const finalPB = pB === 0 ? 999 : pB;
                 if (finalPA !== finalPB) return finalPA - finalPB;
-                return b.offers[0].valorTroco - a.offers[0].valorTroco;
+                return a.offers[0].valorTroco - b.offers[0].valorTroco;
             });
 
         const matchedBank = targetBankName
@@ -559,12 +559,12 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
     }
 }
 
-export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserId: string = '') {
+async function internalProcessWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserId: string = '') {
     const ai = getAI();
     await loadRules();
 
     if (history.length === 0) {
-        return `Olá! Eu sou o *Gutto*, especialista em portabilidade.\n\nPara iniciarmos a sua simulação, qual é o seu *convênio*?\n\n*Opções disponíveis:*\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**\n\n(Ou pergunte as regras de algum banco, ex: "Regras do Bradesco")`;
+        return `👋 Olá! Eu sou o **Gutto**, o seu assistente virtual especialista em portabilidade de crédito consignado. 🤖✨\n\nPara iniciarmos a sua simulação personalizada e rápida, por favor, me informe qual é o seu **convênio**? 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**\n\n_(Dica: se quiser, você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: "Regras do Bradesco" ou "Tabelas do C6"!)_`;
     }
 
     const lower = message.toLowerCase().trim();
@@ -657,32 +657,32 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         }
 
         if (lastOffers.length === 0 || !lastBank) {
-            return `Você ainda não possui uma simulação ativa nesta sessão. Por favor, inicie informando o seu *convênio* para simularmos!`;
+            return `⚠️ *Ops!* Você ainda não possui uma simulação ativa nesta sessão.\n\nPor favor, inicie informando o seu **convênio** para que eu possa simular as melhores ofertas para você! 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**`;
         }
         
         // Filter offers for the last bank that was simulated/offered
         const bankOffers = lastOffers.filter((o: any) => checkBankMatch(o.name, lastBank));
         
         if (bankOffers.length === 0) {
-            return `Não foram encontradas outras tabelas disponíveis para o banco *${lastBank.toUpperCase()}* na simulação recente.`;
+            return `⚠️ *Atenção:* Não foram encontradas outras tabelas disponíveis para o banco **${lastBank.toUpperCase()}** na simulação recente.`;
         }
         
-        // Sort by troco descending (maior troco primeiro, assim como o simulador web)
-        const sortedOffers = bankOffers.sort((a: any, b: any) => b.valorTroco - a.valorTroco);
+        // Sort by troco ascending (menor troco primeiro, conforme solicitado)
+        const sortedOffers = bankOffers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
         
         const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
-        let m = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}*\n\n`;
+        let m = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}* 🏛️\n\n`;
         sortedOffers.forEach((o: any, idx: number) => {
-            m += `${idx === 0 ? '⭐ ' : '👉 '}*Tabela:* ${o.tabela}\n`;
-            m += `• *Valor da Parcela:* R$ ${fmt(valParcela)}\n`;
-            m += `• *Prazo:* ${o.prazoRefinPort || o.parcelasRestantes || 96} meses\n`;
-            m += `• *Novo Contrato:* R$ ${fmt(o.valorContrato)}\n`;
-            m += `• *Saldo Devedor:* R$ ${fmt(o.saldoDevedor || sessionData.lastExtractedParams?.saldoDevedor || 0)}\n`;
-            m += `• *Taxa do Refin:* ${o.taxaBase.toFixed(2)}% a.m.\n`;
-            m += `• *Troco Liberado:* R$ ${fmt(o.valorTroco)}\n\n`;
+            m += `${idx === 0 ? '⭐ ' : '👉 '}*Tabela:* **${o.tabela}**\n`;
+            m += `• 💵 *Valor da Parcela:* **R$ ${fmt(valParcela)}**\n`;
+            m += `• 📅 *Prazo:* **${o.prazoRefinPort || o.parcelasRestantes || 96} meses**\n`;
+            m += `• ✍️ *Novo Contrato:* **R$ ${fmt(o.valorContrato)}**\n`;
+            m += `• 🏦 *Saldo Devedor:* **R$ ${fmt(o.saldoDevedor || sessionData.lastExtractedParams?.saldoDevedor || 0)}**\n`;
+            m += `• 📈 *Taxa do Refin:* **${o.taxaBase.toFixed(2)}% a.m.**\n`;
+            m += `• 💰 *Troco Liberado:* **R$ ${fmt(o.valorTroco)}** 🤑\n\n`;
         });
         
-        m += `_Caso queira ver mais informações ou seguir com alguma das opções acima, é só me dizer!_`;
+        m += `💡 _Caso queira ver mais informações ou seguir com alguma das opções acima, é só me dizer!_`;
         return m;
     }
 
@@ -822,10 +822,10 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
             const conveniosDisponiveis = Array.from(new Set(matchingRules.map(r => r.convenio || 'INSS')));
             const bankName = matchingRules[0].name.toUpperCase();
 
-            let m = `📋 Encontrei o banco *${bankName}* cadastrado para mais de um convênio.\n\n`;
-            m += `Por favor, digite qual convênio você gostaria de consultar:\n`;
+            let m = `📋 *Encontrei o banco ${bankName} cadastrado para mais de um convênio!*\n\n`;
+            m += `Por favor, digite qual convênio você gostaria de consultar: 👇\n`;
             conveniosDisponiveis.forEach(c => {
-                m += `👉 *${c}*\n`;
+                m += `👉 **${c}**\n`;
             });
             m += `\n_(Exemplo: digite "${bankName} ${conveniosDisponiveis[0]}")_`;
             return m;
@@ -836,13 +836,13 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         const attemptedBank = extractMatch ? extractMatch[1].trim() : '';
         if (attemptedBank && attemptedBank.length >= 2) {
             const uniqueNames = Array.from(new Set(cachedBankRules.map(b => b.name.toUpperCase()))).sort();
-            return `O banco "${attemptedBank}" não foi encontrado no sistema com regras cadastradas. Bancos disponíveis para consulta:\n${uniqueNames.map(name => `• ${name}`).join('\n')}`;
+            return `🔍 *Banco não encontrado:* O banco **${attemptedBank}** não possui regras ativas cadastradas no momento.\n\n🏦 *Bancos disponíveis para consulta:*\n${uniqueNames.map(name => `• **${name}**`).join('\n')}`;
         }
     }
 
     if (/\b(bancos|lista)\b/.test(lower) && !history.some(h => h.content?.includes('Troco Estimado'))) {
         const uniqueNames = Array.from(new Set(cachedBankRules.map(b => b.name.toUpperCase()))).sort();
-        return `🏦 *Bancos Cadastrados:* ${uniqueNames.join(', ')}\n\nDigite: *Regras do [banco]* para ver as regras detalhadas de portabilidade.`;
+        return `🏦 *Bancos Cadastrados no Sistema:* ${uniqueNames.map(name => `**${name}**`).join(', ')}\n\n💡 *Dica:* Digite **Regras do [banco]** (ex: _Regras do C6_) para ver o roteiro detalhado de portabilidade deste banco!`;
     }
 
     // Carrega extractedParams diretamente de sessionData (passado por referência do route.ts)
@@ -858,7 +858,7 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
         sessionData.extractedParams = {};
         sessionData.lastExtractedParams = null;
         console.log(`[Gutto] Resetting session parameters.`);
-        return `Perfeito! Reiniciei a simulação para você.\n\nPara começarmos do zero, qual é o seu *convênio*?\n\n👉 INSS\n👉 SIAPE\n👉 Governo\n👉 Forças Armadas\n👉 CLT Privado`;
+        return `🔄 *Tudo pronto!* Reiniciei a nossa simulação para você. 😉\n\nPara começarmos uma nova consulta do zero, por favor, me informe qual é o seu **convênio**: 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**`;
     } else {
         // Se temos lastExtracted e o usuário digitou o nome de um banco
         const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
@@ -904,9 +904,9 @@ export async function processWhatsAppMessage(message: string, history: any[] = [
     if (extracted.saldoDevedor) dataSummary += `• Saldo Devedor: R$ ${fmt(extracted.saldoDevedor)}\n`;
     if (extracted.taxaJurosMensal) dataSummary += `• Taxa de Juros: ${(extracted.taxaJurosMensal * 100).toFixed(2)}%\n`;
 
-    const showStateQuestion = extracted.idade >= 60 && !extracted.estado && !extracted.bancoAtual && !extracted.prazoTotal;
+    const showStateQuestion = (extracted.idade >= 60 || extracted.convenio === 'GOVERNO') && !extracted.estado;
     const step3Text = showStateQuestion
-        ? "3. Se Idade for maior ou igual a 60 anos e o Estado ainda NÃO foi coletado: Pergunta em qual estado o cliente reside (Amapá - AP, Paraíba - PB, Tocantins - TO ou Roraima - RR? Se for outro, pode apenas dizer qual)."
+        ? "3. Se o Estado ainda NÃO foi coletado e (a idade for igual ou superior a 60 anos OU o convênio for Governo): Pergunta em qual estado o cliente reside (Amapá - AP, Paraíba - PB, Tocantins - TO ou Roraima - RR? Se for outro, pode apenas dizer qual)."
         : "3. (PULADO - Estado não necessário ou já coletado)";
 
     // Construir contexto de regras reais dos bancos cadastrados no sistema
@@ -994,7 +994,7 @@ ${step3Text}
    - Se o convênio for Forças Armadas, pergunte qual a sua Força Militar (Ex: Aeronáutica, Exército ou Marinha).
    - Se convênio for CLT Privado, PULE esta pergunta.
 5. Se o cliente é Analfabeto? (Sim/Não)
-   - IMPORTANTE: Para esta pergunta, você DEVE usar EXATAMENTE esta frase com as palavras em negrito usando asteriscos: "Você se considera *analfabeto* ou possui alguma *dificuldade para ler e escrever*? (Responda com *Sim* ou *Não*)"
+   - IMPORTANTE: Para esta pergunta, você DEVE usar EXATAMENTE esta frase com as palavras em negrito usando asteriscos: "Você se considera **analfabeto** ou possui alguma **dificuldade para ler e escrever**? (Responda com **Sim** ou **Não**)"
 6. Se convênio for INSS: Possui 2 cartões de crédito consignado ativos?
 7. Banco atual onde está o contrato que deseja portar.
 8. Prazo total do contrato original (em meses, ex: 84 ou 96).
@@ -1004,7 +1004,7 @@ ${step3Text}
 11. Saldo devedor aproximado do contrato (R$).
 12. Se o cliente souber/desejar informar: Taxa de juros atual do contrato (Relação opcional, ex: "taxa de 1,59%").
 
-CONFIRME de forma extremamente amigável e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista.
+CONFIRME de forma extremamente amigável, acolhedora e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista. Use sempre emojis visíveis e agradáveis para tornar as mensagens mais amigáveis e profissionais.
 IMPORTANTE: Você DEVE coletar o Saldo Devedor do cliente na pergunta 11. Nunca chame a ferramenta calculate_client_loan_offers sem antes perguntar e de fato obter o Saldo Devedor.
 Quando tiver TODOS os dados obrigatórios listados e coletados de fato (incluindo o saldo devedor), chame calculate_client_loan_offers imediatamente para exibir os resultados das ofertas.`;
 
@@ -1048,4 +1048,29 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato (incluind
         }
         return `⚠️ Ops! Tivemos uma pequena falha de conexão: ${error.message || 'Erro interno'}. Por favor, digite o dado novamente.`;
     }
+}
+
+function formatForWhatsApp(text: string): string {
+    if (!text) return text;
+    
+    let formatted = text;
+    
+    // 1. Convert standard markdown bold-italic (***text*** or _**text**_ or **_text_**) to WhatsApp bold-italic (_*text*_)
+    formatted = formatted.replace(/\*\*\*([^\*]+?)\*\*\*/g, '_*$1*_');
+    formatted = formatted.replace(/\*\*\_([^\*\_]+?)\_\*\*/g, '_*$1*_');
+    formatted = formatted.replace(/\_\*\*([^\*\_]+?)\*\*\_/g, '_*$1*_');
+    
+    // 2. Convert single asterisks (*text*) used as standard markdown italic to WhatsApp italic (_text_)
+    // We only convert single asterisks that are not part of double asterisks
+    formatted = formatted.replace(/(?<!\*)\*([^\*]+?)\*(?!\*)/g, '_$1_');
+    
+    // 3. Convert standard markdown bold (**text**) to WhatsApp bold (*text*)
+    formatted = formatted.replace(/\*\*([^\*]+?)\*\*/g, '*$1*');
+    
+    return formatted;
+}
+
+export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserId: string = ''): Promise<string> {
+    const rawResult = await internalProcessWhatsAppMessage(message, history, currentPhone, sessionData, webUserId);
+    return formatForWhatsApp(rawResult);
 }
