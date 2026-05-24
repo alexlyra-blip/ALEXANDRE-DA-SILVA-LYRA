@@ -494,9 +494,8 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
     const others = banks.filter(b => b !== top.name);
     if (others.length > 0) {
         m += `🏛️ **Outros bancos também elegíveis:** ${others.map(b => `**${b}**`).join(', ')}\n`;
+        m += `\n💡 _Deseja ver a oferta de outro banco elegível acima? Basta digitar o nome dele (Ex: "Itau", "Pan")!_`;
     }
-
-    m += `\n💡 _Deseja ver a oferta de outro banco elegível acima? Basta digitar o nome dele (Ex: "Itau", "Pan")!_`;
 
     if (tables > 1) {
         m += `\n\n✨ **Dica de Ouro:** Encontramos **${tables}** tabelas com ofertas elegíveis para o **${top.name.toUpperCase()}**. Para conhecer e comparar todas as opções deste banco ordenadas pelo menor troco, basta digitar **tabelas**! 📊`;
