@@ -355,10 +355,57 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
             }
         }
     }
+
+    // Se for Governo e não tiver subConvenio ou estado, vamos tentar extrair de qualquer forma
+    if (params.convenio === 'GOVERNO' && (!params.subConvenio || !params.estado)) {
+        const stateNormalized = txt.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        let detectedState = "";
+        if (stateNormalized.includes("amapa") || /\bap\b/.test(stateNormalized)) detectedState = "AP";
+        else if (stateNormalized.includes("paraiba") || /\bpb\b/.test(stateNormalized)) detectedState = "PB";
+        else if (stateNormalized.includes("tocantins") || /\bto\b/.test(stateNormalized)) detectedState = "TO";
+        else if (stateNormalized.includes("roraima") || /\brr\b/.test(stateNormalized)) detectedState = "RR";
+        else if (stateNormalized.includes("bahia") || /\bba\b/.test(stateNormalized)) detectedState = "BA";
+        else if (stateNormalized.includes("pernambuco") || /\bpe\b/.test(stateNormalized)) detectedState = "PE";
+        else if (stateNormalized.includes("maranhao") || /\bma\b/.test(stateNormalized)) detectedState = "MA";
+        else if (stateNormalized.includes("goias") || /\bgo\b/.test(stateNormalized)) detectedState = "GO";
+        else {
+            const match = stateNormalized.match(/\b([a-z]{2})\b/);
+            if (match) detectedState = match[1].toUpperCase();
+        }
+        
+        if (detectedState) {
+            if (!params.estado) params.estado = detectedState;
+            if (!params.subConvenio) params.subConvenio = detectedState;
+        }
+    }
+
+    // Sincronizar estado e subConvenio para convênio Governo
+    if (params.convenio === 'GOVERNO') {
+        if (params.estado && !params.subConvenio) {
+            params.subConvenio = params.estado;
+        } else if (params.subConvenio && !params.estado) {
+            params.estado = params.subConvenio;
+        }
+    }
 }
 
 function hasAllRequired(d: any): boolean {
-    return !!(d.convenio && d.idade && d.bancoAtual && d.valorParcela && d.saldoDevedor && d.prazoTotal && d.parcelasRestantes);
+    if (!d.convenio || !d.idade || !d.bancoAtual || !d.valorParcela || !d.saldoDevedor || !d.prazoTotal || !d.parcelasRestantes) {
+        return false;
+    }
+    if (d.convenio === 'INSS' && !d.codigoBeneficio) {
+        return false;
+    }
+    if (['GOVERNO', 'SIAPE', 'FORÇAS ARMADAS'].includes(d.convenio) && !d.subConvenio) {
+        return false;
+    }
+    if (d.isAnalfabeto === undefined) {
+        return false;
+    }
+    if (d.idade >= 60 && !d.estado) {
+        return false;
+    }
+    return true;
 }
 
 function fmt(v: number) { return v?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'; }
@@ -943,7 +990,8 @@ ${step3Text}
 4. Para o próximo dado:
    - Se o convênio for INSS, pergunte o Código do Benefício.
    - Se o convênio for SIAPE, pergunte exatamente: "Como o seu convênio é SIAPE, qual é a sua Situação Funcional?\nS1 - Ativo/Aposentado\nS2 - Pensionista"
-   - Se o convênio for Governo ou Forças Armadas, pergunte o Sub-convênio/órgão.
+   - Se o convênio for Governo, pergunte qual é o seu Estado (ex: Paraíba - PB, Bahia - BA).
+   - Se o convênio for Forças Armadas, pergunte qual a sua Força Militar (Ex: Aeronáutica, Exército ou Marinha).
    - Se convênio for CLT Privado, PULE esta pergunta.
 5. Se o cliente é Analfabeto? (Sim/Não)
    - IMPORTANTE: Para esta pergunta, você DEVE usar EXATAMENTE esta frase com as palavras em negrito usando asteriscos: "Você se considera *analfabeto* ou possui alguma *dificuldade para ler e escrever*? (Responda com *Sim* ou *Não*)"
