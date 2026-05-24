@@ -191,6 +191,28 @@ function getRuleSummary(ruleIdOrName: string): string {
         }
     }
 
+    const acceptsLOAS = b.acceptsLOAS !== undefined ? b.acceptsLOAS : (b.accepts_loas !== undefined ? b.accepts_loas : false);
+    const blockedBenefits: string[] = [];
+    if (!acceptsInvalidez) {
+        blockedBenefits.push("32 (Invalidez)");
+    }
+    if (!acceptsLOAS) {
+        blockedBenefits.push("87 e 88 (LOAS)");
+    }
+    const excludedBenefits = b.excludedBenefits !== undefined ? b.excludedBenefits : (b.excluded_benefits !== undefined ? b.excluded_benefits : []);
+    if (excludedBenefits && excludedBenefits.length > 0) {
+        excludedBenefits.forEach((eb: string) => {
+            const clean = eb.trim();
+            if (clean === '32' && !blockedBenefits.includes("32 (Invalidez)")) {
+                blockedBenefits.push("32 (Invalidez)");
+            } else if ((clean === '87' || clean === '88') && !blockedBenefits.includes("87 e 88 (LOAS)")) {
+                blockedBenefits.push("87 e 88 (LOAS)");
+            } else {
+                blockedBenefits.push(clean);
+            }
+        });
+    }
+
     const convenioStr = `${b.convenio || 'INSS'}${b.subConvenio ? ' - ' + b.subConvenio : ''}`;
 
     let t = `📋 **Resumo de Regras de Portabilidade**\n\n`;
@@ -199,6 +221,11 @@ function getRuleSummary(ruleIdOrName: string): string {
     t += `👵 **Idade:** De ${minAge} a ${maxAge} anos\n`;
     t += `📅 **Prazos:** ${prazosStr}\n`;
     t += `♿ **Aceita Invalidez:** ${invalidezStr}\n`;
+    
+    if (blockedBenefits.length > 0) {
+        t += `🚫 **Benefício não atendido:** ${blockedBenefits.join(', ')}\n`;
+    }
+
     t += `✍️ **Aceita Analfabeto:** ${formatYesNo(acceptsIlliterate)}\n`;
     t += `🕒 **Aceita 60+:** ${formatYesNo(accepts60Mais)}\n`;
     t += `💵 **Parcela Mínima:** ${formatCurrency(minInstallmentValue)}\n`;
@@ -986,11 +1013,35 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             }
         }
 
+        const acceptsLOAS = b.acceptsLOAS !== undefined ? b.acceptsLOAS : (b.accepts_loas !== undefined ? b.accepts_loas : false);
+        const blockedBenefits: string[] = [];
+        if (!acceptsInvalidez) {
+            blockedBenefits.push("32 (Invalidez)");
+        }
+        if (!acceptsLOAS) {
+            blockedBenefits.push("87 e 88 (LOAS)");
+        }
+        const excludedBenefits = b.excludedBenefits !== undefined ? b.excludedBenefits : (b.excluded_benefits !== undefined ? b.excluded_benefits : []);
+        if (excludedBenefits && excludedBenefits.length > 0) {
+            excludedBenefits.forEach((eb: string) => {
+                const clean = eb.trim();
+                if (clean === '32' && !blockedBenefits.includes("32 (Invalidez)")) {
+                    blockedBenefits.push("32 (Invalidez)");
+                } else if ((clean === '87' || clean === '88') && !blockedBenefits.includes("87 e 88 (LOAS)")) {
+                    blockedBenefits.push("87 e 88 (LOAS)");
+                } else {
+                    blockedBenefits.push(clean);
+                }
+            });
+        }
+        const blockedBenefitsStr = blockedBenefits.length > 0 ? blockedBenefits.join(', ') : 'Nenhum';
+
         bankRulesContext += `\n- BANCO: ${b.name} (Convênio: ${b.convenio || 'INSS'}${b.subConvenio ? ' - ' + b.subConvenio : ''})
   * Idade Mínima: ${minAge} anos
   * Idade Máxima: ${maxAge} anos
   * Prazos de Refin: ${prazosStr}
   * Aceita Invalidez: ${invalidezStr}
+  * Benefício não atendido: ${blockedBenefitsStr}
   * Aceita Analfabeto: ${acceptsIlliterate ? 'SIM' : 'NÃO'}
   * Aceita 60+: ${accepts60Mais ? 'SIM' : 'NÃO'}
   * Parcela Mínima: R$ ${minInstallment.toFixed(2)}
@@ -1024,6 +1075,7 @@ SOBRE REGRAS, ROTEIROS OU RESUMOS DE PORTABILIDADE:
   👵 **Idade**: De [Idade Mínima] a [Idade Máxima] anos
   📅 **Prazos**: [Prazos de Refin]
   ♿ **Aceita Invalidez**: [Aceita Invalidez]
+  🚫 **Benefício não atendido**: [Benefício não atendido, ex: 32 (Invalidez), 87 e 88 (LOAS). Se Nenhum, OMITA esta linha completa.]
   ✍️ **Aceita Analfabeto**: [SIM/NÃO]
   🕒 **Aceita 60+**: [SIM/NÃO]
   💵 **Parcela Mínima**: R$ [Valor formatado, ex: 20,00]
