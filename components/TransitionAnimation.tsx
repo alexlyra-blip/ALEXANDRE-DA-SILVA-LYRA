@@ -89,7 +89,7 @@ export default function TransitionAnimation({ onComplete, availableBanks }: { on
 
   // Progress and step logic
   useEffect(() => {
-    const duration = 4000; // Set animation to exactly 4 seconds (4000ms) before the offers page appears
+    const duration = 5000; // Set animation to exactly 5 seconds (5000ms) before completion delay
     const intervalTime = 25;
     const totalSteps = duration / intervalTime;
     const increment = 100 / totalSteps;
@@ -99,7 +99,10 @@ export default function TransitionAnimation({ onComplete, availableBanks }: { on
         const next = prev + increment;
         if (next >= 100) {
           clearInterval(interval);
-          setTimeout(onComplete, 0); // Open offers immediately at 100% completion
+          // Wait 800ms to allow the progress bar to be fully filled (100%) and seen by the user
+          setTimeout(() => {
+            onComplete();
+          }, 800);
           return 100;
         }
         return next;
