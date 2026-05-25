@@ -328,10 +328,11 @@ export default function RegrasBanco() {
     setIsSaving(true);
     setSaveFeedback(null);
     try {
-      const invalidezYears = parseInt(invalidezAgeYears) || 0;
+      const isINSS = convenio === 'INSS';
+      const invalidezYears = isINSS ? (parseInt(invalidezAgeYears) || 0) : 0;
       
       // Validation for benefit time when age rule is present
-      if (invalidezYears > 0) {
+      if (isINSS && invalidezYears > 0) {
         if (!minBenefitTimeYears && !minBenefitTimeMonths) {
           setSaveFeedback({ type: 'error', message: "Tempo mínimo de benefício é obrigatório quando há regra de idade para invalidez." });
           setIsSaving(false);
@@ -353,17 +354,17 @@ export default function RegrasBanco() {
         refinRate: parseNumeric(refinRate) || 0,
         sumBalanceAndTroco,
         nonAcceptedBanks: nonAcceptedBanks,
-        excludedBenefits: excludedBenefits,
+        excludedBenefits: isINSS ? excludedBenefits : [],
         specificInstallmentRules: specificInstallmentRules.map(r => ({ bank: r.bank, installments: parseInt(r.installments) })),
         acceptsIlliterate,
-        acceptsLOAS,
+        acceptsLOAS: isINSS ? acceptsLOAS : false,
         requireTrocoMaiorQue5PorcentoEndividamento,
         accepts60Mais,
-        acceptsInvalidez,
+        acceptsInvalidez: isINSS ? acceptsInvalidez : true,
         invalidezAgeYears: invalidezYears,
-        acceptsOver60Invalidez,
-        minBenefitTimeYears: invalidezYears > 0 ? (parseInt(minBenefitTimeYears) || 0) : 0,
-        minBenefitTimeMonths: invalidezYears > 0 ? (parseInt(minBenefitTimeMonths) || 0) : 0,
+        acceptsOver60Invalidez: isINSS ? acceptsOver60Invalidez : false,
+        minBenefitTimeYears: isINSS && invalidezYears > 0 ? (parseInt(minBenefitTimeYears) || 0) : 0,
+        minBenefitTimeMonths: isINSS && invalidezYears > 0 ? (parseInt(minBenefitTimeMonths) || 0) : 0,
         taxaPortabilidadeOrigem: parseNumeric(taxaContratoAtualPreview),
         ajusteTaxa: parseNumeric(ajusteTaxa),
         novaTaxaReferencia: parseNumeric(novaTaxaReferencia),
@@ -821,7 +822,7 @@ export default function RegrasBanco() {
                   </div>
                 )}
 
-                {bank.excludedBenefits && bank.excludedBenefits.length > 0 && (
+                {bank.convenio === 'INSS' && bank.excludedBenefits && bank.excludedBenefits.length > 0 && (
                   <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Bloqueio p/ Benefícios:</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -1333,36 +1334,38 @@ export default function RegrasBanco() {
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-medium text-slate-500">Códigos de Benefício que NÃO atende</label>
-                  <div className="flex flex-wrap gap-1.5 mb-1.5">
-                    {excludedBenefits.map(benefit => (
-                      <span key={benefit} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[10px] font-medium border border-red-200 dark:border-red-800">
-                        {benefit}
-                        <button type="button" onClick={() => handleRemoveExcludedBenefit(benefit)} className="hover:text-red-900 dark:hover:text-red-200">
-                          <X className="w-2.5 h-2.5" />
-                        </button>
-                      </span>
-                    ))}
+                {convenio === 'INSS' && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-medium text-slate-500">Códigos de Benefício que NÃO atende</label>
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {excludedBenefits.map(benefit => (
+                        <span key={benefit} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[10px] font-medium border border-red-200 dark:border-red-800">
+                          {benefit}
+                          <button type="button" onClick={() => handleRemoveExcludedBenefit(benefit)} className="hover:text-red-900 dark:hover:text-red-200">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input 
+                        type="text" 
+                        value={excludedBenefitInput} 
+                        onChange={e => setExcludedBenefitInput(e.target.value)} 
+                        onKeyDown={handleAddExcludedBenefit}
+                        className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" 
+                        placeholder="Ex: 32 (Aperte Enter)" 
+                      />
+                      <button 
+                        type="button" 
+                        onClick={handleAddExcludedBenefit}
+                        className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        Selo
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-1.5">
-                    <input 
-                      type="text" 
-                      value={excludedBenefitInput} 
-                      onChange={e => setExcludedBenefitInput(e.target.value)} 
-                      onKeyDown={handleAddExcludedBenefit}
-                      className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" 
-                      placeholder="Ex: 32 (Aperte Enter)" 
-                    />
-                    <button 
-                      type="button" 
-                      onClick={handleAddExcludedBenefit}
-                      className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                    >
-                      Selo
-                    </button>
-                  </div>
-                </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-[10px] font-medium text-slate-500">Bancos que porta com regras específicas</label>
                   <div className="flex flex-wrap gap-1.5 mb-1.5">
@@ -1425,42 +1428,46 @@ export default function RegrasBanco() {
                   <span className="text-xs font-medium">Aceita Cliente 60+</span>
                 </label>
 
-                <label className="flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <input type="checkbox" checked={acceptsInvalidez} onChange={e => setAcceptsInvalidez(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
-                  <span className="text-xs font-medium">Aceita Espécie Invalidez</span>
-                </label>
+                {convenio === 'INSS' && (
+                  <>
+                    <label className="flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <input type="checkbox" checked={acceptsInvalidez} onChange={e => setAcceptsInvalidez(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                      <span className="text-xs font-medium">Aceita Espécie Invalidez</span>
+                    </label>
 
-                {acceptsInvalidez && (
-                  <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-lg space-y-2 bg-slate-50 dark:bg-slate-800/20">
-                    <p className="text-xs font-bold text-primary">Regras de Invalidez</p>
-                    <div className="grid grid-cols-2 gap-3 items-end">
-                      <div className="space-y-1">
-                        <label className="text-[10px] text-slate-500 font-bold">Idade Mínima Cliente (Anos)</label>
-                        <input type="number" value={invalidezAgeYears} onChange={e => setInvalidezAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 18 (0 = bloqueia < 60)" />
-                        <p className="text-[8px] text-slate-400 italic">Se 0, o banco só aceita se 60+ e o campo ao lado estiver marcado.</p>
-                      </div>
-                      <div className="space-y-1 h-[34px] flex items-center">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={acceptsOver60Invalidez} onChange={e => setAcceptsOver60Invalidez(e.target.checked)} className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary" />
-                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Aceita cliente acima de 60 Anos</span>
-                        </label>
-                      </div>
-                    </div>
-                    
-                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-2">
-                      <p className="text-[10px] font-bold mb-2 uppercase text-slate-400">Tempo mínimo de Benefício</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[10px] text-slate-500">Anos</label>
-                          <input type="number" value={minBenefitTimeYears} onChange={e => setMinBenefitTimeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 1" />
+                    {acceptsInvalidez && (
+                      <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-lg space-y-2 bg-slate-50 dark:bg-slate-800/20">
+                        <p className="text-xs font-bold text-primary">Regras de Invalidez</p>
+                        <div className="grid grid-cols-2 gap-3 items-end">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-500 font-bold">Idade Mínima Cliente (Anos)</label>
+                            <input type="number" value={invalidezAgeYears} onChange={e => setInvalidezAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 18 (0 = bloqueia < 60)" />
+                            <p className="text-[8px] text-slate-400 italic">Se 0, o banco só aceita se 60+ e o campo ao lado estiver marcado.</p>
+                          </div>
+                          <div className="space-y-1 h-[34px] flex items-center">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="checkbox" checked={acceptsOver60Invalidez} onChange={e => setAcceptsOver60Invalidez(e.target.checked)} className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary" />
+                              <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Aceita cliente acima de 60 Anos</span>
+                            </label>
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] text-slate-500">Meses</label>
-                          <input type="number" value={minBenefitTimeMonths} onChange={e => setMinBenefitTimeMonths(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 6" />
+                        
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-2">
+                          <p className="text-[10px] font-bold mb-2 uppercase text-slate-400">Tempo mínimo de Benefício</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-slate-500">Anos</label>
+                              <input type="number" value={minBenefitTimeYears} onChange={e => setMinBenefitTimeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 1" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-slate-500">Meses</label>
+                              <input type="number" value={minBenefitTimeMonths} onChange={e => setMinBenefitTimeMonths(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 6" />
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
+                    )}
+                  </>
                 )}
               </div>
 

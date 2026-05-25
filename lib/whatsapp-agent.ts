@@ -214,16 +214,19 @@ function getRuleSummary(ruleIdOrName: string): string {
     }
 
     const convenioStr = `${b.convenio || 'INSS'}${b.subConvenio ? ' - ' + b.subConvenio : ''}`;
+    const isINSS = (b.convenio || 'INSS').trim().toUpperCase() === 'INSS';
 
     let t = `📋 **Resumo de Regras de Portabilidade**\n\n`;
     t += `🏛️ **Banco:** ${b.name}\n`;
     t += `💼 **Convênio:** ${convenioStr}\n`;
     t += `👵 **Idade:** De ${minAge} a ${maxAge} anos\n`;
     t += `📅 **Prazos:** ${prazosStr}\n`;
-    t += `♿ **Aceita Invalidez:** ${invalidezStr}\n`;
     
-    if (blockedBenefits.length > 0) {
-        t += `🚫 **Benefício não atendido:** ${blockedBenefits.join(', ')}\n`;
+    if (isINSS) {
+        t += `♿ **Aceita Invalidez:** ${invalidezStr}\n`;
+        if (blockedBenefits.length > 0) {
+            t += `🚫 **Benefício não atendido:** ${blockedBenefits.join(', ')}\n`;
+        }
     }
 
     t += `✍️ **Aceita Analfabeto:** ${formatYesNo(acceptsIlliterate)}\n`;
@@ -1034,14 +1037,19 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             });
         }
         const blockedBenefitsStr = blockedBenefits.length > 0 ? blockedBenefits.join(', ') : 'Nenhum';
+        const isINSS = (b.convenio || 'INSS').trim().toUpperCase() === 'INSS';
 
-        bankRulesContext += `\n- BANCO: ${b.name} (Convênio: ${b.convenio || 'INSS'}${b.subConvenio ? ' - ' + b.subConvenio : ''})
+        let bankRuleText = `\n- BANCO: ${b.name} (Convênio: ${b.convenio || 'INSS'}${b.subConvenio ? ' - ' + b.subConvenio : ''})
   * Idade Mínima: ${minAge} anos
   * Idade Máxima: ${maxAge} anos
-  * Prazos de Refin: ${prazosStr}
-  * Aceita Invalidez: ${invalidezStr}
-  * Benefício não atendido: ${blockedBenefitsStr}
-  * Aceita Analfabeto: ${acceptsIlliterate ? 'SIM' : 'NÃO'}
+  * Prazos de Refin: ${prazosStr}`;
+
+        if (isINSS) {
+            bankRuleText += `\n  * Aceita Invalidez: ${invalidezStr}
+  * Benefício não atendido: ${blockedBenefitsStr}`;
+        }
+
+        bankRuleText += `\n  * Aceita Analfabeto: ${acceptsIlliterate ? 'SIM' : 'NÃO'}
   * Aceita 60+: ${accepts60Mais ? 'SIM' : 'NÃO'}
   * Parcela Mínima: R$ ${minInstallment.toFixed(2)}
   * Troco Mínimo: R$ ${minTroco.toFixed(2)}
@@ -1049,6 +1057,8 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
   * Taxa Mínima Refin/Port: ${refinRate}%
   * Bancos Não Portados (origem): ${nonAccepted.join(', ') || 'Nenhum'}
   * Bancos com Regras específicas: ${specificRulesStr}`;
+
+        bankRulesContext += bankRuleText;
         
         if (tablesArray.length > 0) {
             bankRulesContext += `\n  * Tabelas de Refin da Portabilidade Cadastradas:`;
@@ -1069,20 +1079,34 @@ Use APENAS as regras abaixo para responder perguntas individuais sobre roteiro, 
 ${bankRulesContext}
 
 SOBRE REGRAS, ROTEIROS OU RESUMOS DE PORTABILIDADE:
-- Se o usuário solicitar o resumo, regras ou roteiro de um banco, use os dados acima para responder com absoluta precisão científica e com a seguinte estrutura de layout e emojis premium:
-  🏛️ **Banco**: [Nome do Banco]
-  👵 **Idade**: De [Idade Mínima] a [Idade Máxima] anos
-  📅 **Prazos**: [Prazos de Refin]
-  ♿ **Aceita Invalidez**: [Aceita Invalidez]
-  🚫 **Benefício não atendido**: [Benefício não atendido, ex: 32 (Invalidez), 87 e 88 (LOAS). Se Nenhum, OMITA esta linha completa.]
-  ✍️ **Aceita Analfabeto**: [SIM/NÃO]
-  🕒 **Aceita 60+**: [SIM/NÃO]
-  💵 **Parcela Mínima**: R$ [Valor formatado, ex: 20,00]
-  💰 **Troco Mínimo**: R$ [Valor formatado, ex: 100,00]
-  📉 **Taxa Mínima Portabilidade**: [Taxa]%
-  🔄 **Taxa Mínima Refin/Port**: [Taxa]%
-  🚫 **Bancos Não Portados (Origem)**: [Lista de Bancos Não Portados]
-  ⚠️ **Bancos com Regras específicas**: [Lista de Bancos com Regras específicas]
+- Se o usuário solicitar o resumo, regras ou roteiro de um banco, use os dados acima para responder com absoluta precisão científica com as seguintes diretrizes:
+  * Para o convênio INSS, use a estrutura de layout e emojis premium abaixo:
+    🏛️ **Banco**: [Nome do Banco]
+    👵 **Idade**: De [Idade Mínima] a [Idade Máxima] anos
+    📅 **Prazos**: [Prazos de Refin]
+    ♿ **Aceita Invalidez**: [Aceita Invalidez]
+    🚫 **Benefício não atendido**: [Benefício não atendido, ex: 32 (Invalidez), 87 e 88 (LOAS). Se Nenhum, OMITA esta linha completa.]
+    ✍️ **Aceita Analfabeto**: [SIM/NÃO]
+    🕒 **Aceita 60+**: [SIM/NÃO]
+    💵 **Parcela Mínima**: R$ [Valor formatado, ex: 20,00]
+    💰 **Troco Mínimo**: R$ [Valor formatado, ex: 100,00]
+    📉 **Taxa Mínima Portabilidade**: [Taxa]%
+    🔄 **Taxa Mínima Refin/Port**: [Taxa]%
+    🚫 **Bancos Não Portados (Origem)**: [Lista de Bancos Não Portados]
+    ⚠️ **Bancos com Regras específicas**: [Lista de Bancos com Regras específicas]
+
+  * Para os convênios SIAPE, FORÇAS ARMADAS, CLT PRIVADO e GOVERNO, use a estrutura de layout e emojis premium abaixo (ATENÇÃO: NUNCA exiba as linhas "Aceita Invalidez" ou "Benefício não atendido" para esses convênios, pois são específicos do INSS):
+    🏛️ **Banco**: [Nome do Banco]
+    👵 **Idade**: De [Idade Mínima] a [Idade Máxima] anos
+    📅 **Prazos**: [Prazos de Refin]
+    ✍️ **Aceita Analfabeto**: [SIM/NÃO]
+    🕒 **Aceita 60+**: [SIM/NÃO]
+    💵 **Parcela Mínima**: R$ [Valor formatado, ex: 20,00]
+    💰 **Troco Mínimo**: R$ [Valor formatado, ex: 100,00]
+    📉 **Taxa Mínima Portabilidade**: [Taxa]%
+    🔄 **Taxa Mínima Refin/Port**: [Taxa]%
+    🚫 **Bancos Não Portados (Origem)**: [Lista de Bancos Não Portados]
+    ⚠️ **Bancos com Regras específicas**: [Lista de Bancos com Regras específicas]
 
 - Se ele perguntar se um banco aceita analfabeto, qual a idade mínima, ou as taxas de uma tabela específica, responda citando diretamente os valores reais cadastrados listados acima.
 - Se o usuário pedir para listar as tabelas de Refin de um banco, liste cada tabela informando a taxa e o valor mínimo da operação (se houver valor mínimo configurado na tabela; caso não haja valor mínimo listado acima para a tabela, NÃO exiba nem mencione o texto "valor mínimo" ou "operação mínima").
