@@ -561,13 +561,8 @@ export default function Recomendacoes() {
             return;
           }
         } else {
-          const ageLimit = bank.invalidezAgeYears || 0;
-          if (ageLimit === 0 && bank.maxAge > 0 && idade > bank.maxAge) {
+          if (bank.maxAge > 0 && idade > bank.maxAge) {
             log(`Idade excede o limite máximo para invalidez (${bank.maxAge} anos).`);
-            return;
-          }
-          if (ageLimit > 0 && idade > ageLimit) {
-            log(`Invalidez: Idade excede o limite específico (${ageLimit} anos).`);
             return;
           }
         }

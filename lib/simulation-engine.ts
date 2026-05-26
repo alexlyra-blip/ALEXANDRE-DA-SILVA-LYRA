@@ -290,9 +290,7 @@ export function calculateOffers(
     if (!isInvalidity) {
       if ((bank.minAge > 0 && idade < bank.minAge) || (bank.maxAge > 0 && idade > bank.maxAge)) return;
     } else {
-      const ageLimit = bank.invalidezAgeYears || 0;
-      if (ageLimit === 0 && bank.maxAge > 0 && idade > bank.maxAge) return;
-      if (ageLimit > 0 && idade > ageLimit) return;
+      if (bank.maxAge > 0 && idade > bank.maxAge) return;
     }
 
     // 60+ Rule
