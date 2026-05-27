@@ -67,6 +67,7 @@ export default function RegrasBanco() {
   const [accepts60Mais, setAccepts60Mais] = useState(false);
   const [acceptsInvalidez, setAcceptsInvalidez] = useState(true);
   const [invalidezAgeYears, setInvalidezAgeYears] = useState('');
+  const [invalidezMaxAgeYears, setInvalidezMaxAgeYears] = useState('');
   const [acceptsOver60Invalidez, setAcceptsOver60Invalidez] = useState(false);
   const [minBenefitTimeYears, setMinBenefitTimeYears] = useState('');
   const [minBenefitTimeMonths, setMinBenefitTimeMonths] = useState('');
@@ -149,6 +150,7 @@ export default function RegrasBanco() {
     setAcceptsLOAS(false);
     setAcceptsInvalidez(true);
     setInvalidezAgeYears('');
+    setInvalidezMaxAgeYears('');
     setAcceptsOver60Invalidez(false);
     setMinBenefitTimeYears('');
     setMinBenefitTimeMonths('');
@@ -329,7 +331,8 @@ export default function RegrasBanco() {
     setSaveFeedback(null);
     try {
       const isINSS = convenio === 'INSS';
-      const invalidezYears = isINSS ? (parseInt(invalidezAgeYears) || 0) : 0;
+       const invalidezYears = isINSS ? (parseInt(invalidezAgeYears) || 0) : 0;
+      const invalidezMaxYears = isINSS ? (parseInt(invalidezMaxAgeYears) || 0) : 0;
       
       // Validation for benefit time when age rule is present
       if (isINSS && invalidezYears > 0) {
@@ -362,6 +365,7 @@ export default function RegrasBanco() {
         accepts60Mais,
         acceptsInvalidez: isINSS ? acceptsInvalidez : true,
         invalidezAgeYears: invalidezYears,
+        invalidezMaxAgeYears: invalidezMaxYears,
         acceptsOver60Invalidez: isINSS ? acceptsOver60Invalidez : false,
         minBenefitTimeYears: isINSS && invalidezYears > 0 ? (parseInt(minBenefitTimeYears) || 0) : 0,
         minBenefitTimeMonths: isINSS && invalidezYears > 0 ? (parseInt(minBenefitTimeMonths) || 0) : 0,
@@ -467,6 +471,7 @@ export default function RegrasBanco() {
     setAccepts60Mais(bank.accepts60Mais || false);
     setAcceptsInvalidez(bank.acceptsInvalidez !== false);
     setInvalidezAgeYears(bank.invalidezAgeYears?.toString() || '');
+    setInvalidezMaxAgeYears(bank.invalidezMaxAgeYears?.toString() || '');
     setAcceptsOver60Invalidez(bank.acceptsOver60Invalidez || false);
     setMinBenefitTimeYears(bank.minBenefitTimeYears?.toString() || '');
     setMinBenefitTimeMonths(bank.minBenefitTimeMonths?.toString() || '');
@@ -1440,18 +1445,21 @@ export default function RegrasBanco() {
                     {acceptsInvalidez && (
                       <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-lg space-y-2 bg-slate-50 dark:bg-slate-800/20">
                         <p className="text-xs font-bold text-primary">Regras de Invalidez</p>
-                        <div className="grid grid-cols-2 gap-3 items-end">
+                        <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <label className="text-[10px] text-slate-500 font-bold">Idade Mínima Cliente (Anos)</label>
-                            <input type="number" value={invalidezAgeYears} onChange={e => setInvalidezAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 18 (0 = bloqueia < 60)" />
-                            <p className="text-[8px] text-slate-400 italic">Se 0, o banco só aceita se 60+ e o campo ao lado estiver marcado.</p>
+                            <input type="number" value={invalidezAgeYears} onChange={e => setInvalidezAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 55" />
                           </div>
-                          <div className="space-y-1 h-[34px] flex items-center">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="checkbox" checked={acceptsOver60Invalidez} onChange={e => setAcceptsOver60Invalidez(e.target.checked)} className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary" />
-                              <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Aceita cliente acima de 60 Anos</span>
-                            </label>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-500 font-bold">Idade Máxima Cliente (Anos)</label>
+                            <input type="number" value={invalidezMaxAgeYears} onChange={e => setInvalidezMaxAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 72 (0 = sem máx específica)" />
                           </div>
+                        </div>
+                        <div className="space-y-1 pt-1">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={acceptsOver60Invalidez} onChange={e => setAcceptsOver60Invalidez(e.target.checked)} className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary" />
+                            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Aceita cliente acima de 60 Anos</span>
+                          </label>
                         </div>
                         
                         <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-2">

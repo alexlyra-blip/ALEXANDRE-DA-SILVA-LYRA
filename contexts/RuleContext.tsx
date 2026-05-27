@@ -41,6 +41,7 @@ export interface BankRule {
   accepts60Mais: boolean;
   acceptsInvalidez?: boolean;
   invalidezAgeYears: number;
+  invalidezMaxAgeYears?: number;
   acceptsOver60Invalidez: boolean;
   minBenefitTimeYears: number;
   minBenefitTimeMonths: number;

@@ -50,6 +50,7 @@ export default function RegrasCalculo() {
   const [acceptsLOAS, setAcceptsLOAS] = useState(false);
   const [acceptsInvalidez, setAcceptsInvalidez] = useState(true);
   const [invalidezAgeYears, setInvalidezAgeYears] = useState('');
+  const [invalidezMaxAgeYears, setInvalidezMaxAgeYears] = useState('');
   const [acceptsOver60Invalidez, setAcceptsOver60Invalidez] = useState(false);
   const [minBenefitTimeYears, setMinBenefitTimeYears] = useState('');
   const [minBenefitTimeMonths, setMinBenefitTimeMonths] = useState('');
@@ -147,6 +148,7 @@ export default function RegrasCalculo() {
         acceptsLOAS,
         acceptsInvalidez,
         invalidezAgeYears: parseInt(invalidezAgeYears) || 0,
+        invalidezMaxAgeYears: parseInt(invalidezMaxAgeYears) || 0,
         acceptsOver60Invalidez,
         minBenefitTimeYears: parseInt(minBenefitTimeYears) || 0,
         minBenefitTimeMonths: parseInt(minBenefitTimeMonths) || 0,
@@ -183,6 +185,7 @@ export default function RegrasCalculo() {
       setAcceptsLOAS(false);
       setAcceptsInvalidez(true);
       setInvalidezAgeYears('');
+      setInvalidezMaxAgeYears('');
       setAcceptsOver60Invalidez(false);
       setMinBenefitTimeYears('');
       setMinBenefitTimeMonths('');
@@ -210,6 +213,7 @@ export default function RegrasCalculo() {
     setAcceptsLOAS(bank.acceptsLOAS || false);
     setAcceptsInvalidez(bank.acceptsInvalidez !== false);
     setInvalidezAgeYears(bank.invalidezAgeYears?.toString() || '');
+    setInvalidezMaxAgeYears(bank.invalidezMaxAgeYears?.toString() || '');
     setAcceptsOver60Invalidez(bank.acceptsOver60Invalidez || false);
     setMinBenefitTimeYears(bank.minBenefitTimeYears?.toString() || '');
     setMinBenefitTimeMonths(bank.minBenefitTimeMonths?.toString() || '');
@@ -692,17 +696,21 @@ export default function RegrasCalculo() {
                 {acceptsInvalidez && (
                   <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg space-y-3 bg-slate-50 dark:bg-slate-800/20">
                     <p className="text-sm font-medium">Regra de idade para Benefício Invalidez</p>
-                    <div className="grid grid-cols-2 gap-4 items-end">
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <label className="text-xs text-slate-500">Idade Mínima (Anos)</label>
-                        <input type="number" value={invalidezAgeYears} onChange={e => setInvalidezAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 60" />
+                        <input type="number" value={invalidezAgeYears} onChange={e => setInvalidezAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 55" />
                       </div>
-                      <div className="space-y-1.5 h-[38px] flex items-center">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={acceptsOver60Invalidez} onChange={e => setAcceptsOver60Invalidez(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
-                          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Aceita clientes acima de 60 Anos</span>
-                        </label>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-slate-500">Idade Máxima (Anos)</label>
+                        <input type="number" value={invalidezMaxAgeYears} onChange={e => setInvalidezMaxAgeYears(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" placeholder="Ex: 72 (0 = sem máx específica)" />
                       </div>
+                    </div>
+                    <div className="space-y-1.5 pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={acceptsOver60Invalidez} onChange={e => setAcceptsOver60Invalidez(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Aceita clientes acima de 60 Anos</span>
+                      </label>
                     </div>
                     
                     {(!invalidezAgeYears || parseInt(invalidezAgeYears) > 0 || acceptsOver60Invalidez) && (

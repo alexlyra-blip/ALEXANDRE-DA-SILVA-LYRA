@@ -179,13 +179,15 @@ function getRuleSummary(ruleIdOrName: string): string {
 
     const acceptsInvalidez = b.acceptsInvalidez !== false;
     const invalidezAgeYears = b.invalidezAgeYears || 0;
+    const invalidezMaxAgeYears = b.invalidezMaxAgeYears || 0;
     const minBenefitTimeYears = b.minBenefitTimeYears || 0;
     const minBenefitTimeMonths = b.minBenefitTimeMonths || 0;
     
     let invalidezStr = 'Não';
     if (acceptsInvalidez) {
         if (invalidezAgeYears > 0 || minBenefitTimeYears > 0 || minBenefitTimeMonths > 0) {
-            invalidezStr = `SIM (Idade: >=${invalidezAgeYears} anos e <60 anos, Tempo de Benefício: ${minBenefitTimeYears} anos e ${minBenefitTimeMonths} meses)`;
+            const maxStr = invalidezMaxAgeYears > 0 ? `${invalidezMaxAgeYears} anos` : '60 anos';
+            invalidezStr = `SIM (Idade: >=${invalidezAgeYears} anos e <${maxStr}, Tempo de Benefício: ${minBenefitTimeYears} anos e ${minBenefitTimeMonths} meses)`;
         } else {
             invalidezStr = 'SIM';
         }
@@ -1004,12 +1006,14 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
         const acceptsInvalidez = b.acceptsInvalidez !== false;
         const invalidezAgeYears = b.invalidezAgeYears || 0;
+        const invalidezMaxAgeYears = b.invalidezMaxAgeYears || 0;
         const minBenefitTimeYears = b.minBenefitTimeYears || 0;
         const minBenefitTimeMonths = b.minBenefitTimeMonths || 0;
         let invalidezStr = 'Não';
         if (acceptsInvalidez) {
             if (invalidezAgeYears > 0 || minBenefitTimeYears > 0 || minBenefitTimeMonths > 0) {
-                invalidezStr = `SIM (Idade: >=${invalidezAgeYears} anos e <60 anos, Tempo de Benefício: ${minBenefitTimeYears} anos e ${minBenefitTimeMonths} meses)`;
+                const maxStr = invalidezMaxAgeYears > 0 ? `${invalidezMaxAgeYears} anos` : '60 anos';
+                invalidezStr = `SIM (Idade: >=${invalidezAgeYears} anos e <${maxStr}, Tempo de Benefício: ${minBenefitTimeYears} anos e ${minBenefitTimeMonths} meses)`;
             } else {
                 invalidezStr = 'SIM';
             }
