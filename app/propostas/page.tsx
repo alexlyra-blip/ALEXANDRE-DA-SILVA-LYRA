@@ -114,22 +114,59 @@ export default function PropostasPage() {
   };
 
   const stats = useMemo(() => {
-    const total = proposals.length;
-    const pending = proposals.filter(p => p.status === 'PENDENTE').length;
-    const inProgress = proposals.filter(p => p.status === 'ANDAMENTO').length;
-    const paid = proposals.filter(p => p.status === 'PAGO').length;
-    const rejected = proposals.filter(p => p.status === 'REPROVADO').length;
+    const filteredForStats = proposals.filter(p => {
+      // Date Filter
+      let matchesDate = true;
+      if (dateFilter !== 'all') {
+        const proposalDate = p.proposalDate ? startOfDay(parseISO(p.proposalDate)) : null;
+        if (!proposalDate) {
+          matchesDate = false;
+        } else {
+          const today = startOfDay(new Date());
+          if (dateFilter === 'today') {
+            matchesDate = proposalDate.getTime() === today.getTime();
+          } else if (dateFilter === 'week') {
+            const weekAgo = subDays(today, 7);
+            matchesDate = isWithinInterval(proposalDate, { start: weekAgo, end: today });
+          } else if (dateFilter === '15days') {
+            const fifteenDaysAgo = subDays(today, 15);
+            matchesDate = isWithinInterval(proposalDate, { start: fifteenDaysAgo, end: today });
+          } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
+            const start = startOfDay(parseISO(customStartDate));
+            const end = startOfDay(parseISO(customEndDate));
+            matchesDate = isWithinInterval(proposalDate, { start, end });
+          }
+        }
+      }
+
+      // Bank Filter
+      const matchesBank = bankFilter === 'all' || p.bank === bankFilter;
+
+      // Corretor Filter
+      const matchesCorretor = corretorFilter === 'all' || p.corretor === corretorFilter;
+
+      // Loan Type Filter
+      const matchesLoanType = loanTypeFilter === 'all' || p.loanType === loanTypeFilter;
+
+      return matchesDate && matchesBank && matchesCorretor && matchesLoanType;
+    });
+
+    const total = filteredForStats.length;
+    const pending = filteredForStats.filter(p => p.status === 'PENDENTE').length;
+    const inProgress = filteredForStats.filter(p => p.status === 'ANDAMENTO').length;
+    const paid = filteredForStats.filter(p => p.status === 'PAGO').length;
+    const rejected = filteredForStats.filter(p => p.status === 'REPROVADO').length;
     
     // Proposals returning today
     const today = startOfDay(new Date());
-    const returningToday = proposals.filter(p => {
+    const returningToday = filteredForStats.filter(p => {
       if (p.status !== 'ANDAMENTO' || !p.expectedReturnDate) return false;
       const returnDate = startOfDay(new Date(p.expectedReturnDate));
       return returnDate.getTime() === today.getTime();
     }).length;
 
     return { total, pending, inProgress, paid, rejected, returningToday };
-  }, [proposals]);
+  }, [proposals, dateFilter, customStartDate, customEndDate, bankFilter, corretorFilter, loanTypeFilter]);
 
   const filterOptions = useMemo(() => {
     const banks = Array.from(new Set(proposals.map(p => p.bank).filter(Boolean))).sort();
