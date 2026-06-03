@@ -15,7 +15,9 @@ import {
   Trash2,
   Landmark,
   Download,
-  CheckCircle
+  CheckCircle,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getProposals, deleteProposal } from '@/lib/data-service';
@@ -41,6 +43,23 @@ export default function PropostasPage() {
   const [loanTypeFilter, setLoanTypeFilter] = useState<string>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [proposalToDelete, setProposalToDelete] = useState<any | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = async (e: React.MouseEvent, text: string, key: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      showToast("Copiado para a área de transferência!", "success");
+      setTimeout(() => {
+        setCopiedKey(null);
+      }, 2000);
+    } catch (err) {
+      console.error('Falha ao copiar:', err);
+      showToast("Erro ao copiar.", "error");
+    }
+  };
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 100;
@@ -619,7 +638,20 @@ export default function PropostasPage() {
                             </span>
                           )}
                         </div>
-                        <h3 className="font-bold text-slate-900 truncate">{proposal.clientName}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <h3 className="font-bold text-slate-900 truncate">{proposal.clientName}</h3>
+                          <button
+                            onClick={(e) => handleCopy(e, proposal.clientName || '', `${proposal.id}-name`)}
+                            className="p-1 text-slate-400 hover:text-primary hover:bg-primary/10 rounded transition-all shrink-0 opacity-60 hover:opacity-100 focus:opacity-100"
+                            title="Copiar Nome"
+                          >
+                            {copiedKey === `${proposal.id}-name` ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <Calendar className="w-3.5 h-3.5" />
@@ -628,6 +660,17 @@ export default function PropostasPage() {
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <AlertCircle className="w-3.5 h-3.5" />
                             <span>CPF: {proposal.clientCpf}</span>
+                            <button
+                              onClick={(e) => handleCopy(e, proposal.clientCpf || '', `${proposal.id}-cpf`)}
+                              className="p-1 text-slate-400 hover:text-primary hover:bg-primary/10 rounded transition-all shrink-0 opacity-60 hover:opacity-100 focus:opacity-100"
+                              title="Copiar CPF"
+                            >
+                              {copiedKey === `${proposal.id}-cpf` ? (
+                                <Check className="w-3 h-3 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
                           </div>
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <Landmark className="w-3.5 h-3.5" />
