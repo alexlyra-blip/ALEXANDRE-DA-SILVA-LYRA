@@ -691,9 +691,14 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                             saldoDevedor: simDoc?.saldoDevedor,
                             prazoTotal: simDoc?.prazoTotal,
                             parcelasRestantes: simDoc?.parcelasRestantes,
+                            taxaJurosMensal: simDoc?.taxaJurosMensal,
                         };
 
                         if (cleanParams && cleanParams.convenio) {
+                            if (!cleanParams.taxaJurosMensal && cleanParams.saldoDevedor > 0 && cleanParams.valorParcela > 0 && cleanParams.parcelasRestantes > 0) {
+                                cleanParams.taxaJurosMensal = calculateRate(cleanParams.saldoDevedor, cleanParams.valorParcela, cleanParams.parcelasRestantes);
+                            }
+
                             const recalcOffers = calculateOffers(
                                 cleanParams as SimulationParams, 
                                 banks, 
@@ -707,10 +712,24 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                                 sessionData.lastOffers = recalcOffers;
                                 lastOffers = recalcOffers;
                                 
-                                // Determinar o top bank com maior troco da simulação
-                                const sortedRecalc = [...recalcOffers].sort((a: any, b: any) => b.valorTroco - a.valorTroco);
-                                sessionData.lastOfertadoBank = sortedRecalc[0].name;
-                                lastBank = sortedRecalc[0].name;
+                                if (simDoc.topOffer) {
+                                    sessionData.lastOfertadoBank = simDoc.topOffer;
+                                    lastBank = simDoc.topOffer;
+                                } else {
+                                    const sortedRecalc = [...recalcOffers].sort((a: any, b: any) => {
+                                        const bankIdA = a.id?.split('-')[0];
+                                        const bankIdB = b.id?.split('-')[0];
+                                        const pp = sd?.bankPriorities || {};
+                                        const pA = pp[bankIdA] ?? a.priority ?? 999;
+                                        const pB = pp[bankIdB] ?? b.priority ?? 999;
+                                        const finalPA = pA === 0 ? 999 : pA;
+                                        const finalPB = pB === 0 ? 999 : pB;
+                                        if (finalPA !== finalPB) return finalPA - finalPB;
+                                        return a.valorTroco - b.valorTroco;
+                                    });
+                                    sessionData.lastOfertadoBank = sortedRecalc[0].name;
+                                    lastBank = sortedRecalc[0].name;
+                                }
                             }
                         }
                     }
@@ -724,8 +743,8 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             return `⚠️ *Ops!* Você ainda não possui uma simulação ativa nesta sessão.\n\nPor favor, inicie informando o seu **convênio** para que eu possa simular as melhores ofertas para você! 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**`;
         }
         
-        // Filter offers for the last bank that was simulated/offered
-        const bankOffers = lastOffers.filter((o: any) => checkBankMatch(o.name, lastBank));
+        // Filter offers for the exact last bank that was simulated/offered
+        const bankOffers = lastOffers.filter((o: any) => o.name === lastBank);
         
         if (bankOffers.length === 0) {
             return `⚠️ *Atenção:* Não foram encontradas outras tabelas disponíveis para o banco **${lastBank.toUpperCase()}** na simulação recente.`;
