@@ -622,6 +622,10 @@ export default function PropostasPage() {
                         <h3 className="font-bold text-slate-900 truncate">{proposal.clientName}</h3>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>Incluída em: {proposal.proposalDate ? format(parseISO(proposal.proposalDate), 'dd/MM/yyyy') : '---'}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <AlertCircle className="w-3.5 h-3.5" />
                             <span>CPF: {proposal.clientCpf}</span>
                           </div>

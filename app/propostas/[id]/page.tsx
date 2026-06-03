@@ -552,7 +552,7 @@ function ProposalDetailPageContent() {
                   {isNew ? 'Nova Proposta' : 'Editar Proposta'}
                 </h1>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-                  {isNew ? 'Criando novo registro' : `Proposta #${formData.proposalNumber || '---'}`}
+                  {isNew ? 'Criando novo registro' : `Proposta #${formData.proposalNumber || '---'} • Incluída em: ${formData.proposalDate ? format(parseISO(formData.proposalDate), 'dd/MM/yyyy') : '---'}`}
                 </p>
               </div>
             </div>
