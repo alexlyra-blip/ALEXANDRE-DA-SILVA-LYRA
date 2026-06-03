@@ -131,10 +131,15 @@ export default function PropostasPage() {
           } else if (dateFilter === '15days') {
             const fifteenDaysAgo = subDays(today, 15);
             matchesDate = isWithinInterval(proposalDate, { start: fifteenDaysAgo, end: today });
-          } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
-            const start = startOfDay(parseISO(customStartDate));
-            const end = startOfDay(parseISO(customEndDate));
-            matchesDate = isWithinInterval(proposalDate, { start, end });
+          } else if (dateFilter === 'custom') {
+            if (customStartDate) {
+              const start = startOfDay(parseISO(customStartDate));
+              if (proposalDate < start) matchesDate = false;
+            }
+            if (customEndDate) {
+              const end = startOfDay(parseISO(customEndDate));
+              if (proposalDate > end) matchesDate = false;
+            }
           }
         }
       }
@@ -210,10 +215,15 @@ export default function PropostasPage() {
           } else if (dateFilter === '15days') {
             const fifteenDaysAgo = subDays(today, 15);
             matchesDate = isWithinInterval(proposalDate, { start: fifteenDaysAgo, end: today });
-          } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
-            const start = startOfDay(parseISO(customStartDate));
-            const end = startOfDay(parseISO(customEndDate));
-            matchesDate = isWithinInterval(proposalDate, { start, end });
+          } else if (dateFilter === 'custom') {
+            if (customStartDate) {
+              const start = startOfDay(parseISO(customStartDate));
+              if (proposalDate < start) matchesDate = false;
+            }
+            if (customEndDate) {
+              const end = startOfDay(parseISO(customEndDate));
+              if (proposalDate > end) matchesDate = false;
+            }
           }
         }
       }
@@ -272,7 +282,7 @@ export default function PropostasPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, dateFilter, bankFilter, corretorFilter, loanTypeFilter]);
+  }, [searchTerm, statusFilter, dateFilter, bankFilter, corretorFilter, loanTypeFilter, customStartDate, customEndDate]);
 
   const exportToPDF = () => {
     const doc = new jsPDF('landscape');
