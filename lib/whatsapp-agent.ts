@@ -601,6 +601,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
 
         if (top) {
             sessionData.lastOffers = sortedOffers;
+            sessionData.allOffers = offers;
             sessionData.lastOfertadoBank = top.name;
         }
 
@@ -656,9 +657,11 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         }
     }
 
-    // Interceptar comando "tabelas" ou "tabela"
-    if (lower === 'tabelas' || lower === 'tabela' || lower === 'tabelas disponíveis' || lower === 'outras tabelas') {
-        let lastOffers = sessionData.lastOffers || [];
+    // Interceptar comando "tabelas" com ou sem prazo (ex: "tabelas 96")
+    const tabelasMatch = lower.match(/^tabelas?(?:\s+(?:dispon[ií]veis|outras))?(?:\s+(?:do\s+refin|da\s+portabilidade))?(?:\s+(\d{2,3})x?)?$/i);
+    if (lower === 'tabelas' || lower === 'tabela' || lower === 'tabelas disponíveis' || lower === 'outras tabelas' || tabelasMatch) {
+        let requestedPrazo = tabelasMatch && tabelasMatch[1] ? parseInt(tabelasMatch[1]) : null;
+        let lastOffers = sessionData.allOffers || sessionData.lastOffers || [];
         let lastBank = sessionData.lastOfertadoBank || '';
         
         if (lastOffers.length === 0 || !lastBank) {
@@ -709,7 +712,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                                 sd?.nonPortableBanks || []
                             );
                             if (recalcOffers.length > 0) {
-                                sessionData.lastOffers = recalcOffers;
+                                sessionData.allOffers = recalcOffers;
                                 lastOffers = recalcOffers;
                                 
                                 if (simDoc.topOffer) {
@@ -750,8 +753,26 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             return `⚠️ *Atenção:* Não foram encontradas outras tabelas disponíveis para o banco **${lastBank.toUpperCase()}** na simulação recente.`;
         }
         
-        // Sort by troco ascending (menor troco primeiro, conforme solicitado)
-        const sortedOffers = bankOffers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
+        const prazosDisponiveis = new Set<number>();
+        bankOffers.forEach((o: any) => { if (o.prazoRefinPort) prazosDisponiveis.add(o.prazoRefinPort); });
+        const availablePrazos = Array.from(prazosDisponiveis).sort((a, b) => b - a);
+        
+        let prazoAtual = requestedPrazo;
+        if (!prazoAtual && availablePrazos.length > 0) {
+            // Se o usuário não pediu um prazo específico, exibe o maior (que foi o ofertado)
+            prazoAtual = availablePrazos[0];
+        }
+        
+        let filteredOffers = bankOffers;
+        if (prazoAtual) {
+            filteredOffers = bankOffers.filter((o: any) => o.prazoRefinPort === prazoAtual);
+        }
+        if (filteredOffers.length === 0) {
+            return `⚠️ *Atenção:* Não encontramos tabelas disponíveis no prazo de **${prazoAtual}X** para o banco **${lastBank.toUpperCase()}**.`;
+        }
+
+        // Sort by troco ascending (menor troco primeiro)
+        const sortedOffers = filteredOffers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
         
         const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
         let m = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}* 🏛️\n\n`;
@@ -765,7 +786,12 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             m += `• 💰 *Troco Liberado:* **R$ ${fmt(o.valorTroco)}** 🤑\n\n`;
         });
         
-        m += `💡 _Caso queira ver mais informações ou seguir com alguma das opções acima, é só me dizer!_`;
+        const otherPrazos = availablePrazos.filter(p => p !== prazoAtual);
+        if (otherPrazos.length > 0) {
+            m += `💡 _Temos tabelas disponíveis também em outros prazos: ${otherPrazos.map(p => `*${p}X*`).join(', ')}. Para visualizá-las, digite por exemplo:_ *tabelas ${otherPrazos[0]}*`;
+        } else {
+            m += `💡 _Caso queira ver mais informações ou seguir com alguma das opções acima, é só me dizer!_`;
+        }
         return m;
     }
 
