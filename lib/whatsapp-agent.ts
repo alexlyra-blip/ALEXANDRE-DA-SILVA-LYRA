@@ -657,10 +657,21 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         }
     }
 
-    // Interceptar comando "tabelas" com ou sem prazo (ex: "tabelas 96")
+    // Contexto da última mensagem do bot
+    const lastBotMsgContent = history.length > 0 ? history[history.length - 1].content || '' : '';
+    const wasLastMsgSimOrTable = lastBotMsgContent.includes('Simulação concluída') ||
+        lastBotMsgContent.includes('DETALHES DA OPERAÇÃO') ||
+        lastBotMsgContent.includes('TABELAS E OFERTAS DISPONÍVEIS');
+
+    // Interceptar comando "tabelas" com ou sem prazo (ex: "tabelas 96") ou apenas número isolado (ex: "96")
     const tabelasMatch = lower.match(/^tabelas?(?:\s+(?:dispon[ií]veis|outras))?(?:\s+(?:do\s+refin|da\s+portabilidade))?(?:\s+(\d{2,3})x?)?$/i);
-    if (lower === 'tabelas' || lower === 'tabela' || lower === 'tabelas disponíveis' || lower === 'outras tabelas' || tabelasMatch) {
-        let requestedPrazo = tabelasMatch && tabelasMatch[1] ? parseInt(tabelasMatch[1]) : null;
+    const justNumberMatch = lower.match(/^(\d{2,3})x?$/i);
+    
+    if (lower === 'tabelas' || lower === 'tabela' || lower === 'tabelas disponíveis' || lower === 'outras tabelas' || tabelasMatch || (wasLastMsgSimOrTable && justNumberMatch)) {
+        let requestedPrazo = null;
+        if (tabelasMatch && tabelasMatch[1]) requestedPrazo = parseInt(tabelasMatch[1]);
+        else if (wasLastMsgSimOrTable && justNumberMatch && justNumberMatch[1]) requestedPrazo = parseInt(justNumberMatch[1]);
+
         let lastOffers = sessionData.allOffers || sessionData.lastOffers || [];
         let lastBank = sessionData.lastOfertadoBank || '';
         
@@ -797,7 +808,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
     // Verificar agradecimentos / encerramento se a última mensagem do bot foi uma simulação
     const thanksKeywords = ['obrigado', 'obrigada', 'valeu', 'agradeço', 'grato', 'grata', 'tchau', 'obg', 'perfeito', 'show', 'blz', 'beleza', 'excelente', 'resolvido', 'ajudou', 'satisfeito'];
-    const lastBotMsgContent = history.length > 0 ? history[history.length - 1].content || '' : '';
+
     const wasLastMsgSimulation = lastBotMsgContent.includes('Simulação concluída') ||
         lastBotMsgContent.includes('DETALHES DA OPERAÇÃO') ||
         lastBotMsgContent.includes('VALOR DO TROCO LIBERADO');
