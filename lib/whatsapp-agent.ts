@@ -613,6 +613,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
                 saldoDevedor: params.saldoDevedor, selectedOffer: top, topOffer: top?.name || '',
                 topOfferContrato: top?.valorContrato || 0, topOfferTroco: top?.valorTroco || 0,
                 topOfferTaxa: top?.novaTaxaPortabilidade || 0, topOfferTabela: top?.tabela || '',
+                simData: params,
                 createdAt: new Date(), timestamp: Date.now(), origin: 'whatsapp'
             });
         } catch (e) { console.error("Error saving simulation:", e); }
@@ -709,6 +710,8 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                         };
 
                         if (cleanParams && cleanParams.convenio) {
+                            sessionData.lastExtractedParams = cleanParams;
+                            
                             if (!cleanParams.taxaJurosMensal && cleanParams.saldoDevedor > 0 && cleanParams.valorParcela > 0 && cleanParams.parcelasRestantes > 0) {
                                 cleanParams.taxaJurosMensal = calculateRate(cleanParams.saldoDevedor, cleanParams.valorParcela, cleanParams.parcelasRestantes);
                             }
