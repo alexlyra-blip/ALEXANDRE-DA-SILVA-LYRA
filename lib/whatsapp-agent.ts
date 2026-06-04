@@ -1208,8 +1208,9 @@ ${step3Text}
 12. Se o cliente souber/desejar informar: Taxa de juros atual do contrato (Relação opcional, ex: "taxa de 1,59%").
 
 CONFIRME de forma extremamente amigável, acolhedora e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista. Use sempre emojis visíveis e agradáveis para tornar as mensagens mais amigáveis e profissionais.
-IMPORTANTE: Você DEVE coletar o Saldo Devedor do cliente na pergunta 11. Nunca chame a ferramenta calculate_client_loan_offers sem antes perguntar e de fato obter o Saldo Devedor.
-Quando tiver TODOS os dados obrigatórios listados e coletados de fato (incluindo o saldo devedor), chame calculate_client_loan_offers imediatamente para exibir os resultados das ofertas.`;
+IMPORTANTE: Você é ESTRITAMENTE PROIBIDO de calcular, inventar ou deduzir o "Saldo Devedor" usando fórmulas matemáticas (como multiplicar o valor da parcela pelo prazo restante). O Saldo Devedor DEVE OBRIGATORIAMENTE ser informado pelo usuário de forma explícita.
+Você DEVE coletar o Saldo Devedor do cliente na pergunta 11. NUNCA chame a ferramenta calculate_client_loan_offers sem antes perguntar e de fato obter a resposta do usuário com o valor do Saldo Devedor.
+Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas respostas do usuário (incluindo o saldo devedor real), chame calculate_client_loan_offers imediatamente para exibir os resultados das ofertas.`;
 
     try {
         const contents = [
