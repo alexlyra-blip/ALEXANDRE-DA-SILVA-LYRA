@@ -492,7 +492,12 @@ export default function Recomendacoes() {
           specificInstallmentRules: rawBank.specificInstallmentRules !== undefined ? rawBank.specificInstallmentRules : (rawBank.specific_installment_rules !== undefined ? rawBank.specific_installment_rules : []),
           logoUrl: rawBank.logoUrl !== undefined ? rawBank.logoUrl : (rawBank.logo_url !== undefined ? rawBank.logo_url : ''),
           abaterMargemNaPortabilidade: rawBank.abaterMargemNaPortabilidade !== undefined ? rawBank.abaterMargemNaPortabilidade : false,
+          bloquearMargemNegativa: rawBank.bloquearMargemNegativa !== undefined ? rawBank.bloquearMargemNegativa : false,
         };
+
+        if (bank.bloquearMargemNegativa && (negativeCardValue || 0) > 0) {
+          return;
+        }
 
         const abaterMargem = bank.abaterMargemNaPortabilidade && (negativeCardValue || 0) > 0;
         const parcelaParaRegras = abaterMargem ? Math.max(0, valorParcela - (negativeCardValue || 0)) : valorParcela;

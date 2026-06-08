@@ -245,9 +245,12 @@ export function calculateOffers(
       specificInstallmentRules: rawBank.specificInstallmentRules !== undefined ? rawBank.specificInstallmentRules : (rawBank.specific_installment_rules !== undefined ? rawBank.specific_installment_rules : []),
       logoUrl: rawBank.logoUrl !== undefined ? rawBank.logoUrl : (rawBank.logo_url !== undefined ? rawBank.logo_url : ''),
       abaterMargemNaPortabilidade: rawBank.abaterMargemNaPortabilidade !== undefined ? rawBank.abaterMargemNaPortabilidade : false,
+      bloquearMargemNegativa: rawBank.bloquearMargemNegativa !== undefined ? rawBank.bloquearMargemNegativa : false,
     };
 
     if (bank.isActive === false) return;
+    
+    if (bank.bloquearMargemNegativa && margemNegativa > 0) return;
     
     const abaterMargem = bank.abaterMargemNaPortabilidade && margemNegativa > 0;
     const parcelaParaRegras = abaterMargem ? Math.max(0, valorParcela - margemNegativa) : valorParcela;
