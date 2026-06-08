@@ -499,7 +499,8 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
     
     const margemNegativa = (p as any).negativeCardValue || 0;
     if (margemNegativa > 0) {
-        m += `• 💵 **Nova Parcela:** **R$ ${fmt(p.valorParcela || 0)}** _(desconto de R$ ${fmt(margemNegativa)} da margem negativa)_\n`;
+        const novaParcela = Math.max(0, (p.valorParcela || 0) - margemNegativa);
+        m += `• 💵 **Nova Parcela:** **R$ ${fmt(novaParcela)}** _(desconto de R$ ${fmt(margemNegativa)} da margem negativa)_\n`;
     } else {
         m += `• 💵 **Valor da Parcela:** **R$ ${fmt(p.valorParcela || 0)}**\n`;
     }
@@ -528,10 +529,6 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
 async function doCalculation(params: SimulationParams, userProfile: any, targetBankName?: string, sessionData: any = {}): Promise<string> {
     try {
         const margemNegativa = (params as any).negativeCardValue || 0;
-        if (margemNegativa > 0 && !(params as any).originalParcela) {
-            (params as any).originalParcela = params.valorParcela;
-            params.valorParcela = Math.max(0, params.valorParcela - margemNegativa);
-        }
 
         if (params.taxaJurosMensal && params.taxaJurosMensal > 0.1) {
             params.taxaJurosMensal = params.taxaJurosMensal / 100;

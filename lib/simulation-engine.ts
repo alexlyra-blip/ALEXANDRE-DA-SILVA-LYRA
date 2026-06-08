@@ -35,6 +35,7 @@ export interface SimulationParams {
   prazoTotal: number;
   parcelasRestantes?: number;
   taxaJurosMensal?: number;
+  negativeCardValue?: number;
   isCliente60Mais?: boolean;
   isAnalfabeto?: boolean;
 }
@@ -190,11 +191,10 @@ export function calculateOffers(
     return [];
   }
 
+  const margemNegativa = params.negativeCardValue || 0;
   const originalRate = params.taxaJurosMensal ? params.taxaJurosMensal * 100 : 0;
   
-  // Calculate the NEW calculated rate with the current (potentially reduced) valorParcela
   const effectiveN = parcelasRestantes || (prazoTotal > 0 && parcelasPagas !== undefined ? prazoTotal - parcelasPagas : 0);
-  const newRateCalculated = calculateRate(saldoDevedor, valorParcela, effectiveN) * 100;
   
   const calculatedOffers: Offer[] = [];
   
@@ -244,9 +244,15 @@ export function calculateOffers(
       nonPortableBanks: rawBank.nonPortableBanks !== undefined ? rawBank.nonPortableBanks : (rawBank.non_portable_banks !== undefined ? rawBank.non_portable_banks : []),
       specificInstallmentRules: rawBank.specificInstallmentRules !== undefined ? rawBank.specificInstallmentRules : (rawBank.specific_installment_rules !== undefined ? rawBank.specific_installment_rules : []),
       logoUrl: rawBank.logoUrl !== undefined ? rawBank.logoUrl : (rawBank.logo_url !== undefined ? rawBank.logo_url : ''),
+      abaterMargemNaPortabilidade: rawBank.abaterMargemNaPortabilidade !== undefined ? rawBank.abaterMargemNaPortabilidade : false,
     };
 
     if (bank.isActive === false) return;
+    
+    const abaterMargem = bank.abaterMargemNaPortabilidade && margemNegativa > 0;
+    const parcelaParaRegras = abaterMargem ? Math.max(0, valorParcela - margemNegativa) : valorParcela;
+    const parcelaParaContrato = Math.max(0, valorParcela - margemNegativa);
+    const newRateCalculated = calculateRate(saldoDevedor, parcelaParaRegras, effectiveN) * 100;
     
     // Allowed Banks Filter
     if (profile?.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) {
@@ -281,7 +287,7 @@ export function calculateOffers(
     }
 
     // Installment Value
-    if (bank.minInstallmentValue && valorParcela < bank.minInstallmentValue) return;
+    if (bank.minInstallmentValue && parcelaParaRegras < bank.minInstallmentValue) return;
 
     // Min Balance
     const bSumSaldoTrocoGlobal = !!(bank.sumBalanceAndTroco || bank.sumSaldoTroco);
@@ -356,7 +362,7 @@ export function calculateOffers(
         const coef = parseRate(tabela.coeficiente);
         if (coef <= 0) return;
 
-        const valorContrato = valorParcela / coef;
+        const valorContrato = parcelaParaContrato / coef;
         const valorTroco = valorContrato - saldoDevedor;
         
         const bSumSaldoTroco = bSumSaldoTrocoGlobal || !!tabela.somaSaldoTroco;
@@ -377,8 +383,8 @@ export function calculateOffers(
         const tableMaxInst = parseRate(tabela.maxInstallmentValue);
         const effectiveMinInst = tableMinInst > 0 ? tableMinInst : (parseRate(bank.minInstallmentValue) || 0);
 
-        if (effectiveMinInst > 0 && valorParcela < effectiveMinInst) return;
-        if (tableMaxInst > 0 && valorParcela > tableMaxInst) return;
+        if (effectiveMinInst > 0 && parcelaParaRegras < effectiveMinInst) return;
+        if (tableMaxInst > 0 && parcelaParaRegras > tableMaxInst) return;
 
         // Rates and Validations
         const tDiferencial = parseRate(tabela.taxaDiferencial);

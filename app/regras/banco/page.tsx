@@ -64,6 +64,7 @@ export default function RegrasBanco() {
   const [acceptsIlliterate, setAcceptsIlliterate] = useState(false);
   const [acceptsLOAS, setAcceptsLOAS] = useState(false);
   const [requireTrocoMaiorQue5PorcentoEndividamento, setRequireTrocoMaiorQue5PorcentoEndividamento] = useState(false);
+  const [abaterMargemNaPortabilidade, setAbaterMargemNaPortabilidade] = useState(false);
   const [accepts60Mais, setAccepts60Mais] = useState(false);
   const [acceptsInvalidez, setAcceptsInvalidez] = useState(true);
   const [invalidezAgeYears, setInvalidezAgeYears] = useState('');
@@ -148,6 +149,8 @@ export default function RegrasBanco() {
     setSpecificInstallmentsInput('');
     setAcceptsIlliterate(false);
     setAcceptsLOAS(false);
+    setRequireTrocoMaiorQue5PorcentoEndividamento(false);
+    setAbaterMargemNaPortabilidade(false);
     setAcceptsInvalidez(true);
     setInvalidezAgeYears('');
     setInvalidezMaxAgeYears('');
@@ -362,6 +365,7 @@ export default function RegrasBanco() {
         acceptsIlliterate,
         acceptsLOAS: isINSS ? acceptsLOAS : false,
         requireTrocoMaiorQue5PorcentoEndividamento,
+        abaterMargemNaPortabilidade,
         accepts60Mais,
         acceptsInvalidez: isINSS ? acceptsInvalidez : true,
         invalidezAgeYears: invalidezYears,
@@ -424,6 +428,8 @@ export default function RegrasBanco() {
         setSpecificInstallmentsInput('');
         setAcceptsIlliterate(false);
         setAcceptsLOAS(false);
+        setRequireTrocoMaiorQue5PorcentoEndividamento(false);
+        setAbaterMargemNaPortabilidade(false);
         setAcceptsInvalidez(true);
         setInvalidezAgeYears('');
         setAcceptsOver60Invalidez(false);
@@ -468,6 +474,7 @@ export default function RegrasBanco() {
     setAcceptsIlliterate(bank.acceptsIlliterate || false);
     setAcceptsLOAS(bank.acceptsLOAS || false);
     setRequireTrocoMaiorQue5PorcentoEndividamento(bank.requireTrocoMaiorQue5PorcentoEndividamento || false);
+    setAbaterMargemNaPortabilidade(bank.abaterMargemNaPortabilidade || false);
     setAccepts60Mais(bank.accepts60Mais || false);
     setAcceptsInvalidez(bank.acceptsInvalidez !== false);
     setInvalidezAgeYears(bank.invalidezAgeYears?.toString() || '');
@@ -1428,6 +1435,11 @@ export default function RegrasBanco() {
                 <label className="flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <input type="checkbox" checked={requireTrocoMaiorQue5PorcentoEndividamento} onChange={e => setRequireTrocoMaiorQue5PorcentoEndividamento(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
                   <span className="text-xs font-medium">Troco deve ser maior que 5% do Novo Endividamento</span>
+                </label>
+
+                <label className="flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <input type="checkbox" checked={abaterMargemNaPortabilidade} onChange={e => setAbaterMargemNaPortabilidade(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                  <span className="text-xs font-medium">Abater Margem Negativa no Cálculo da Taxa de Portabilidade</span>
                 </label>
 
                 <label className="flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">

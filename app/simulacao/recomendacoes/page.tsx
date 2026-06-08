@@ -427,7 +427,8 @@ export default function Recomendacoes() {
         parcelasPagas,
         prazoTotal,
         parcelasRestantes,
-        isCliente60Mais
+        isCliente60Mais,
+        negativeCardValue
       } = currentSim;
 
       // Check if bancoAtual is a globally blocked Non-Portable Bank
@@ -439,7 +440,6 @@ export default function Recomendacoes() {
 
       const originalRate = currentSim.taxaJurosMensal ? currentSim.taxaJurosMensal * 100 : 0;
       const effectiveN = parcelasRestantes || (prazoTotal > 0 && parcelasPagas !== undefined ? prazoTotal - parcelasPagas : 0);
-      const newRateCalculated = calculateRate(saldoDevedor, valorParcela, effectiveN) * 100;
       
       const calculatedOffers: Offer[] = [];
       const localFilterReasons: {bankName: string, reason: string, tabela?: string}[] = [];
@@ -491,7 +491,13 @@ export default function Recomendacoes() {
           nonAcceptedBanks: rawBank.nonAcceptedBanks !== undefined ? rawBank.nonAcceptedBanks : (rawBank.non_accepted_banks !== undefined ? rawBank.non_accepted_banks : []),
           specificInstallmentRules: rawBank.specificInstallmentRules !== undefined ? rawBank.specificInstallmentRules : (rawBank.specific_installment_rules !== undefined ? rawBank.specific_installment_rules : []),
           logoUrl: rawBank.logoUrl !== undefined ? rawBank.logoUrl : (rawBank.logo_url !== undefined ? rawBank.logo_url : ''),
+          abaterMargemNaPortabilidade: rawBank.abaterMargemNaPortabilidade !== undefined ? rawBank.abaterMargemNaPortabilidade : false,
         };
+
+        const abaterMargem = bank.abaterMargemNaPortabilidade && (negativeCardValue || 0) > 0;
+        const parcelaParaRegras = abaterMargem ? Math.max(0, valorParcela - (negativeCardValue || 0)) : valorParcela;
+        const parcelaParaContrato = Math.max(0, valorParcela - (negativeCardValue || 0));
+        const newRateCalculated = calculateRate(saldoDevedor, parcelaParaRegras, effectiveN) * 100;
 
         const log = (reason: string, tabela?: string) => {
           localFilterReasons.push({ bankName: bank.name, reason, tabela });
@@ -652,7 +658,7 @@ export default function Recomendacoes() {
               log("Coeficiente da tabela inválido ou zero", tabela.nome);
               return;
             }
-            const valorContrato = valorParcela / coef;
+            const valorContrato = parcelaParaContrato / coef;
             const valorTroco = valorContrato - saldoDevedor;
             const bSumSaldoTroco = bSumSaldoTrocoGlobal || !!tabela.somaSaldoTroco;
             if (bSumSaldoTroco && bank.minBalance && (saldoDevedor + valorTroco) < bank.minBalance) {
@@ -674,12 +680,12 @@ export default function Recomendacoes() {
             const tableMaxInst = parseRate(tabela.maxInstallmentValue);
             const effectiveMinInst = tableMinInst > 0 ? tableMinInst : (parseRate(bank.minInstallmentValue) || 0);
 
-            if (effectiveMinInst > 0 && valorParcela < effectiveMinInst) {
-              log(`Valor da parcela insuficiente: ${formatCurrency(valorParcela)} (Mínimo: ${formatCurrency(effectiveMinInst)})`, tabela.nome);
+            if (effectiveMinInst > 0 && parcelaParaRegras < effectiveMinInst) {
+              log(`Valor da parcela insuficiente: ${formatCurrency(parcelaParaRegras)} (Mínimo: ${formatCurrency(effectiveMinInst)})`, tabela.nome);
               return;
             }
-            if (tableMaxInst > 0 && valorParcela > tableMaxInst) {
-              log(`Valor da parcela excedente: ${formatCurrency(valorParcela)} (Máximo: ${formatCurrency(tableMaxInst)})`, tabela.nome);
+            if (tableMaxInst > 0 && parcelaParaRegras > tableMaxInst) {
+              log(`Valor da parcela excedente: ${formatCurrency(parcelaParaRegras)} (Máximo: ${formatCurrency(tableMaxInst)})`, tabela.nome);
               return;
             }
 
