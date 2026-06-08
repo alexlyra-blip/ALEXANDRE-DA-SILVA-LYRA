@@ -356,10 +356,7 @@ export function calculateOffers(
         const coef = parseRate(tabela.coeficiente);
         if (coef <= 0) return;
 
-        const margemNegativa = (params as any).negativeCardValue || 0;
-        const parcelaParaTroco = Math.max(0, valorParcela - margemNegativa);
-
-        const valorContrato = parcelaParaTroco / coef;
+        const valorContrato = valorParcela / coef;
         const valorTroco = valorContrato - saldoDevedor;
         
         const bSumSaldoTroco = bSumSaldoTrocoGlobal || !!tabela.somaSaldoTroco;

@@ -260,9 +260,9 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
     );
 
     if (simulatedOffers.length > 0) {
-        const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
         const margemNeg = sessionData.lastExtractedParams?.negativeCardValue || sessionData.extractedParams?.negativeCardValue || 0;
-        const parcelaFinal = margemNeg > 0 ? Math.max(0, valParcela - margemNeg) : valParcela;
+        const valParcelaBase = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
+        const parcelaFinal = valParcelaBase;
         const parcelaLabel = margemNeg > 0 ? `Nova Parcela` : `Valor da Parcela`;
         
         let t = `📊 **TABELAS E OFERTAS DISPONÍVEIS: ${b.name.toUpperCase()}** 🏛️\n`;
@@ -499,8 +499,7 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
     
     const margemNegativa = (p as any).negativeCardValue || 0;
     if (margemNegativa > 0) {
-        const novaParcela = Math.max(0, (p.valorParcela || 0) - margemNegativa);
-        m += `• 💵 **Nova Parcela:** **R$ ${fmt(novaParcela)}** _(desconto de R$ ${fmt(margemNegativa)} da margem negativa)_\n`;
+        m += `• 💵 **Nova Parcela:** **R$ ${fmt(p.valorParcela || 0)}** _(desconto de R$ ${fmt(margemNegativa)} da margem negativa)_\n`;
     } else {
         m += `• 💵 **Valor da Parcela:** **R$ ${fmt(p.valorParcela || 0)}**\n`;
     }
@@ -528,6 +527,12 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
 
 async function doCalculation(params: SimulationParams, userProfile: any, targetBankName?: string, sessionData: any = {}): Promise<string> {
     try {
+        const margemNegativa = (params as any).negativeCardValue || 0;
+        if (margemNegativa > 0 && !(params as any).originalParcela) {
+            (params as any).originalParcela = params.valorParcela;
+            params.valorParcela = Math.max(0, params.valorParcela - margemNegativa);
+        }
+
         if (params.taxaJurosMensal && params.taxaJurosMensal > 0.1) {
             params.taxaJurosMensal = params.taxaJurosMensal / 100;
         }
@@ -561,18 +566,26 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
             return "❌ Infelizmente, analisando as regras dos bancos, não encontramos nenhuma oferta vantajosa ou compatível com esses dados no momento.";
         }
 
-        // 1. Filtrar pelo maior prazo disponível nas ofertas elegíveis (exatamente como a Web e o webhook)
+        let targetOffers = offers;
+        if (targetBankName) {
+            const explicitBankOffers = offers.filter((o: any) => o.name.toLowerCase().includes(targetBankName.toLowerCase()) || targetBankName.toLowerCase().includes(o.name.toLowerCase()));
+            if (explicitBankOffers.length > 0) {
+                targetOffers = explicitBankOffers;
+            }
+        }
+
+        // 1. Filtrar pelo maior prazo disponível nas ofertas elegíveis
         const prazos = new Set<number>();
-        offers.forEach(o => {
+        targetOffers.forEach(o => {
             if (o.prazoRefinPort) prazos.add(o.prazoRefinPort);
         });
         const availablePrazos = Array.from(prazos).sort((a, b) => b - a);
         
-        let offersWithPrazo = offers;
+        let offersWithPrazo = targetOffers;
         let selectedPrazo: number | null = null;
         if (availablePrazos.length > 0) {
             selectedPrazo = availablePrazos[0];
-            offersWithPrazo = offers.filter(o => o.prazoRefinPort === selectedPrazo);
+            offersWithPrazo = targetOffers.filter(o => o.prazoRefinPort === selectedPrazo);
         }
 
         // 2. Ordenar todas as ofertas por prioridade (crescente) e depois por troco (crescente/menor primeiro)
@@ -610,12 +623,8 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
                 return a.offers[0].valorTroco - b.offers[0].valorTroco;
             });
 
-        const matchedBank = targetBankName
-            ? sortedOffers.find((o: any) => o.name.toLowerCase().includes(targetBankName.toLowerCase()) || targetBankName.toLowerCase().includes(o.name.toLowerCase()))
-            : null;
-
-        const top = matchedBank ? matchedBank : sortedOffers[0];
-        const bankNames = Array.from(new Set(sortedOffers.map((o: any) => o.name)));
+        const top = sortedOffers[0];
+        const bankNames = Array.from(new Set(offers.map((o: any) => o.name)));
 
         if (top) {
             sessionData.lastOffers = sortedOffers;
@@ -806,9 +815,9 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         // Sort by troco ascending (menor troco primeiro)
         const sortedOffers = filteredOffers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
         
-        const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
         const margemNeg = sessionData.lastExtractedParams?.negativeCardValue || sessionData.extractedParams?.negativeCardValue || 0;
-        const parcelaFinal = margemNeg > 0 ? Math.max(0, valParcela - margemNeg) : valParcela;
+        const valParcelaBase = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
+        const parcelaFinal = valParcelaBase;
         const parcelaLabel = margemNeg > 0 ? `Nova Parcela` : `Valor da Parcela`;
         
         let m = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}* 🏛️\n\n`;
