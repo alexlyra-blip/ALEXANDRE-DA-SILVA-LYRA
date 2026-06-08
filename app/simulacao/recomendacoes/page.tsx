@@ -495,7 +495,12 @@ export default function Recomendacoes() {
           bloquearMargemNegativa: rawBank.bloquearMargemNegativa !== undefined ? rawBank.bloquearMargemNegativa : false,
         };
 
+        const log = (reason: string, tabela?: string) => {
+          localFilterReasons.push({ bankName: bank.name, reason, tabela });
+        };
+
         if (bank.bloquearMargemNegativa && (negativeCardValue || 0) > 0) {
+          log('Não aceita a portabilidade para clientes com margem negativa');
           return;
         }
 
@@ -503,10 +508,6 @@ export default function Recomendacoes() {
         const parcelaParaRegras = abaterMargem ? Math.max(0, valorParcela - (negativeCardValue || 0)) : valorParcela;
         const parcelaParaContrato = Math.max(0, valorParcela - (negativeCardValue || 0));
         const newRateCalculated = calculateRate(saldoDevedor, parcelaParaRegras, effectiveN) * 100;
-
-        const log = (reason: string, tabela?: string) => {
-          localFilterReasons.push({ bankName: bank.name, reason, tabela });
-        };
 
         const effectiveIs60Mais = isCliente60Mais != null ? isCliente60Mais : (idade >= 60);
         if (bank.isActive === false) {
