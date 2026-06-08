@@ -1323,8 +1323,12 @@ export default function Recomendacoes() {
                   <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(simData.saldoDevedor)}</p>
                 </div>
                 <div className="space-y-1 col-span-1">
-                  <p className="text-[10px] text-slate-500 uppercase font-bold">Parcela</p>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(simData.valorParcela)}</p>
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">
+                    {(simData?.negativeCardValue || 0) > 0 ? 'Nova Parcela' : 'Parcela'}
+                  </p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">
+                    {formatCurrency(Math.max(0, (simData?.valorParcela || 0) - (simData?.negativeCardValue || 0)))}
+                  </p>
                 </div>
                 <div className="space-y-1 col-span-2 sm:col-span-1">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Convênio/Idade</p>
@@ -1688,7 +1692,10 @@ export default function Recomendacoes() {
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                           <Banknote className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <p className="text-xs font-medium truncate">
-                            Parcela: <span className="text-slate-900 dark:text-white font-bold">{formatCurrency(simData?.valorParcela || 0)}</span>
+                            {(simData?.negativeCardValue || 0) > 0 ? 'Nova Parcela: ' : 'Parcela: '}
+                            <span className="text-slate-900 dark:text-white font-bold">
+                              {formatCurrency(Math.max(0, (simData?.valorParcela || 0) - (simData?.negativeCardValue || 0)))}
+                            </span>
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
