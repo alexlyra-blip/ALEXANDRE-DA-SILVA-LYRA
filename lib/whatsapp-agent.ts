@@ -261,6 +261,10 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
 
     if (simulatedOffers.length > 0) {
         const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
+        const margemNeg = sessionData.lastExtractedParams?.negativeCardValue || sessionData.extractedParams?.negativeCardValue || 0;
+        const parcelaFinal = margemNeg > 0 ? Math.max(0, valParcela - margemNeg) : valParcela;
+        const parcelaLabel = margemNeg > 0 ? `Nova Parcela` : `Valor da Parcela`;
+        
         let t = `📊 **TABELAS E OFERTAS DISPONÍVEIS: ${b.name.toUpperCase()}** 🏛️\n`;
         t += `🤝 **Convênio:** **${b.convenio || 'INSS'}**${b.subConvenio ? ' - ' + b.subConvenio : ''}\n\n`;
         
@@ -268,7 +272,7 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
         const sortedSimulated = simulatedOffers.sort((x: any, y: any) => x.valorTroco - y.valorTroco);
         sortedSimulated.forEach((o: any, idx: number) => {
             t += `${idx === 0 ? '⭐ ' : '👉 '}**Tabela:** **${o.tabela}**\n`;
-            t += `• 💵 **Valor da Parcela:** **R$ ${fmt(valParcela)}**\n`;
+            t += `• 💵 **${parcelaLabel}:** **R$ ${fmt(parcelaFinal)}**${margemNeg > 0 ? ` _(desconto de R$ ${fmt(margemNeg)})_` : ''}\n`;
             t += `• 📅 **Prazo:** **${o.prazoRefinPort || o.parcelasRestantes || 96} meses**\n`;
             t += `• ✍️ **Novo Contrato:** **R$ ${fmt(o.valorContrato)}**\n`;
             t += `• 🏦 **Saldo Devedor:** **R$ ${fmt(o.saldoDevedor || sessionData.lastExtractedParams?.saldoDevedor || 0)}**\n`;
@@ -492,7 +496,14 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
 
     m += `📋 **DETALHES DA OPERAÇÃO:**\n`;
     if (top.tabela) m += `• 🏷️ **Tabela:** **${top.tabela}**\n`;
-    m += `• 💵 **Valor da Parcela:** **R$ ${fmt(p.valorParcela || 0)}**\n`;
+    
+    const margemNegativa = (p as any).negativeCardValue || 0;
+    if (margemNegativa > 0) {
+        const novaParcela = Math.max(0, (p.valorParcela || 0) - margemNegativa);
+        m += `• 💵 **Nova Parcela:** **R$ ${fmt(novaParcela)}** _(desconto de R$ ${fmt(margemNegativa)} da margem negativa)_\n`;
+    } else {
+        m += `• 💵 **Valor da Parcela:** **R$ ${fmt(p.valorParcela || 0)}**\n`;
+    }
     m += `• 📅 **Prazo:** **${top.prazoRefinPort || p.parcelasRestantes || 96} meses**\n`;
     m += `• ✍️ **Novo Contrato:** **R$ ${fmt(top.valorContrato)}**\n`;
     m += `• 🏦 **Saldo Devedor:** **R$ ${fmt(top.saldoDevedor || p.saldoDevedor || 0)}**\n`;
@@ -796,10 +807,14 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         const sortedOffers = filteredOffers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
         
         const valParcela = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
+        const margemNeg = sessionData.lastExtractedParams?.negativeCardValue || sessionData.extractedParams?.negativeCardValue || 0;
+        const parcelaFinal = margemNeg > 0 ? Math.max(0, valParcela - margemNeg) : valParcela;
+        const parcelaLabel = margemNeg > 0 ? `Nova Parcela` : `Valor da Parcela`;
+        
         let m = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}* 🏛️\n\n`;
         sortedOffers.forEach((o: any, idx: number) => {
             m += `${idx === 0 ? '⭐ ' : '👉 '}*Tabela:* **${o.tabela}**\n`;
-            m += `• 💵 *Valor da Parcela:* **R$ ${fmt(valParcela)}**\n`;
+            m += `• 💵 *${parcelaLabel}:* **R$ ${fmt(parcelaFinal)}**${margemNeg > 0 ? ` _(desconto de R$ ${fmt(margemNeg)})_` : ''}\n`;
             m += `• 📅 *Prazo:* **${o.prazoRefinPort || o.parcelasRestantes || 96} meses**\n`;
             m += `• ✍️ *Novo Contrato:* **R$ ${fmt(o.valorContrato)}**\n`;
             m += `• 🏦 *Saldo Devedor:* **R$ ${fmt(o.saldoDevedor || sessionData.lastExtractedParams?.saldoDevedor || 0)}**\n`;
