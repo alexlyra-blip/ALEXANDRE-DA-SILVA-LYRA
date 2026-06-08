@@ -80,7 +80,8 @@ const calculateLoanOffersTool = {
             isCliente60Mais: { type: Type.BOOLEAN, description: "60+ in AP/PB/TO/RR" },
             hasTwoCards: { type: Type.BOOLEAN, description: "2 active cards (INSS)" },
             negativeCardValue: { type: Type.NUMBER, description: "Card discount" },
-            taxaJurosMensal: { type: Type.NUMBER, description: "Client's current contract interest rate as percentage (e.g. 1.59). Optional." }
+            taxaJurosMensal: { type: Type.NUMBER, description: "Client's current contract interest rate as percentage (e.g. 1.59). Optional." },
+            targetBankName: { type: Type.STRING, description: "Optional explicit bank name requested by the user for the new simulation (e.g., 'Facta', 'Bradesco'). Only fill this if the user explicitly asks to see the simulation in a specific bank." }
         },
         required: ["idade", "convenio", "bancoAtual", "valorParcela", "saldoDevedor", "prazoTotal", "parcelasRestantes"]
     }
@@ -251,7 +252,7 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
     }
     if (!b) return `⚠️ Banco **"${ruleIdOrName}"** não encontrado.`;
     
-    const lastOffers = sessionData.lastOffers || [];
+    const lastOffers = sessionData.allOffers || sessionData.lastOffers || [];
     
     // Encontrar as ofertas específicas calculadas e válidas para este banco
     const simulatedOffers = lastOffers.filter((o: any) =>
@@ -380,6 +381,12 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
         if (/apenas\s*um|1|só\s*um|so\s*um/.test(txt)) {
             params.hasTwoCards = false;
         }
+    }
+    // Margem negativa
+    if (params.hasTwoCards === true && params.negativeCardValue === undefined && (prev.includes('margem') || prev.includes('negativa'))) {
+        const num = parsePortugueseNumber(userMsg);
+        if (num !== null) params.negativeCardValue = num;
+        else params.negativeCardValue = 0; // fallback caso o usuário diga que não tem
     }
     // Banco atual
     if (!params.bancoAtual && prev.includes('banco') && (prev.includes('atual') || prev.includes('contrato'))) {
@@ -1020,6 +1027,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     if (extracted.subConvenio) dataSummary += `• Sub-convênio/órgão: ${extracted.subConvenio}\n`;
     if (extracted.isAnalfabeto !== undefined) dataSummary += `• Analfabeto: ${extracted.isAnalfabeto ? 'Sim' : 'Não'}\n`;
     if (extracted.hasTwoCards !== undefined) dataSummary += `• Possui 2 cartões consignados ativos: ${extracted.hasTwoCards ? 'Sim' : 'Não'}\n`;
+    if (extracted.negativeCardValue !== undefined) dataSummary += `• Margem Negativa: R$ ${fmt(extracted.negativeCardValue)}\n`;
     if (extracted.bancoAtual) dataSummary += `• Banco Atual: ${extracted.bancoAtual}\n`;
     if (extracted.prazoTotal) dataSummary += `• Prazo Total: ${extracted.prazoTotal} meses\n`;
     if (extracted.parcelasRestantes) dataSummary += `• Prazo Restante: ${extracted.parcelasRestantes} meses\n`;
@@ -1198,7 +1206,9 @@ ${step3Text}
    - Se convênio for CLT Privado, PULE esta pergunta.
 5. Se o cliente é Analfabeto? (Sim/Não)
    - IMPORTANTE: Para esta pergunta, você DEVE usar EXATAMENTE esta frase com as palavras em negrito usando asteriscos: "Você se considera **analfabeto** ou possui alguma **dificuldade para ler e escrever**? (Responda com **Sim** ou **Não**)"
-6. Se convênio for INSS: Possui 2 cartões de crédito consignado ativos?
+6. Se convênio for INSS:
+   - Pergunte PRIMEIRO: "Possui 2 cartões de crédito consignado ativos?"
+   - Se o cliente responder que SIM (que possui os 2 cartões), faça UMA PERGUNTA ADICIONAL ANTES DE AVANÇAR: "Informe o valor da sua margem negativa atual, se houver (se não houver, digite 0)."
 7. Banco atual onde está o contrato que deseja portar.
 8. Prazo total do contrato original (em meses, ex: 84 ou 96).
 9. Prazo restante / Parcelas restantes que ainda faltam pagar (em meses).
@@ -1230,13 +1240,11 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         const fc = parts.find((p: any) => p.functionCall);
 
         if (fc?.functionCall?.name === "calculate_client_loan_offers") {
-            console.log(`[Gutto] AI triggered calculate_client_loan_offers tool call!`);
-            const params = fc.functionCall.args as unknown as SimulationParams;
-            if (params.convenio === 'INSS' && (params as any).hasTwoCards)
-                params.valorParcela = Math.max(0, (params.valorParcela || 0) - ((params as any).negativeCardValue || 81.05));
-            sessionData.lastExtractedParams = { ...params }; // Salva no histórico da sessão
-            sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
-            return await doCalculation(params, userProfile, undefined, sessionData);
+            const params = fc.functionCall.args as any;
+            console.log("[Gutto] AI calling calculation:", params);
+            sessionData.lastExtractedParams = { ...params };
+            sessionData.extractedParams = {};
+            return await doCalculation(params, userProfile, params.targetBankName, sessionData);
         }
 
         const text = parts.find((p: any) => p.text)?.text || (result as any).text;
