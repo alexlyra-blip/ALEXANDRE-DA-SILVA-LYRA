@@ -702,7 +702,11 @@ export default function Recomendacoes() {
             const bankPortRate = parseRate(bank.portabilityRate);
             
             const defaultRate = bankConvenio === 'siape' ? 1.70 : (bankConvenio === 'inss' ? 1.85 : 2.05);
-            const orig = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || defaultRate);
+            let orig = originalRate > 0 ? originalRate : (bank.taxaPortabilidadeOrigem || defaultRate);
+            
+            if (abaterMargem && newRateCalculated > 0) {
+                orig = newRateCalculated;
+            }
             
             // Dynamic calculation: client rate + bank adjustment
             const novaTaxaPort = Number((orig + bankAdjustment).toFixed(2));

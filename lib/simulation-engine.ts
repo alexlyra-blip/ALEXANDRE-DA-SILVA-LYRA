@@ -396,7 +396,11 @@ export function calculateOffers(
         const bankAdjustment = parseRate(bank.ajusteTaxa);
 
         const defaultRate = convenio?.toUpperCase() === 'SIAPE' ? 1.70 : (convenio?.toUpperCase() === 'INSS' ? 1.85 : 2.05);
-        const origRateCalculated = originalRate > 0 ? originalRate : (parseRate(bank.taxaPortabilidadeOrigem) || defaultRate);
+        let origRateCalculated = originalRate > 0 ? originalRate : (parseRate(bank.taxaPortabilidadeOrigem) || defaultRate);
+        
+        if (abaterMargem && newRateCalculated > 0) {
+            origRateCalculated = newRateCalculated;
+        }
 
         // Dynamic calculation: client rate + bank adjustment
         const novaTaxaPortTarget = Number((origRateCalculated + bankAdjustment).toFixed(2));
