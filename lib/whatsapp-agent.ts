@@ -569,6 +569,8 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
             const explicitBankOffers = offers.filter((o: any) => o.name.toLowerCase().includes(targetBankName.toLowerCase()) || targetBankName.toLowerCase().includes(o.name.toLowerCase()));
             if (explicitBankOffers.length > 0) {
                 targetOffers = explicitBankOffers;
+            } else {
+                return `❌ *Atenção:* Não encontramos tabelas ou ofertas elegíveis para o banco **${targetBankName.toUpperCase()}** no momento. Tente outro banco ou digite "tabelas" para ver as ofertas disponíveis.`;
             }
         }
 
@@ -1041,23 +1043,24 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     }
 
     // Construir sumário dos dados já coletados para orientar a IA de forma precisa
+    const summaryData = { ...(lastExtracted || {}), ...extracted };
     let dataSummary = '';
-    if (extracted.convenio) dataSummary += `• Convênio: ${extracted.convenio}\n`;
-    if (extracted.idade) dataSummary += `• Idade: ${extracted.idade} anos\n`;
-    if (extracted.estado) dataSummary += `• Estado: ${extracted.estado}\n`;
-    if (extracted.codigoBeneficio) dataSummary += `• Código do Benefício: ${extracted.codigoBeneficio}\n`;
-    if (extracted.subConvenio) dataSummary += `• Sub-convênio/órgão: ${extracted.subConvenio}\n`;
-    if (extracted.isAnalfabeto !== undefined) dataSummary += `• Analfabeto: ${extracted.isAnalfabeto ? 'Sim' : 'Não'}\n`;
-    if (extracted.hasTwoCards !== undefined) dataSummary += `• Possui 2 cartões consignados ativos: ${extracted.hasTwoCards ? 'Sim' : 'Não'}\n`;
-    if (extracted.negativeCardValue !== undefined) dataSummary += `• Margem Negativa: R$ ${fmt(extracted.negativeCardValue)}\n`;
-    if (extracted.bancoAtual) dataSummary += `• Banco Atual: ${extracted.bancoAtual}\n`;
-    if (extracted.prazoTotal) dataSummary += `• Prazo Total: ${extracted.prazoTotal} meses\n`;
-    if (extracted.parcelasRestantes) dataSummary += `• Prazo Restante: ${extracted.parcelasRestantes} meses\n`;
-    if (extracted.valorParcela) dataSummary += `• Valor da Parcela: R$ ${fmt(extracted.valorParcela)}\n`;
-    if (extracted.saldoDevedor) dataSummary += `• Saldo Devedor: R$ ${fmt(extracted.saldoDevedor)}\n`;
-    if (extracted.taxaJurosMensal) dataSummary += `• Taxa de Juros: ${(extracted.taxaJurosMensal * 100).toFixed(2)}%\n`;
+    if (summaryData.convenio) dataSummary += `• Convênio: ${summaryData.convenio}\n`;
+    if (summaryData.idade) dataSummary += `• Idade: ${summaryData.idade} anos\n`;
+    if (summaryData.estado) dataSummary += `• Estado: ${summaryData.estado}\n`;
+    if (summaryData.codigoBeneficio) dataSummary += `• Código do Benefício: ${summaryData.codigoBeneficio}\n`;
+    if (summaryData.subConvenio) dataSummary += `• Sub-convênio/órgão: ${summaryData.subConvenio}\n`;
+    if (summaryData.isAnalfabeto !== undefined) dataSummary += `• Analfabeto: ${summaryData.isAnalfabeto ? 'Sim' : 'Não'}\n`;
+    if (summaryData.hasTwoCards !== undefined) dataSummary += `• Possui 2 cartões consignados ativos: ${summaryData.hasTwoCards ? 'Sim' : 'Não'}\n`;
+    if (summaryData.negativeCardValue !== undefined) dataSummary += `• Margem Negativa: R$ ${fmt(summaryData.negativeCardValue)}\n`;
+    if (summaryData.bancoAtual) dataSummary += `• Banco Atual: ${summaryData.bancoAtual}\n`;
+    if (summaryData.prazoTotal) dataSummary += `• Prazo Total: ${summaryData.prazoTotal} meses\n`;
+    if (summaryData.parcelasRestantes) dataSummary += `• Prazo Restante: ${summaryData.parcelasRestantes} meses\n`;
+    if (summaryData.valorParcela) dataSummary += `• Valor da Parcela: R$ ${fmt(summaryData.valorParcela)}\n`;
+    if (summaryData.saldoDevedor) dataSummary += `• Saldo Devedor: R$ ${fmt(summaryData.saldoDevedor)}\n`;
+    if (summaryData.taxaJurosMensal) dataSummary += `• Taxa de Juros: ${(summaryData.taxaJurosMensal * 100).toFixed(2)}%\n`;
 
-    const showStateQuestion = (extracted.idade >= 60 || extracted.convenio === 'GOVERNO') && !extracted.estado;
+    const showStateQuestion = (summaryData.idade >= 60 || summaryData.convenio === 'GOVERNO') && !summaryData.estado;
     const step3Text = showStateQuestion
         ? "3. Se o Estado ainda NÃO foi coletado e (a idade for igual ou superior a 60 anos OU o convênio for Governo): Pergunta em qual estado o cliente reside (Amapá - AP, Paraíba - PB, Tocantins - TO ou Roraima - RR? Se for outro, pode apenas dizer qual)."
         : "3. (PULADO - Estado não necessário ou já coletado)";
