@@ -2,6 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { getAI } from '@/lib/ai-config';
 import { getAdminDb } from "@/lib/firebase-admin";
 import { calculateOffers, SimulationParams, calculateRate } from "@/lib/simulation-engine";
+import { normalizePhone, validateWhatsAppUser } from "@/lib/whatsapp-utils";
 
 const ai = getAI();
 
@@ -671,13 +672,13 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                 }
             } catch (e) { console.error("Error loading web user profile:", e); }
         } else if (currentPhone) {
-            const clean = currentPhone.replace(/\D/g, '');
             try {
-                const snap = await db.collection('users').get();
-                let found = null;
-                snap.forEach(doc => { const d = doc.data(); if (d.phone) { const cp = d.phone.replace(/\D/g, ''); if (cp.length >= 8 && clean.endsWith(cp)) found = { uid: doc.id, ...d }; } });
-                if (!found) return "Desculpe, seu número de telefone não está cadastrado ou autorizado no sistema.";
-                userProfile = found;
+                const normalizedPhone = normalizePhone(currentPhone);
+                const auth = await validateWhatsAppUser(normalizedPhone);
+                if (!auth.authorized) {
+                   return "Desculpe, seu número de telefone não está cadastrado ou autorizado no sistema.";
+                }
+                userProfile = auth.user;
             } catch (e) { console.error("Error loading phone user profile:", e); }
         }
     }
