@@ -44,16 +44,31 @@ export async function validateWhatsAppUser(normalizedPhone: string): Promise<Aut
   try {
     // Busca na coleção de usuários
     const usersRef = adminDb.collection('users');
-    let snapshot = await usersRef.where('phone', '==', normalizedPhone).get();
     
-    // Tentativa 2: Variações de formato
-    if (snapshot.empty && !normalizedPhone.startsWith('55')) {
-      snapshot = await usersRef.where('phone', '==', '55' + normalizedPhone).get();
-    }
+    let localPhone = normalizedPhone;
+    if (localPhone.startsWith('55')) localPhone = localPhone.substring(2);
     
-    if (snapshot.empty && normalizedPhone.startsWith('55')) {
-      snapshot = await usersRef.where('phone', '==', normalizedPhone.substring(2)).get();
+    const variations = new Set<string>();
+    variations.add(normalizedPhone);
+    variations.add(localPhone);
+    variations.add('55' + localPhone);
+    
+    if (localPhone.length === 11) {
+       variations.add(`(${localPhone.substring(0,2)}) ${localPhone.substring(2,7)}-${localPhone.substring(7)}`);
+       const altPhone = localPhone.substring(0,2) + localPhone.substring(3);
+       variations.add(altPhone);
+       variations.add('55' + altPhone);
+       variations.add(`(${altPhone.substring(0,2)}) ${altPhone.substring(2,6)}-${altPhone.substring(6)}`);
+    } else if (localPhone.length === 10) {
+       variations.add(`(${localPhone.substring(0,2)}) ${localPhone.substring(2,6)}-${localPhone.substring(6)}`);
+       const altPhone = localPhone.substring(0,2) + '9' + localPhone.substring(2);
+       variations.add(altPhone);
+       variations.add('55' + altPhone);
+       variations.add(`(${altPhone.substring(0,2)}) ${altPhone.substring(2,7)}-${altPhone.substring(7)}`);
     }
+
+    const uniqueVariations = Array.from(variations).slice(0, 10);
+    let snapshot = await usersRef.where('phone', 'in', uniqueVariations).get();
 
     if (snapshot.empty) {
       console.log(`Usuário não encontrado para o telefone: ${normalizedPhone}`);
