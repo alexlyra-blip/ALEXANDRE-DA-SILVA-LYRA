@@ -169,7 +169,8 @@ export function calculateOffers(
   promotoraPriorities: Record<string, number> = {},
   promotoraInstallments: Record<string, number> = {},
   profile: any = {},
-  nonPortableBanks: string[] = []
+  nonPortableBanks: string[] = [],
+  blockedBanks: string[] = []
 ): Offer[] {
   const {
     idade,
@@ -258,7 +259,12 @@ export function calculateOffers(
     const newRateCalculated = calculateRate(saldoDevedor, parcelaParaRegras, effectiveN) * 100;
     
     // Allowed Banks Filter
-    if (profile?.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) {
+    if (profile?.allowedBanks !== undefined) {
+      if (!profile.allowedBanks.includes(bank.id)) return;
+    }
+
+    // Blocked Banks Filter (Promotora specifically blocked these)
+    if (blockedBanks && blockedBanks.includes(bank.name)) {
       return;
     }
 

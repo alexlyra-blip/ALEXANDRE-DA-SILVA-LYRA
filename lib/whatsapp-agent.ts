@@ -557,7 +557,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
         const pp = sd?.bankPriorities || {};
         const pi = sd?.bankInstallments || {};
 
-        const offers = calculateOffers(params, banks, rules, pp, pi, userProfile, sd?.nonPortableBanks || []);
+        const offers = calculateOffers(params, banks, rules, pp, pi, userProfile, sd?.nonPortableBanks || [], sd?.blockedBanks || []);
         console.log(`[Gutto] Total Offers: ${offers.length}`);
 
         if (offers.length === 0) {
@@ -750,7 +750,8 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                                 sd?.bankPriorities || {}, 
                                 sd?.bankInstallments || {}, 
                                 userProfile, 
-                                sd?.nonPortableBanks || []
+                                sd?.nonPortableBanks || [],
+                                sd?.blockedBanks || []
                             );
                             if (recalcOffers.length > 0) {
                                 sessionData.allOffers = recalcOffers;

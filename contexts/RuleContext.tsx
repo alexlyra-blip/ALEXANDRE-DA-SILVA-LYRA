@@ -87,6 +87,7 @@ interface RuleContextType {
   promotoraPriorities: PromotoraPriorities;
   promotoraInstallments: PromotoraInstallments;
   nonPortableBanks: string[];
+  blockedBanks: string[];
   isLoaded: boolean;
   addBank: (bank: Omit<BankRule, 'id'>) => Promise<void>;
   updateBank: (id: string, bank: Partial<BankRule>) => Promise<void>;
@@ -97,6 +98,7 @@ interface RuleContextType {
   updatePromotoraPriority: (bankId: string, priority: number) => Promise<void>;
   updatePromotoraInstallment: (bankId: string, installments: number) => Promise<void>;
   updateNonPortableBanks: (banksList: string[]) => Promise<void>;
+  updateBlockedBanks: (banksList: string[]) => Promise<void>;
 }
 
 const RuleContext = createContext<RuleContextType | undefined>(undefined);
@@ -107,6 +109,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
   const [promotoraPriorities, setPromotoraPriorities] = useState<PromotoraPriorities>({});
   const [promotoraInstallments, setPromotoraInstallments] = useState<PromotoraInstallments>({});
   const [nonPortableBanks, setNonPortableBanks] = useState<string[]>([]);
+  const [blockedBanks, setBlockedBanks] = useState<string[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const { user, profile, setQuotaExceeded } = useAuth();
 
@@ -117,6 +120,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
       setPromotoraPriorities({});
       setPromotoraInstallments({});
       setNonPortableBanks([]);
+      setBlockedBanks([]);
       setIsLoaded(false);
     };
 
@@ -206,6 +210,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
                 if (data.bankPriorities) setPromotoraPriorities(data.bankPriorities);
                 if (data.bankInstallments) setPromotoraInstallments(data.bankInstallments);
                 if (data.nonPortableBanks) setNonPortableBanks(data.nonPortableBanks);
+                if (data.blockedBanks) setBlockedBanks(data.blockedBanks);
               }
             });
           }
@@ -283,6 +288,22 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateBlockedBanks = async (banksList: string[]) => {
+    if (!profile) return;
+    const promotoraId = profile.role === 'admin' ? 'admin' : (profile.role === 'promotora' ? profile.uid : profile.createdBy);
+    if (!promotoraId) return;
+
+    try {
+      await setDoc(doc(db, 'settings', promotoraId), {
+        blockedBanks: banksList
+      }, { merge: true });
+      setBlockedBanks(banksList);
+    } catch (error) {
+      console.error("Error updating blockedBanks:", error);
+      throw error;
+    }
+  };
+
   const addBank = async (bank: Omit<BankRule, 'id'>) => {
     try {
       await saveBankRule(bank);
@@ -349,6 +370,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
     promotoraPriorities,
     promotoraInstallments,
     nonPortableBanks,
+    blockedBanks,
     isLoaded,
     addBank, 
     updateBank, 
@@ -358,13 +380,15 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
     deleteGeneralRule,
     updatePromotoraPriority,
     updatePromotoraInstallment,
-    updateNonPortableBanks
+    updateNonPortableBanks,
+    updateBlockedBanks
   }), [
     banks, 
     generalRules, 
     promotoraPriorities, 
     promotoraInstallments, 
     nonPortableBanks,
+    blockedBanks,
     isLoaded
   ]);
 

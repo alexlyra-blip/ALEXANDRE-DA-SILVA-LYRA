@@ -2141,7 +2141,7 @@ function UsuariosAdminContent() {
                     }}
                     className="rounded border-slate-300 text-primary focus:ring-primary"
                   />
-                  <span className="text-sm">{bank.name}</span>
+                  <span className="text-sm">{bank.name} - {bank.convenio}</span>
                 </label>
               ))}
             </div>

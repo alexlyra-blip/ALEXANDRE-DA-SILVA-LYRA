@@ -17,9 +17,11 @@ export default function RegrasGeraisPage() {
     promotoraPriorities, 
     promotoraInstallments, 
     nonPortableBanks,
+    blockedBanks,
     updatePromotoraPriority, 
     updatePromotoraInstallment,
-    updateNonPortableBanks
+    updateNonPortableBanks,
+    updateBlockedBanks
   } = useRules();
 
   const allOriginBanks = Array.from(new Set([
@@ -52,7 +54,6 @@ export default function RegrasGeraisPage() {
   const [priorityValue, setPriorityValue] = useState('');
   
   // States Blocked Banks
-  const [blockedBanks, setBlockedBanks] = useState<string[]>([]);
   const [blockedBankSelection, setBlockedBankSelection] = useState('');
   const [nonPortableBankSelection, setNonPortableBankSelection] = useState('');
   
@@ -146,17 +147,24 @@ export default function RegrasGeraisPage() {
               onChange={e => setBlockedBankSelection(e.target.value)}
             >
               <option value="">Selecione um banco para bloquear...</option>
-              {banks.filter(b => !blockedBanks.includes(b.name)).map(b => (
-                <option key={b.id} value={b.name}>{b.name}</option>
+              {banks.filter(b => !(blockedBanks || []).includes(b.id) && !(blockedBanks || []).includes(b.name)).map(b => (
+                <option key={b.id} value={b.id}>{b.name} - {b.convenio}</option>
               ))}
             </select>
             <button
               type="button"
               disabled={isSaving || !blockedBankSelection}
-              onClick={() => {
+              onClick={async () => {
                 if(blockedBankSelection) {
-                  setBlockedBanks([...blockedBanks, blockedBankSelection]);
-                  setBlockedBankSelection('');
+                  setIsSaving(true);
+                  try {
+                    await updateBlockedBanks([...(blockedBanks || []), blockedBankSelection]);
+                    setBlockedBankSelection('');
+                  } catch (e) {
+                    console.error(e);
+                  } finally {
+                    setIsSaving(false);
+                  }
                 }
               }}
               className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white p-2 rounded-xl transition-all flex items-center justify-center shrink-0"
@@ -166,18 +174,31 @@ export default function RegrasGeraisPage() {
           </div>
           
           <div className="flex flex-wrap gap-2 mt-4">
-            {blockedBanks.map(bankName => (
-              <span key={bankName} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-xs font-bold">
-                {bankName}
-                <button 
-                  type="button" 
-                  onClick={() => setBlockedBanks(blockedBanks.filter(b => b !== bankName))} 
-                  className="ml-1 hover:text-red-700 transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
+            {(blockedBanks || []).map(bankIdOrName => {
+              const matchedBank = banks.find(b => b.id === bankIdOrName || b.name === bankIdOrName);
+              const label = matchedBank ? `${matchedBank.name} - ${matchedBank.convenio}` : bankIdOrName;
+              return (
+                <span key={bankIdOrName} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-xs font-bold">
+                  {label}
+                  <button 
+                    type="button" 
+                    onClick={async () => {
+                      setIsSaving(true);
+                      try {
+                        await updateBlockedBanks((blockedBanks || []).filter(b => b !== bankIdOrName));
+                      } catch (e) {
+                        console.error(e);
+                      } finally {
+                        setIsSaving(false);
+                      }
+                    }} 
+                    className="ml-1 hover:text-red-700 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>

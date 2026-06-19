@@ -51,6 +51,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
   const settingsSnapshot = await getDocs(collection(db, 'settings'));
   const adminSettings = settingsSnapshot.docs.find(d => d.id === 'admin')?.data() || {};
   const nonPortableBanks = adminSettings.nonPortableBanks || [];
+  const blockedBanks = adminSettings.blockedBanks || [];
   const pp = adminSettings.bankPriorities || {};
   const pi = adminSettings.bankInstallments || {};
 
@@ -78,7 +79,7 @@ export async function runSimulation(input: SimulationInput): Promise<Offer[]> {
   };
 
   // Run the central simulation engine
-  const rawOffers = calculateOffers(params, banks, generalRules, pp, pi, {}, nonPortableBanks);
+  const rawOffers = calculateOffers(params, banks, generalRules, pp, pi, {}, nonPortableBanks, blockedBanks);
 
   // Map raw offers to the expected Offer structure for backward compatibility
   return rawOffers.map(o => ({
