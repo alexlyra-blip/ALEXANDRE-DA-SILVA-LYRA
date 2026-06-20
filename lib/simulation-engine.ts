@@ -259,12 +259,12 @@ export function calculateOffers(
     const newRateCalculated = calculateRate(saldoDevedor, parcelaParaRegras, effectiveN) * 100;
     
     // Allowed Banks Filter
-    if (profile?.allowedBanks !== undefined) {
-      if (!profile.allowedBanks.includes(bank.id)) return;
+    if (profile?.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) {
+      return;
     }
 
     // Blocked Banks Filter (Promotora specifically blocked these)
-    if (blockedBanks && blockedBanks.includes(bank.name)) {
+    if (blockedBanks && (blockedBanks.includes(bank.name) || blockedBanks.includes(bank.id))) {
       return;
     }
 
@@ -385,7 +385,9 @@ export function calculateOffers(
         if (tableMinTicket > 0 && valorAValidar < tableMinTicket) return;
         
         // Check Min Troco
-        if (bankMinTroco > 0 && valorTroco < bankMinTroco) return;
+        const tableMinTroco = parseRate(tabela.minTroco);
+        const effectiveMinTroco = tableMinTroco > 0 ? tableMinTroco : bankMinTroco;
+        if (effectiveMinTroco > 0 && valorTroco < effectiveMinTroco) return;
 
         // Check Min/Max Installment Value
         const tableMinInst = parseRate(tabela.minInstallmentValue);
@@ -452,6 +454,7 @@ export function calculateOffers(
           saldoDevedor,
           novaTaxaPortabilidade: novaTaxaPortTarget,
           taxaPonderada: taxaPonderadaFinal,
+          ajusteTaxaPonderada: ajusteTabela,
           useTaxaPonderada: Boolean(tabela.useTaxaPonderada),
           originalRateCalculated: orig,
           taxaBase: taxaTabelaValida,

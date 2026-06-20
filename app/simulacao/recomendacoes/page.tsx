@@ -196,7 +196,7 @@ export default function Recomendacoes() {
   const [activeSimulationIndex, setActiveSimulationIndex] = useState(0);
   const [showFilterLog, setShowFilterLog] = useState(false);
   const [isAISummarizing, setIsAISummarizing] = useState(false);
-  const { banks, generalRules, promotoraPriorities, promotoraInstallments, nonPortableBanks, isLoaded } = useRules();
+  const { banks, generalRules, promotoraPriorities, promotoraInstallments, nonPortableBanks, blockedBanks, isLoaded } = useRules();
   const { profile } = useAuth();
   const savedSimulationIds = useRef<Set<string>>(new Set());
 
