@@ -514,11 +514,13 @@ export default function Recomendacoes() {
           log("Banco inativo");
           return;
         }
-        if (profile?.allowedBanks !== undefined) {
-          if (!profile.allowedBanks.includes(bank.id)) {
-             log("Sem permissão para este banco");
-             return;
-          }
+        if (profile?.allowedBanks && profile.allowedBanks.length > 0 && !profile.allowedBanks.includes(bank.id)) {
+          log("Sem permissão para este banco");
+          return;
+        }
+        if (blockedBanks && (blockedBanks.includes(bank.name) || blockedBanks.includes(bank.id))) {
+          log("Bloqueado pelas regras gerais da promotora");
+          return;
         }
         
         const bankConvenio = normalizeStr(bank.convenio || 'INSS');
