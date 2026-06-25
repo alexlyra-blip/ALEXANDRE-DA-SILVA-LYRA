@@ -1345,30 +1345,49 @@ function UsuariosAdminContent() {
         <QuotaAlert />
         
         {/* Promotora User Limit Banner */}
-        {profile?.role === 'promotora' && profile.maxUsers !== undefined && profile.maxUsers > 0 && promotoraCreatedCount !== null && (
-          <div className="mb-6 bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 p-4 rounded-2xl flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="size-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                <Users className="w-5 h-5" />
+        {profile?.role === 'promotora' && profile.maxUsers !== undefined && profile.maxUsers > 0 && promotoraCreatedCount !== null && (() => {
+          const percentage = Math.min(100, Math.round((promotoraCreatedCount / profile.maxUsers) * 100));
+          const remaining = Math.max(0, profile.maxUsers - promotoraCreatedCount);
+          const isDanger = remaining <= 0;
+          const isWarning = remaining > 0 && remaining <= Math.ceil(profile.maxUsers * 0.2);
+          
+          return (
+            <div className="mb-6 bg-blue-500/5 border border-blue-500/20 text-blue-700 dark:text-blue-300 p-4 md:p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto">
+                <div className="size-10 md:size-12 bg-blue-500/10 rounded-xl flex items-center justify-center shrink-0">
+                  <Users className="w-5 h-5 md:w-6 md:h-6 text-blue-500" />
+                </div>
+                <div className="flex flex-col flex-1">
+                  <p className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-100">Limite de Usuários</p>
+                  <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 font-medium">
+                    Você utilizou <span className="font-bold text-slate-700 dark:text-slate-200">{promotoraCreatedCount}</span> de <span className="font-bold text-slate-700 dark:text-slate-200">{profile.maxUsers}</span> usuários
+                  </p>
+                </div>
               </div>
-              <div className="flex flex-col">
-                <p className="font-bold text-sm">Limite de Usuários</p>
-                <p className="text-xs opacity-90 font-medium">
-                  Você cadastrou <span className="font-bold">{promotoraCreatedCount}</span> de <span className="font-bold">{profile.maxUsers}</span> permitidos
-                </p>
+              
+              <div className="flex flex-col w-full md:w-1/3 min-w-[200px] gap-2">
+                <div className="flex items-center justify-between text-xs font-bold">
+                  <span className={isDanger ? 'text-red-500' : isWarning ? 'text-orange-500' : 'text-emerald-500'}>
+                    {percentage}% Utilizado
+                  </span>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Faltam <span className="text-slate-700 dark:text-slate-200">{remaining}</span> usuários
+                  </span>
+                </div>
+                <div className="w-full h-2.5 md:h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden shadow-inner">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-700 ease-out ${
+                      isDanger ? 'bg-gradient-to-r from-red-500 to-red-400' 
+                      : isWarning ? 'bg-gradient-to-r from-orange-500 to-orange-400'
+                      : 'bg-gradient-to-r from-emerald-500 to-emerald-400'
+                    }`}
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
               </div>
             </div>
-            <div className={`font-bold text-xs px-3 py-1.5 rounded-lg border ${
-              (profile.maxUsers - promotoraCreatedCount) <= 0 
-                ? 'bg-red-500/10 text-red-500 border-red-500/20' 
-                : (profile.maxUsers - promotoraCreatedCount) <= Math.ceil(profile.maxUsers * 0.2)
-                  ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20'
-                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-            }`}>
-              {Math.max(0, profile.maxUsers - promotoraCreatedCount)} restantes
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Branding Settings Toggle */}
         {(profile?.role === 'admin' || profile?.role === 'promotora') && (
@@ -1962,18 +1981,38 @@ function UsuariosAdminContent() {
                     </button>
                   )}
 
-                  {user.role === 'promotora' && (
-                    <div className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${
-                      (user.maxUsers > 0 && users.filter(u => u.promotoraId === user.id).length >= user.maxUsers)
-                        ? 'bg-red-500/10 border-red-500/20 text-red-600' 
-                        : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        <Users className="w-3 h-3" />
-                        <span>{users.filter(u => u.promotoraId === user.id).length} / {user.maxUsers || '∞'}</span>
+                  {user.role === 'promotora' && (() => {
+                    const createdUsers = users.filter(u => u.promotoraId === user.id).length;
+                    const max = user.maxUsers || 0;
+                    const percentage = max > 0 ? Math.min(100, Math.round((createdUsers / max) * 100)) : 0;
+                    const isFull = max > 0 && createdUsers >= max;
+                    
+                    return (
+                      <div className="flex flex-col gap-1.5 min-w-[120px]">
+                        <div className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${
+                          isFull
+                            ? 'bg-red-500/10 border-red-500/20 text-red-600' 
+                            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'
+                        }`}>
+                          <div className="flex items-center gap-1.5">
+                            <Users className="w-3 h-3" />
+                            <span>{createdUsers} / {max || '∞'}</span>
+                          </div>
+                          {max > 0 && (
+                            <span className="text-[10px] opacity-80">{percentage}%</span>
+                          )}
+                        </div>
+                        {max > 0 && (
+                          <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : 'bg-emerald-500'}`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                   <button
                     onClick={() => {
                       setEditingAllowedBanksUser(user);
