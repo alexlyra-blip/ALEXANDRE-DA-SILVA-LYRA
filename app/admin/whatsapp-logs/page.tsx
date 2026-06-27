@@ -74,7 +74,7 @@ export default function WhatsappLogs() {
           const usuario = log.userName || 'N/A';
           const telefone = (log.phone || '').split('@')[0]; // Clean @s.whatsapp.net
           const protocolo = log.protocolNumber || 'N/A';
-          const status = log.status === 'finished' ? 'Finalizado' : 'Expirou';
+          const status = log.status === 'finished' ? 'Finalizado' : 'Pendente';
           csv += `"${dataHora}","${usuario}","${telefone}","${protocolo}","${status}"\n`;
         });
         
@@ -236,7 +236,7 @@ export default function WhatsappLogs() {
                   </td>
                   <td className="p-4 text-sm">
                     <span className={`px-2 py-1 rounded-full text-xs font-bold ${log.status === 'finished' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {log.status === 'finished' ? 'Finalizado' : 'Expirou'}
+                      {log.status === 'finished' ? 'Finalizado' : 'Pendente'}
                     </span>
                   </td>
                   <td className="p-4 text-right">
