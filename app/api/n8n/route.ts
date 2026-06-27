@@ -60,7 +60,19 @@ export async function POST(req: NextRequest) {
     if (sessionData?.lastUpdate) {
       const lastUpdateDate = sessionData.lastUpdate.toDate ? sessionData.lastUpdate.toDate() : new Date(sessionData.lastUpdate);
       const diffMinutes = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60);
-      if (diffMinutes > 3) {
+      if (diffMinutes > 3 && sessionData.status !== 'finished') {
+        // Salva o histórico no arquivo permanente antes de resetar (timeout)
+        if (sessionData.history && sessionData.history.length > 0) {
+          await adminDb.collection('whatsappHistory').add({
+            phone: senderNumber,
+            userId: auth.user?.id || null,
+            userName: auth.user?.name || 'User',
+            protocolNumber: sessionData.protocolNumber,
+            history: sessionData.history,
+            createdAt: now,
+            status: 'timeout'
+          });
+        }
         sessionData.history = []; // Reset session
         sessionData.extractedParams = {}; // Wipe parameters so we start completely fresh
         sessionData.status = 'finished';
@@ -88,13 +100,23 @@ export async function POST(req: NextRequest) {
 
     // 2. Atualizar histórico
     const updatedHistory = [
-      ...(sessionData.history || []).slice(-20),
+      ...(sessionData.history || []),
       { role: 'user', content: messageText },
       { role: 'model', content: responseText }
     ];
 
     try {
       if (responseText.includes('[END_SESSION]')) {
+        // Salva o histórico no arquivo permanente antes de resetar (end session explicit)
+        await adminDb.collection('whatsappHistory').add({
+          phone: senderNumber,
+          userId: auth.user?.id || null,
+          userName: auth.user?.name || 'User',
+          protocolNumber: sessionData.protocolNumber,
+          history: updatedHistory,
+          createdAt: now,
+          status: 'finished'
+        });
         await sessionRef.set({ ...sessionData, history: [], lastUpdate: now, status: 'finished' });
         responseText = responseText.replace('[END_SESSION]', '').trim();
       } else {

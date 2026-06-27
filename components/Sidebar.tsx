@@ -61,10 +61,11 @@ export default function Sidebar() {
   if (profile?.role === 'admin' || profile?.role === 'promotora') {
     menuItems.push({ name: 'Regras e Bancos', icon: Landmark, path: '/regras/banco' });
     menuItems.push({ name: 'Usuários', icon: Users, path: '/admin/usuarios' });
+    menuItems.push({ name: 'Logs WhatsApp', icon: FileText, path: '/admin/whatsapp-logs' });
   }
 
-  // Acesso para Admin e Promotora
-  if (profile?.role === 'admin' || profile?.role === 'promotora') {
+  // Simulador WhatsApp (Chat interface) apenas para Admin
+  if (profile?.role === 'admin') {
     menuItems.push({ name: 'Simulador WhatsApp', icon: FileText, path: '/admin/simulador-whatsapp' });
   }
 
