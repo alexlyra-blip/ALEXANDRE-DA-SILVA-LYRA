@@ -32,7 +32,7 @@ export async function POST(req: Request) {
           const data = sessionSnap.data();
           const lastUpdate = data.lastUpdate?.toDate ? data.lastUpdate.toDate() : (data.lastUpdate ? new Date(data.lastUpdate) : null);
           const now = new Date();
-          if (lastUpdate && (now.getTime() - lastUpdate.getTime() > 3 * 60 * 1000)) {
+          if (lastUpdate && (now.getTime() - lastUpdate.getTime() > 20 * 60 * 1000)) {
             // EXPIRED after 3 minutes! Start fresh
             sessionData = { history: [], extractedParams: {} };
           } else {

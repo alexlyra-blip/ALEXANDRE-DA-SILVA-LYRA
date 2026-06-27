@@ -55,31 +55,31 @@ export async function POST(req: NextRequest) {
     let sessionSnap = await sessionRef.get();
     let sessionData = sessionSnap.exists ? sessionSnap.data() : { history: [] };
     
-    // Time out sessions after 3 minutes of inactivity
-    const now = new Date();
-    if (sessionData?.lastUpdate) {
-      const lastUpdateDate = sessionData.lastUpdate.toDate ? sessionData.lastUpdate.toDate() : new Date(sessionData.lastUpdate);
-      const diffMinutes = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60);
-      if (diffMinutes > 3 && sessionData.status !== 'finished') {
-        // Salva o histórico no arquivo permanente antes de resetar (timeout)
-        if (sessionData.history && sessionData.history.length > 0) {
-          await adminDb.collection('whatsappHistory').add({
-            phone: senderNumber,
-            userId: auth.user?.id || null,
-            userName: auth.user?.name || 'User',
-            userPhotoURL: auth.user?.photoURL || null,
-            protocolNumber: sessionData.protocolNumber,
-            history: sessionData.history,
-            createdAt: now,
-            status: 'timeout'
-          });
+      // Time out sessions after 20 minutes of inactivity
+      const now = new Date();
+      if (sessionData?.lastUpdate) {
+        const lastUpdateDate = sessionData.lastUpdate.toDate ? sessionData.lastUpdate.toDate() : new Date(sessionData.lastUpdate);
+        const diffMinutes = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60);
+        if (diffMinutes > 20 && sessionData.status !== 'finished') {
+          // Salva o histórico no arquivo permanente antes de resetar (timeout)
+          if (sessionData.history && sessionData.history.length > 0) {
+            await adminDb.collection('whatsappHistory').add({
+              phone: senderNumber,
+              userId: auth.user?.id || null,
+              userName: auth.user?.name || 'User',
+              userPhotoURL: auth.user?.avatarUrl || auth.user?.photoUrl || auth.user?.photoURL || null,
+              protocolNumber: sessionData.protocolNumber,
+              history: sessionData.history,
+              createdAt: now,
+              status: 'timeout'
+            });
+          }
+          sessionData.history = []; // Reset session
+          sessionData.extractedParams = {}; // Wipe parameters so we start completely fresh
+          sessionData.status = 'finished';
+          console.log(`[n8n] WhatsApp Session for ${senderNumber} timed out after 20 minutes.`);
         }
-        sessionData.history = []; // Reset session
-        sessionData.extractedParams = {}; // Wipe parameters so we start completely fresh
-        sessionData.status = 'finished';
-        console.log(`[n8n] WhatsApp Session for ${senderNumber} timed out after 3 minutes.`);
       }
-    }
 
     if (!sessionData?.history) sessionData = { ...sessionData, history: [], extractedParams: {} };
 
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
           phone: senderNumber,
           userId: auth.user?.id || null,
           userName: auth.user?.name || 'User',
-          userPhotoURL: auth.user?.photoURL || null,
+          userPhotoURL: auth.user?.avatarUrl || auth.user?.photoUrl || auth.user?.photoURL || null,
           protocolNumber: sessionData.protocolNumber,
           history: updatedHistory,
           createdAt: now,

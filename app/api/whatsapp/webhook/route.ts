@@ -83,11 +83,12 @@ export async function POST(req: NextRequest) {
       let sessionSnap = await sessionRef.get();
       let sessionData = sessionSnap.exists ? sessionSnap.data() : { history: [] };
       
+      // Time out sessions after 20 minutes of inactivity
       const now = new Date();
       if (sessionData?.lastUpdate) {
         const lastUpdateDate = sessionData.lastUpdate.toDate ? sessionData.lastUpdate.toDate() : new Date(sessionData.lastUpdate);
         const diffMinutes = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60);
-        if (diffMinutes > 3 && sessionData.status !== 'finished') {
+        if (diffMinutes > 20 && sessionData.status !== 'finished') {
           if (sessionData.history && sessionData.history.length > 0) {
             await adminDb.collection('whatsappHistory').add({
               phone: senderNumber,
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
           sessionData.history = []; 
           sessionData.extractedParams = {}; 
           sessionData.status = 'finished';
-          console.log(`[Meta API] WhatsApp Session for ${senderNumber} timed out after 3 minutes.`);
+          console.log(`[Meta API] WhatsApp Session for ${senderNumber} timed out after 20 minutes.`);
         }
       }
 

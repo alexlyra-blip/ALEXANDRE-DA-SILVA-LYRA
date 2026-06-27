@@ -594,7 +594,8 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
         const [bSnap, rSnap, sSnap] = await Promise.all([
             db.collection('bankRules').get(), db.collection('generalRules').get(), db.collection('settings').doc(promotoraId).get()
         ]);
-        const banks = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const rawBanks = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const banks = dedupBanks(rawBanks);
         const rules = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         const sd = sSnap.exists ? sSnap.data() : {};
         const pp = sd?.bankPriorities || {};
@@ -765,7 +766,8 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                         const [bSnap, rSnap, sSnap] = await Promise.all([
                             db.collection('bankRules').get(), db.collection('generalRules').get(), db.collection('settings').doc(promotoraId).get()
                         ]);
-                        const banks = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        const rawBanks = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        const banks = dedupBanks(rawBanks);
                         const rules = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                         const sd = sSnap.exists ? sSnap.data() : {};
                         
@@ -1416,9 +1418,34 @@ function formatForWhatsApp(text: string): string {
     formatted = formatted.replace(/(?<!\*)\*([^\*]+?)\*(?!\*)/g, '_$1_');
     
     // 3. Convert standard markdown bold (**text**) to WhatsApp bold (*text*)
+    formatted = formatted.replace(/\*\*\*([^\*]+?)\*\*\*/g, '*$1*');
     formatted = formatted.replace(/\*\*([^\*]+?)\*\*/g, '*$1*');
     
     return formatted;
+}
+
+function dedupBanks(rawBanks: any[]): any[] {
+    const seenKeys = new Map<string, any>();
+    const getUpdatedTime = (b: any): number => {
+        if (!b?.updatedAt) return 0;
+        if (typeof b.updatedAt === 'number') return b.updatedAt;
+        if (typeof b.updatedAt.toMillis === 'function') return b.updatedAt.toMillis();
+        if (b.updatedAt.seconds) return b.updatedAt.seconds * 1000;
+        const parsed = Date.parse(String(b.updatedAt));
+        return isNaN(parsed) ? 0 : parsed;
+    };
+
+    rawBanks.forEach(bank => {
+        const key = `${bank.name}-${bank.convenio}-${bank.subConvenio || ''}`.toUpperCase();
+        const existing = seenKeys.get(key);
+        const tBank = getUpdatedTime(bank);
+        const tExisting = getUpdatedTime(existing);
+        
+        if (!existing || tBank > tExisting || (tBank === tExisting && bank.id.localeCompare(existing.id) > 0)) {
+            seenKeys.set(key, bank);
+        }
+    });
+    return Array.from(seenKeys.values());
 }
 
 export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserId: string = ''): Promise<string> {
