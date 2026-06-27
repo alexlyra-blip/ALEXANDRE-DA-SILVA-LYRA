@@ -12,12 +12,15 @@ export async function GET(req: NextRequest) {
     const protocol = searchParams.get('protocol');
     const phone = searchParams.get('phone');
     const dateStr = searchParams.get('date'); // YYYY-MM-DD
+    const startDateStr = searchParams.get('startDate'); // YYYY-MM-DD
+    const endDateStr = searchParams.get('endDate'); // YYYY-MM-DD
+    const isExport = searchParams.get('export') === 'true';
     const limitParam = searchParams.get('limit');
     
-    let limit = 50;
+    let limit = isExport ? 2000 : 50;
     if (limitParam) {
       const parsedLimit = parseInt(limitParam, 10);
-      if (!isNaN(parsedLimit) && parsedLimit > 0 && parsedLimit <= 200) {
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
         limit = parsedLimit;
       }
     }
@@ -44,13 +47,18 @@ export async function GET(req: NextRequest) {
     snapshot.forEach((doc: any) => {
       const data = doc.data();
       
-      // Filtrar por data na memória se fornecido (pois query de data + igualdade em outros campos pode pedir index composto)
-      if (dateStr && data.createdAt) {
+      if (data.createdAt) {
         const createdAt = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
         const docDateStr = createdAt.toISOString().split('T')[0];
-        if (docDateStr !== dateStr) {
+        
+        // Single date filter
+        if (dateStr && docDateStr !== dateStr) {
           return;
         }
+        
+        // Period filter
+        if (startDateStr && docDateStr < startDateStr) return;
+        if (endDateStr && docDateStr > endDateStr) return;
       }
       
       history.push({

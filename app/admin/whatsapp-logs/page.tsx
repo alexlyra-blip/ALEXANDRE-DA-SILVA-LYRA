@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Loader2, Search, Calendar, FileText, X, AlertCircle, Phone } from 'lucide-react';
+import { Loader2, Search, Calendar, FileText, X, AlertCircle, Phone, Download } from 'lucide-react';
 
 export default function WhatsappLogs() {
   const { profile, isAuthReady } = useAuth();
@@ -18,6 +18,11 @@ export default function WhatsappLogs() {
   const [filterProtocol, setFilterProtocol] = useState('');
   
   const [selectedSession, setSelectedSession] = useState<any>(null);
+  
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportStart, setExportStart] = useState(new Date().toISOString().split('T')[0]);
+  const [exportEnd, setExportEnd] = useState(new Date().toISOString().split('T')[0]);
+  const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
     if (isAuthReady && profile && profile.role !== 'admin' && profile.role !== 'promotora') {
@@ -47,6 +52,49 @@ export default function WhatsappLogs() {
       setError('Erro de conexão ao buscar logs.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const exportData = async () => {
+    setExportLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (exportStart) params.append('startDate', exportStart);
+      if (exportEnd) params.append('endDate', exportEnd);
+      params.append('export', 'true');
+      
+      const res = await fetch(`/api/admin/whatsapp-history?${params.toString()}`);
+      const data = await res.json();
+      
+      if (data.success && data.data) {
+        // Gera CSV
+        let csv = 'Data/Hora,Usuário,Telefone,Protocolo,Status\n';
+        data.data.forEach((log: any) => {
+          const dataHora = new Date(log.createdAt).toLocaleString('pt-BR').replace(',', '');
+          const usuario = log.userName || 'N/A';
+          const telefone = log.phone || '';
+          const protocolo = log.protocolNumber || 'N/A';
+          const status = log.status === 'finished' ? 'Finalizado' : 'Expirou';
+          csv += `"${dataHora}","${usuario}","${telefone}","${protocolo}","${status}"\n`;
+        });
+        
+        // Add BOM for Excel UTF-8 reading
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `simulacoes_whatsapp_${exportStart}_a_${exportEnd}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setShowExportModal(false);
+      } else {
+        alert('Erro ao exportar dados.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro de conexão ao exportar.');
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -110,14 +158,24 @@ export default function WhatsappLogs() {
           </div>
         </div>
         
-        <button 
-          onClick={fetchLogs}
-          disabled={loading}
-          className="bg-primary text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors h-10 w-full md:w-auto"
-        >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-          Buscar
-        </button>
+        <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+          <button 
+            onClick={fetchLogs}
+            disabled={loading}
+            className="bg-primary text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors h-10 w-full md:w-auto shadow-sm"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            Buscar
+          </button>
+          
+          <button 
+            onClick={() => setShowExportModal(true)}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors h-10 w-full md:w-auto shadow-sm"
+          >
+            <Download className="w-4 h-4" />
+            Exportar
+          </button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-[var(--sidebar-bg)] rounded-xl shadow-sm border border-slate-200 dark:border-white/10 overflow-hidden">
@@ -225,7 +283,62 @@ export default function WhatsappLogs() {
               )}
             </div>
           </div>
+          {/* MODAL DE EXPORTAÇÃO */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#111] w-full max-w-md rounded-2xl shadow-2xl flex flex-col border border-slate-200 dark:border-white/10 overflow-hidden">
+            <div className="p-4 border-b border-slate-200 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-white/5">
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                <Download className="w-5 h-5 text-emerald-600" />
+                Exportar para Planilha
+              </h3>
+              <button 
+                onClick={() => setShowExportModal(false)}
+                className="p-2 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 rounded-full transition-colors text-slate-700 dark:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+                Selecione o período para baixar todas as simulações em formato CSV (abre no Excel).
+              </p>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Data Inicial</label>
+                <input 
+                  type="date" 
+                  value={exportStart}
+                  onChange={(e) => setExportStart(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-black text-slate-800 dark:text-white"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Data Final</label>
+                <input 
+                  type="date" 
+                  value={exportEnd}
+                  onChange={(e) => setExportEnd(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-black text-slate-800 dark:text-white"
+                />
+              </div>
+              
+              <button 
+                onClick={exportData}
+                disabled={exportLoading}
+                className="w-full mt-4 bg-emerald-600 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shadow-md"
+              >
+                {exportLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                Baixar Arquivo CSV
+              </button>
+            </div>
+          </div>
         </div>
+      )}
+      
+    </div>
       )}
       
     </div>
