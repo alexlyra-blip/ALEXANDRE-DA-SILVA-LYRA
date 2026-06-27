@@ -8,7 +8,7 @@ const ai = getAI();
 
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
 }
@@ -71,6 +71,9 @@ const calculateLoanOffersTool = {
             idade: { type: Type.NUMBER, description: "Customer age" },
             convenio: { type: Type.STRING, description: "INSS, SIAPE, GOVERNO, FORÇAS ARMADAS, CLT PRIVADO" },
             subConvenio: { type: Type.STRING, description: "Sub-agreement" },
+            codigoBeneficio: { type: Type.STRING, description: "Benefit code (INSS only)" },
+            estado: { type: Type.STRING, description: "State (UF) for Governo" },
+            dataConcessao: { type: Type.STRING, description: "Benefit concession date (YYYY-MM-DD)" },
             bancoAtual: { type: Type.STRING, description: "Current bank name" },
             valorParcela: { type: Type.NUMBER, description: "Monthly installment" },
             saldoDevedor: { type: Type.NUMBER, description: "Outstanding balance" },
@@ -393,6 +396,18 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
         if (num !== null) params.negativeCardValue = num;
         else params.negativeCardValue = 0; // fallback caso o usuário diga que não tem
     }
+    // Data de Concessão
+    if (!params.dataConcessao && (prev.includes('concessão') || prev.includes('concessao') || prev.includes('data'))) {
+        const m = txt.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+        if (m) {
+            params.dataConcessao = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        } else {
+            const m2 = txt.match(/(\d{4})/);
+            if (m2 && parseInt(m2[1]) > 1900 && parseInt(m2[1]) <= new Date().getFullYear()) {
+                params.dataConcessao = `${m2[1]}-01-01`;
+            }
+        }
+    }
     // Banco atual
     if (!params.bancoAtual && prev.includes('banco') && (prev.includes('atual') || prev.includes('contrato'))) {
         params.bancoAtual = userMsg.trim();
@@ -470,8 +485,11 @@ function hasAllRequired(d: any): boolean {
     if (!d.convenio || !d.idade || !d.bancoAtual || !d.valorParcela || !d.saldoDevedor || !d.prazoTotal || !d.parcelasRestantes) {
         return false;
     }
-    if (d.convenio === 'INSS' && !d.codigoBeneficio) {
-        return false;
+    if (d.convenio === 'INSS') {
+        if (!d.codigoBeneficio) return false;
+        const cbClean = d.codigoBeneficio.toString().replace(/^0+/, '');
+        const isInvalidity = ['4', '5', '11', '30', '32', '33', '34', '92'].includes(cbClean);
+        if (isInvalidity && d.idade < 60 && !d.dataConcessao) return false;
     }
     if (['GOVERNO', 'SIAPE', 'FORÇAS ARMADAS'].includes(d.convenio) && !d.subConvenio) {
         return false;
@@ -530,6 +548,26 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
 async function doCalculation(params: SimulationParams, userProfile: any, targetBankName?: string, sessionData: any = {}): Promise<string> {
     try {
         const margemNegativa = (params as any).negativeCardValue || 0;
+
+        // Normalizar convênio que a IA pode ter enviado fora do padrão
+        if (params.convenio) {
+            const conv = params.convenio.toLowerCase();
+            if (conv.includes('inss')) params.convenio = 'INSS';
+            else if (conv.includes('siape')) params.convenio = 'SIAPE';
+            else if (conv.includes('gov')) params.convenio = 'GOVERNO';
+            else if (conv.includes('forç') || conv.includes('forc')) params.convenio = 'FORÇAS ARMADAS';
+            else if (conv.includes('clt')) params.convenio = 'CLT PRIVADO';
+        }
+
+        // Sincronizar estado e subConvenio para convênio Governo
+        if (params.convenio === 'GOVERNO') {
+            if (params.estado && !params.subConvenio) params.subConvenio = params.estado;
+            if (params.subConvenio && !params.estado) params.estado = params.subConvenio;
+        }
+
+        if (params.idade >= 60) {
+            params.isCliente60Mais = true;
+        }
 
         if (params.taxaJurosMensal && params.taxaJurosMensal > 0.1) {
             params.taxaJurosMensal = params.taxaJurosMensal / 100;
@@ -1015,8 +1053,23 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         console.log(`[Gutto] Resetting session parameters.`);
         return `🔄 *Tudo pronto!* Reiniciei a nossa simulação para você. 😉\n\nPara começarmos uma nova consulta do zero, por favor, me informe qual é o seu **convênio**: 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**`;
     } else {
-        // Se temos lastExtracted e o usuário digitou o nome de um banco
         const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
+        
+        // Se a simulação acabou de ser feita e o usuário está apenas agradecendo/concordando
+        if (lastExtracted && Object.keys(extracted).length === 0) {
+            const endWords = ['obrigado', 'obrigada', 'valeu', 'obg', 'tchau', 'agradeço', 'perfeito', 'ok', 'certo', 'joia', 'entendi', 'ótimo', 'otimo', 'bom', 'show', 'top', 'legal'];
+            const words = cleanMsg.split(/\s+/);
+            const isEnd = words.every(w => endWords.includes(w) || w.length <= 3) && words.some(w => endWords.includes(w) && w.length >= 2);
+            
+            if (isEnd) {
+                sessionData.extractedParams = {};
+                sessionData.lastExtractedParams = null;
+                console.log(`[Gutto] User thanked/ended session.`);
+                return "Eu que agradeço! Fico muito feliz em ajudar. Se precisar de uma nova simulação no futuro, é só me mandar um 'Olá'. Um abraço e um excelente dia! ✨";
+            }
+        }
+
+        // Se temos lastExtracted e o usuário digitou o nome de um banco
         const matchedCachedBank = lastExtracted && cachedBankRules.find(b =>
             checkBankMatch(b.name, cleanMsg)
         );
@@ -1050,6 +1103,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     if (summaryData.idade) dataSummary += `• Idade: ${summaryData.idade} anos\n`;
     if (summaryData.estado) dataSummary += `• Estado: ${summaryData.estado}\n`;
     if (summaryData.codigoBeneficio) dataSummary += `• Código do Benefício: ${summaryData.codigoBeneficio}\n`;
+    if (summaryData.dataConcessao) dataSummary += `• Data de Concessão: ${summaryData.dataConcessao}\n`;
     if (summaryData.subConvenio) dataSummary += `• Sub-convênio/órgão: ${summaryData.subConvenio}\n`;
     if (summaryData.isAnalfabeto !== undefined) dataSummary += `• Analfabeto: ${summaryData.isAnalfabeto ? 'Sim' : 'Não'}\n`;
     if (summaryData.hasTwoCards !== undefined) dataSummary += `• Possui 2 cartões consignados ativos: ${summaryData.hasTwoCards ? 'Sim' : 'Não'}\n`;
@@ -1063,8 +1117,15 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
     const showStateQuestion = (summaryData.idade >= 60 || summaryData.convenio === 'GOVERNO') && !summaryData.estado;
     const step3Text = showStateQuestion
-        ? "3. Se o Estado ainda NÃO foi coletado e (a idade for igual ou superior a 60 anos OU o convênio for Governo): Pergunta em qual estado o cliente reside (Amapá - AP, Paraíba - PB, Tocantins - TO ou Roraima - RR? Se for outro, pode apenas dizer qual)."
+        ? "3. Se o Estado ainda NÃO foi coletado e (a idade for igual ou superior a 60 anos OU o convênio for Governo): Pergunte apenas qual é o Estado. Se o convênio for Governo, use exatamente esta frase: 'Como o seu convênio é Governo, me informe o Estado? (Ex: Bahia - BA, Maranhão - MA, Paraíba - PB, Pernambuco - PE)'"
         : "3. (PULADO - Estado não necessário ou já coletado)";
+
+    const cbClean = summaryData.codigoBeneficio ? summaryData.codigoBeneficio.toString().replace(/^0+/, '') : '';
+    const isInvalidityContext = ['4', '5', '11', '30', '32', '33', '34', '92'].includes(cbClean);
+    const showDataConcessaoQuestion = summaryData.convenio === 'INSS' && isInvalidityContext && summaryData.idade < 60 && !summaryData.dataConcessao;
+    const stepConcessaoText = showDataConcessaoQuestion
+        ? "4.5. Se o benefício for Invalidez (espécie 32, 92, etc) e o cliente tiver menos de 60 anos, e a Data de Concessão AINDA NÃO FOI COLETADA: Pergunte qual é a **Data de Concessão do Benefício** (exemplo: informe a data exata como DD/MM/AAAA ou pelo menos o ano)."
+        : "4.5. (PULADO - Data de concessão não necessária ou já coletada)";
 
     // Construir contexto de regras reais dos bancos cadastrados no sistema
     let bankRulesContext = '';
@@ -1227,9 +1288,9 @@ ${step3Text}
 4. Para o próximo dado:
    - Se o convênio for INSS, pergunte o Código do Benefício.
    - Se o convênio for SIAPE, pergunte exatamente: "Como o seu convênio é SIAPE, qual é a sua Situação Funcional?\nS1 - Ativo/Aposentado\nS2 - Pensionista"
-   - Se o convênio for Governo, pergunte qual é o seu Estado (ex: Paraíba - PB, Bahia - BA).
    - Se o convênio for Forças Armadas, pergunte qual a sua Força Militar (Ex: Aeronáutica, Exército ou Marinha).
    - Se convênio for CLT Privado, PULE esta pergunta.
+${stepConcessaoText}
 5. Se o cliente é Analfabeto? (Sim/Não)
    - IMPORTANTE: Para esta pergunta, você DEVE usar EXATAMENTE esta frase com as palavras em negrito usando asteriscos: "Você se considera **analfabeto** ou possui alguma **dificuldade para ler e escrever**? (Responda com **Sim** ou **Não**)"
 6. Se convênio for INSS:
