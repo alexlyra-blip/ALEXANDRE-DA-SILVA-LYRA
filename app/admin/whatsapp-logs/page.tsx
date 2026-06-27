@@ -72,7 +72,7 @@ export default function WhatsappLogs() {
         data.data.forEach((log: any) => {
           const dataHora = new Date(log.createdAt).toLocaleString('pt-BR').replace(',', '');
           const usuario = log.userName || 'N/A';
-          const telefone = log.phone || '';
+          const telefone = (log.phone || '').split('@')[0]; // Clean @s.whatsapp.net
           const protocolo = log.protocolNumber || 'N/A';
           const status = log.status === 'finished' ? 'Finalizado' : 'Expirou';
           csv += `"${dataHora}","${usuario}","${telefone}","${protocolo}","${status}"\n`;
@@ -214,7 +214,7 @@ export default function WhatsappLogs() {
                     {log.protocolNumber || 'N/A'}
                   </td>
                   <td className="p-4 text-sm text-slate-600 dark:text-slate-300">
-                    {log.phone}
+                    {(log.phone || '').split('@')[0]}
                   </td>
                   <td className="p-4 text-sm">
                     <span className={`px-2 py-1 rounded-full text-xs font-bold ${log.status === 'finished' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -246,7 +246,7 @@ export default function WhatsappLogs() {
                   Histórico: {selectedSession.protocolNumber}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {selectedSession.phone} • {new Date(selectedSession.createdAt).toLocaleString('pt-BR')}
+                  {(selectedSession.phone || '').split('@')[0]} • {new Date(selectedSession.createdAt).toLocaleString('pt-BR')}
                 </p>
               </div>
               <button 
