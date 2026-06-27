@@ -63,11 +63,24 @@ export async function POST(req: NextRequest) {
       if (diffMinutes > 3) {
         sessionData.history = []; // Reset session
         sessionData.extractedParams = {}; // Wipe parameters so we start completely fresh
+        sessionData.status = 'finished';
         console.log(`[n8n] WhatsApp Session for ${senderNumber} timed out after 3 minutes.`);
       }
     }
 
     if (!sessionData?.history) sessionData = { ...sessionData, history: [], extractedParams: {} };
+
+    // Generate Protocol Number if not exists or if session was finished
+    if (!sessionData.protocolNumber || sessionData.status === 'finished') {
+      const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
+      const randomHex = Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase();
+      sessionData.protocolNumber = `GUTTO-${dateStr}-${randomHex}`;
+      sessionData.status = 'active';
+      sessionData.history = [];
+      sessionData.extractedParams = {};
+      sessionData.lastExtractedParams = null;
+      sessionData.allOffers = [];
+    }
 
     // 1. Usar o Agente de IA consolidado
     const { processWhatsAppMessage } = await import('@/lib/whatsapp-agent');
@@ -82,7 +95,7 @@ export async function POST(req: NextRequest) {
 
     try {
       if (responseText.includes('[END_SESSION]')) {
-        await sessionRef.set({ history: [], lastUpdate: now });
+        await sessionRef.set({ ...sessionData, history: [], lastUpdate: now, status: 'finished' });
         responseText = responseText.replace('[END_SESSION]', '').trim();
       } else {
         await sessionRef.set({ ...sessionData, history: updatedHistory, lastUpdate: now });

@@ -59,6 +59,11 @@ function checkBankMatch(ruleBank: string, currentBank: string): boolean {
         const name = parts.slice(1).join('-').trim();
         if (rule.length >= 2 && name.includes(rule)) return true;
     }
+    const ruleParts = rule.split('-');
+    if (ruleParts.length >= 2) {
+        const name = ruleParts.slice(1).join('-').trim();
+        if (name.length >= 2 && (current.includes(name) || name.includes(current))) return true;
+    }
     return rule.length >= 2 && (current.includes(rule) || rule.includes(current));
 }
 
@@ -597,6 +602,8 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
 
         const offers = calculateOffers(params, banks, rules, pp, pi, userProfile, sd?.nonPortableBanks || [], sd?.blockedBanks || []);
         console.log(`[Gutto] Total Offers: ${offers.length}`);
+        sessionData.allOffers = offers; // Guaranty we save them so user can ask for another bank later
+
 
         if (offers.length === 0) {
             return "❌ Infelizmente, analisando as regras dos bancos, não encontramos nenhuma oferta vantajosa ou compatível com esses dados no momento.";
@@ -1049,11 +1056,9 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
     if (isRestart) {
         extracted = {};
-        sessionData.history = [];
-        sessionData.extractedParams = {};
-        sessionData.lastExtractedParams = null;
+        sessionData.status = 'finished'; // This will force routes to generate a new protocol on the NEXT message
         console.log(`[Gutto] Resetting session parameters.`);
-        return `🔄 *Tudo pronto!* Reiniciei a nossa simulação para você. 😉\n\nPara começarmos uma nova consulta do zero, por favor, me informe qual é o seu **convênio**: 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**`;
+        return `🔄 *Tudo pronto!* Encerrei o protocolo anterior e reiniciei a nossa simulação.\n\nPara começarmos uma nova consulta do zero, por favor, me informe qual é o seu **convênio**: 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**\n\n_(Protocolo anterior encerrado. Um novo será gerado automaticamente na próxima mensagem)_`;
     } else {
         const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
         
@@ -1064,21 +1069,17 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             const isEnd = words.every(w => endWords.includes(w) || w.length <= 3) && words.some(w => endWords.includes(w) && w.length >= 2);
             
             if (isEnd) {
-                sessionData.extractedParams = {};
-                sessionData.lastExtractedParams = null;
-                console.log(`[Gutto] User thanked/ended session.`);
-                return "Eu que agradeço! Fico muito feliz em ajudar. Se precisar de uma nova simulação no futuro, é só me mandar um 'Olá'. Um abraço e um excelente dia! ✨";
+                sessionData.status = 'finished';
+                const protocol = sessionData.protocolNumber || 'N/A';
+                console.log(`[Gutto] User thanked/ended session. Protocol: ${protocol}`);
+                return `Eu que agradeço! Fico muito feliz em ajudar.\n\nO seu número de protocolo de atendimento foi: *${protocol}*.\n\nEste atendimento foi encerrado. Se precisar de uma nova simulação no futuro, é só me mandar um 'Olá'. Um abraço e um excelente dia! ✨\n[END_SESSION]`;
             }
         }
 
-        // 1. Verificar se usuário mudou o convênio drasticamente para forçar nova simulação
         const isNewConvenio = cleanMsg === 'inss' || cleanMsg === 'siape' || cleanMsg === 'governo' || (cleanMsg.includes('forcas') && cleanMsg.includes('armadas')) || (cleanMsg.includes('forças') && cleanMsg.includes('armadas'));
         if (isNewConvenio && lastExtracted && lastExtracted.convenio && !cleanMsg.includes(lastExtracted.convenio.toLowerCase())) {
-            sessionData.history = [];
-            sessionData.extractedParams = {};
-            sessionData.lastExtractedParams = null;
-            lastExtracted = null;
-            extracted = {};
+            sessionData.status = 'finished';
+            return `🔄 Percebi que você quer consultar um novo convênio. Encerrei o protocolo anterior.\n\nPor favor, envie a sua mensagem novamente para iniciar o novo atendimento!`;
         }
 
         // 2. Se temos ofertas cacheadas e o usuário digitou o nome de um banco
