@@ -889,8 +889,9 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     const isThanks = thanksKeywords.some(kw => lower.includes(kw));
 
     if (isThanks && wasLastMsgSimulation) {
-        sessionData.extractedParams = {}; // Limpa parâmetros
-        sessionData.lastExtractedParams = null; // Limpa histórico
+        sessionData.history = []; // Clear completely
+        sessionData.extractedParams = {}; 
+        sessionData.lastExtractedParams = null;
         return `Por nada! 😊 Fico extremamente feliz em ajudar na sua busca pelas melhores taxas.\n\nEstou à sua total disposição sempre que precisar de uma nova simulação ou tirar dúvidas sobre portabilidade. Tenha um excelente dia e ótimos negócios! 🚀💼`;
     }
 
@@ -1048,6 +1049,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
     if (isRestart) {
         extracted = {};
+        sessionData.history = [];
         sessionData.extractedParams = {};
         sessionData.lastExtractedParams = null;
         console.log(`[Gutto] Resetting session parameters.`);
@@ -1069,13 +1071,35 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             }
         }
 
-        // Se temos lastExtracted e o usuário digitou o nome de um banco
-        const matchedCachedBank = lastExtracted && cachedBankRules.find(b =>
-            checkBankMatch(b.name, cleanMsg)
-        );
-        if (matchedCachedBank && lastExtracted) {
-            console.log(`[Gutto] User selected bank ${matchedCachedBank.name} from previous calculation.`);
-            return await doCalculation(lastExtracted as SimulationParams, userProfile, matchedCachedBank.name, sessionData);
+        // 1. Verificar se usuário mudou o convênio drasticamente para forçar nova simulação
+        const isNewConvenio = cleanMsg === 'inss' || cleanMsg === 'siape' || cleanMsg === 'governo' || (cleanMsg.includes('forcas') && cleanMsg.includes('armadas')) || (cleanMsg.includes('forças') && cleanMsg.includes('armadas'));
+        if (isNewConvenio && lastExtracted && lastExtracted.convenio && !cleanMsg.includes(lastExtracted.convenio.toLowerCase())) {
+            sessionData.history = [];
+            sessionData.extractedParams = {};
+            sessionData.lastExtractedParams = null;
+            lastExtracted = null;
+            extracted = {};
+        }
+
+        // 2. Se temos ofertas cacheadas e o usuário digitou o nome de um banco
+        if (lastExtracted || (sessionData.allOffers && sessionData.allOffers.length > 0)) {
+            // First check if the typed text matches any bank in the offers we just calculated
+            const banksInOffers = sessionData.allOffers ? Array.from(new Set(sessionData.allOffers.map((o: any) => o.name))) as string[] : [];
+            const matchedBankInOffers = banksInOffers.find(bName => checkBankMatch(bName, cleanMsg));
+            
+            if (matchedBankInOffers) {
+                console.log(`[Gutto] User selected bank ${matchedBankInOffers} from previous calculation offers.`);
+                const paramsToUse = lastExtracted || sessionData.extractedParams || {};
+                return await doCalculation(paramsToUse as SimulationParams, userProfile, matchedBankInOffers, sessionData);
+            }
+            
+            // Fallback to rules if not in specific offers list
+            const matchedCachedBank = cachedBankRules.find(b => checkBankMatch(b.name, cleanMsg));
+            if (matchedCachedBank) {
+                console.log(`[Gutto] User selected bank ${matchedCachedBank.name} from previous calculation.`);
+                const paramsToUse = lastExtracted || sessionData.extractedParams || {};
+                return await doCalculation(paramsToUse as SimulationParams, userProfile, matchedCachedBank.name, sessionData);
+            }
         }
 
         const lastBotMessage = history.length > 0 ? history[history.length - 1].content || '' : '';
