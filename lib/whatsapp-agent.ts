@@ -702,9 +702,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     const ai = getAI();
     await loadRules();
 
-    if (history.length === 0) {
-        return `👋 Olá! Eu sou o Gutto, o seu assistente virtual especialista em portabilidade de crédito consignado. 🤖✨\n\nO seu protocolo de atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}.\n\nPode me informar se quer fazer uma nova simulação ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: "Regras do Bradesco" ou "Tabelas do C6"! 🤝💼`;
-    }
+    const isFirstMessage = (!history || history.length === 0);
 
     const lower = message.toLowerCase().trim();
 
@@ -1058,9 +1056,20 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
     if (isRestart) {
         extracted = {};
-        sessionData.status = 'finished'; // This will force routes to generate a new protocol on the NEXT message
-        console.log(`[Gutto] Resetting session parameters.`);
-        return `🔄 *Tudo pronto!* Encerrei o protocolo anterior e reiniciei a nossa simulação.\n\nPara começarmos uma nova consulta do zero, por favor, me informe qual é o seu **convênio**: 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**\n\n_(Protocolo anterior encerrado. Um novo será gerado automaticamente na próxima mensagem)_`;
+        
+        // Gerar novo protocolo imediatamente
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
+        const randomHex = Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase();
+        sessionData.protocolNumber = `GUTTO-${dateStr}-${randomHex}`;
+        sessionData.status = 'active';
+        sessionData.history = [];
+        sessionData.extractedParams = {};
+        sessionData.lastExtractedParams = null;
+        sessionData.allOffers = [];
+        
+        console.log(`[Gutto] Resetting session parameters and generating new protocol: ${sessionData.protocolNumber}`);
+        return `🔄 *Tudo pronto!* Encerrei o protocolo anterior e reiniciei a nossa simulação.\n\nO seu novo protocolo de atendimento é: *${sessionData.protocolNumber}*.\n\nPara iniciarmos a sua simulação personalizada e rápida, por favor, me informe qual é o seu **convênio**: 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**`;
     } else {
         const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
         
@@ -1265,9 +1274,7 @@ ${bankRulesContext}
 
 SOBRE PROTOCOLO DE ATENDIMENTO E ENCERRAMENTO:
 - O número de protocolo deste atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}.
-- INÍCIO E APRESENTAÇÃO: Sempre que você for iniciar o atendimento pela PRIMEIRA VEZ na conversa, você DEVE OBRIGATORIAMENTE enviar exatamente a seguinte apresentação:
-"👋 Olá! Eu sou o Gutto, o seu assistente virtual especialista em portabilidade de crédito consignado. 🤖✨
-O seu protocolo de atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}."
+- INÍCIO E APRESENTAÇÃO: O sistema já envia automaticamente a apresentação ("👋 Olá! Eu sou o Gutto... O seu protocolo é: GUTTO-XXX.") na primeira mensagem da conversa. Você NUNCA deve repetir essa apresentação inicial ou o número do protocolo na sua mensagem de saudação, apenas prossiga com as perguntas ou respostas de forma contínua.
 
 - APÓS A APRESENTAÇÃO INICIAL: Você deve perguntar se o cliente quer fazer uma simulação ou se quer consultar as regras, exatamente com este sentido:
 "Pode me informar se quer fazer uma nova simulação ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: 'Regras do Bradesco' ou 'Tabelas do C6'!"
@@ -1384,7 +1391,12 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         }
 
         const text = parts.find((p: any) => p.text)?.text || (result as any).text;
-        return text || "Como posso ajudar na sua simulação hoje?";
+        let finalReply = text || "Como posso ajudar na sua simulação hoje?";
+        
+        if (isFirstMessage) {
+            finalReply = `👋 Olá! Eu sou o Gutto, o seu assistente virtual especialista em portabilidade de crédito consignado. 🤖✨\n\nO seu protocolo de atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}.\n\n` + finalReply;
+        }
+        return finalReply;
 
     } catch (error: any) {
         console.error("Agent Error:", error);
