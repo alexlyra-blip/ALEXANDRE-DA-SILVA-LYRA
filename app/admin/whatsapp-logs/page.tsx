@@ -191,6 +191,7 @@ export default function WhatsappLogs() {
             <thead>
               <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
                 <th className="p-4 text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Data / Hora</th>
+                <th className="p-4 text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Usuário</th>
                 <th className="p-4 text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Protocolo</th>
                 <th className="p-4 text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Telefone</th>
                 <th className="p-4 text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Status</th>
@@ -200,7 +201,7 @@ export default function WhatsappLogs() {
             <tbody>
               {logs.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={6} className="p-8 text-center text-slate-500 dark:text-slate-400">
                     Nenhuma simulação encontrada para estes filtros.
                   </td>
                 </tr>
@@ -209,6 +210,20 @@ export default function WhatsappLogs() {
                 <tr key={log.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                   <td className="p-4 text-sm text-slate-800 dark:text-white">
                     {new Date(log.createdAt).toLocaleString('pt-BR')}
+                  </td>
+                  <td className="p-4 text-sm text-slate-800 dark:text-white">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden flex-shrink-0">
+                        {log.userPhotoURL ? (
+                          <img src={log.userPhotoURL} alt={log.userName || 'User'} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs font-bold">
+                            {(log.userName || 'U').charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <span className="font-medium truncate max-w-[150px]">{log.userName || 'Não Identificado'}</span>
+                    </div>
                   </td>
                   <td className="p-4 text-sm font-medium text-slate-800 dark:text-white">
                     {log.protocolNumber || 'N/A'}
