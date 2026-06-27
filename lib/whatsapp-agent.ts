@@ -92,7 +92,7 @@ const calculateLoanOffersTool = {
             taxaJurosMensal: { type: Type.NUMBER, description: "Client's current contract interest rate as percentage (e.g. 1.59). Optional." },
             targetBankName: { type: Type.STRING, description: "Optional explicit bank name requested by the user for the new simulation (e.g., 'Facta', 'Bradesco'). Only fill this if the user explicitly asks to see the simulation in a specific bank." }
         },
-        required: ["idade", "convenio", "bancoAtual", "valorParcela", "saldoDevedor", "prazoTotal", "parcelasRestantes"]
+        required: ["convenio"]
     }
 };
 
@@ -1372,9 +1372,13 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         if (fc?.functionCall?.name === "calculate_client_loan_offers") {
             const params = fc.functionCall.args as any;
             console.log("[Gutto] AI calling calculation:", params);
-            sessionData.lastExtractedParams = { ...params };
+            
+            // Mescla com lastExtractedParams para usar os dados que a IA omitiu
+            const mergedParams = { ...(sessionData.lastExtractedParams || {}), ...params };
+            
+            sessionData.lastExtractedParams = { ...mergedParams };
             sessionData.extractedParams = {};
-            return await doCalculation(params, userProfile, params.targetBankName, sessionData);
+            return await doCalculation(mergedParams, userProfile, params.targetBankName, sessionData);
         }
 
         const text = parts.find((p: any) => p.text)?.text || (result as any).text;
