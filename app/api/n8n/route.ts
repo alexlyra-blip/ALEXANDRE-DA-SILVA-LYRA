@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     
     const senderNumber = body.senderNumber;
     const messageText = body.messageText;
+    const pushName = body.pushName || body.pushname || '';
 
     if (!senderNumber || !messageText) {
       return NextResponse.json({ error: 'Faltam parametros obrigatorios: senderNumber e messageText' }, { status: 400 });
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-    if (!sessionData?.history) sessionData = { ...sessionData, history: [], extractedParams: {} };
+    if (!sessionData?.history) sessionData = { ...sessionData, history: [], extractedParams: {}, pushName };
 
     // Generate Protocol Number if not exists or if session was finished
     if (!sessionData.protocolNumber || sessionData.status === 'finished') {
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
       sessionData.extractedParams = {};
       sessionData.lastExtractedParams = null;
       sessionData.allOffers = [];
+      sessionData.pushName = pushName;
     }
 
     // 1. Usar o Agente de IA consolidado

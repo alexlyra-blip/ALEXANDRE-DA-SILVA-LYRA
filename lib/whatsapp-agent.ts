@@ -1333,7 +1333,7 @@ REGRA CRÍTICA ABSOLUTA: Faça APENAS UMA pergunta por vez. Nunca pergunte dois 
 DADOS JÁ COLETADOS ATÉ AGORA (Nunca pergunte estes novamente!):
 ${dataSummary || 'Nenhum dado coletado ainda.'}
 
-VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EXATA ABAIXO. IMPORTANTE: Só inicie a coleta do Convênio (Passo 1) SE O CLIENTE CONFIRMAR QUE QUER FAZER UMA SIMULAÇÃO! Se for a primeira mensagem (ex: "olá"), você DEVE perguntar exatamente assim: "Pode me informar se quer fazer uma nova simulação ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: 'Regras do Bradesco' ou 'Tabelas do C6'! 😊" e aguarde a resposta do usuário.
+VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EXATA ABAIXO. IMPORTANTE: Só inicie a coleta do Convênio (Passo 1) SE O CLIENTE CONFIRMAR QUE QUER FAZER UMA SIMULAÇÃO! Se for a primeira mensagem (ex: "olá"), você DEVE perguntar exatamente assim: "Podemos seguir para uma nova simulação de portabilidade? Ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: \"Regras do Bradesco\" ou \"Tabelas do C6\"!, Ou se quiser tirar apenas uma dúvida é so falar 🤝💼" e aguarde a resposta do usuário.
 1. Convênio (INSS, SIAPE, Governo, Forças Armadas ou CLT Privado)
    - IMPORTANTE: Para pedir o convênio, use EXATAMENTE a frase: "Para iniciarmos a sua simulação personalizada e rápida, por favor, me informe qual é o seu convênio: 👇" e liste as opções abaixo:
      👉 **INSS**
@@ -1401,7 +1401,9 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         let finalReply = text || "Como posso ajudar na sua simulação hoje?";
         
         if (isFirstMessage) {
-            finalReply = `👋 Olá! Eu sou o Gutto, o seu assistente virtual especialista em portabilidade de crédito consignado. 🤖✨\n\nO seu protocolo de atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}.\n\n` + finalReply;
+            const userName = sessionData.pushName || userProfile.name || '';
+            const greetingName = userName ? `Olá ${userName}, ` : 'Olá, ';
+            finalReply = `${greetingName}👋 Eu sou o Gutto, especialista em portabilidade de crédito consignado. 🤖✨\n\nO seu protocolo de atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}.\n\nPodemos seguir para uma nova simulação de portabilidade? Ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: "Regras do Bradesco" ou "Tabelas do C6"!, Ou se quiser tirar apenas uma dúvida é so falar 🤝💼`;
         }
         return finalReply;
 
