@@ -91,6 +91,7 @@ const calculateLoanOffersTool = {
             negativeCardValue: { type: Type.NUMBER, description: "Card discount" },
             taxaJurosMensal: { type: Type.NUMBER, description: "Client's current contract interest rate as percentage (e.g. 1.59). Optional." },
             targetBankName: { type: Type.STRING, description: "Optional explicit bank name requested by the user for the new simulation (e.g., 'Facta', 'Bradesco'). Only fill this if the user explicitly asks to see the simulation in a specific bank." }
+        },
         required: ["convenio", "idade", "bancoAtual", "valorParcela", "saldoDevedor", "prazoTotal", "parcelasRestantes"]
     }
 };
