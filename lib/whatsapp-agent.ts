@@ -1093,15 +1093,15 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             return `🔄 Percebi que você quer consultar um novo convênio. Encerrei o protocolo anterior.\n\nPor favor, envie a sua mensagem novamente para iniciar o novo atendimento!`;
         }
 
-        // 2. Se temos ofertas cacheadas e o usuário digitou o nome de um banco
-        if (lastExtracted || (sessionData.allOffers && sessionData.allOffers.length > 0)) {
-            // First check if the typed text matches any bank in the offers we just calculated
-            const banksInOffers = sessionData.allOffers ? Array.from(new Set(sessionData.allOffers.map((o: any) => o.name))) as string[] : [];
+        // 2. Se o usuário digitou o nome de um banco e temos parâmetros de simulação completos
+        const paramsToUse = lastExtracted || sessionData.extractedParams || {};
+        if (hasAllRequired(paramsToUse)) {
+            const offersToUse = (sessionData.allOffers && sessionData.allOffers.length > 0) ? sessionData.allOffers : (sessionData.lastOffers || []);
+            const banksInOffers = Array.from(new Set(offersToUse.map((o: any) => o.name))) as string[];
             const matchedBankInOffers = banksInOffers.find(bName => checkBankMatch(bName, cleanMsg));
             
             if (matchedBankInOffers) {
-                console.log(`[Gutto] User selected bank ${matchedBankInOffers} from previous calculation offers.`);
-                const paramsToUse = lastExtracted || sessionData.extractedParams || {};
+                console.log(`[Gutto] User selected bank ${matchedBankInOffers} from active calculation offers.`);
                 return await doCalculation(paramsToUse as SimulationParams, userProfile, matchedBankInOffers, sessionData);
             }
             
@@ -1109,7 +1109,6 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             const matchedCachedBank = cachedBankRules.find(b => checkBankMatch(b.name, cleanMsg));
             if (matchedCachedBank) {
                 console.log(`[Gutto] User selected bank ${matchedCachedBank.name} from previous calculation.`);
-                const paramsToUse = lastExtracted || sessionData.extractedParams || {};
                 return await doCalculation(paramsToUse as SimulationParams, userProfile, matchedCachedBank.name, sessionData);
             }
         }

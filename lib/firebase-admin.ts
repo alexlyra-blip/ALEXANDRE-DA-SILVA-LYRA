@@ -3,6 +3,7 @@ import admin from 'firebase-admin';
 let adminApp: admin.app.App | null = null;
 
 let initError: string | null = null;
+let dbInstance: admin.firestore.Firestore | null = null;
 
 export function getAdminApp() {
   if (adminApp) return adminApp;
@@ -99,10 +100,11 @@ export const getInitializationError = () => initError;
 export const getAdminDb = () => {
   const app = getAdminApp();
   if (!app) return null;
-  
-  // O Admin SDK usa o banco (default) por padrão ao chamar firestore().
-  // Isso atende à solicitação de usar o banco padrão em southamerica-east1.
-  return admin.firestore();
+  if (!dbInstance) {
+    dbInstance = admin.firestore(app);
+    dbInstance.settings({ ignoreUndefinedProperties: true });
+  }
+  return dbInstance;
 };
 
 export const getAdminAuth = () => {
