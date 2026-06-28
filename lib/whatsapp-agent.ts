@@ -1377,7 +1377,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         ];
 
         const result = await ai.models.generateContent({
-            model: "gemini-1.5-flash",
+            model: "gemini-2.5-flash",
             contents,
             config: { systemInstruction: sysInst, tools: [{ functionDeclarations: [calculateLoanOffersTool] }] }
         });
@@ -1401,6 +1401,9 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
 
         const text = parts.find((p: any) => p.text)?.text || (result as any).text;
         let finalReply = text || "Como posso ajudar na sua simulação hoje?";
+        
+        // Strip the hallucinated "model" string from the end of Gemini's response
+        finalReply = finalReply.replace(/\s+model$/i, '').trim();
         
         if (isFirstMessage) {
             const userName = sessionData.pushName || userProfile.name || '';
