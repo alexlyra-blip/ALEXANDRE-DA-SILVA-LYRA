@@ -1333,7 +1333,7 @@ REGRA CRÍTICA ABSOLUTA: Faça APENAS UMA pergunta por vez. Nunca pergunte dois 
 DADOS JÁ COLETADOS ATÉ AGORA (Nunca pergunte estes novamente!):
 ${dataSummary || 'Nenhum dado coletado ainda.'}
 
-VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EXATA ABAIXO. IMPORTANTE: Se o cliente iniciar a conversa (ex: "olá", "oi"), comece imediatamente o atendimento perguntando o Convênio (Passo 1). Nunca pergunte se ele deseja fazer uma simulação, apenas inicie o fluxo diretamente!
+VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EXATA ABAIXO. IMPORTANTE: Só inicie a coleta do Convênio (Passo 1) SE O CLIENTE CONFIRMAR QUE QUER FAZER UMA SIMULAÇÃO! Se for a primeira mensagem (ex: "olá"), você DEVE perguntar exatamente assim: "Pode me informar se quer fazer uma nova simulação ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: 'Regras do Bradesco' ou 'Tabelas do C6'! 😊" e aguarde a resposta do usuário.
 1. Convênio (INSS, SIAPE, Governo, Forças Armadas ou CLT Privado)
    - IMPORTANTE: Para pedir o convênio, use EXATAMENTE a frase: "Para iniciarmos a sua simulação personalizada e rápida, por favor, me informe qual é o seu convênio: 👇" e liste as opções abaixo:
      👉 **INSS**
