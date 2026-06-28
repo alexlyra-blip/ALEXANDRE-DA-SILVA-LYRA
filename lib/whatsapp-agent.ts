@@ -603,7 +603,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
 
         const offers = calculateOffers(params, banks, rules, pp, pi, userProfile, sd?.nonPortableBanks || [], sd?.blockedBanks || []);
         console.log(`[Gutto] Total Offers: ${offers.length}`);
-        sessionData.allOffers = offers; // Guaranty we save them so user can ask for another bank later
+        sessionData.allOffers = JSON.parse(JSON.stringify(offers)); // Guaranty we save them without undefined values
 
 
         if (offers.length === 0) {
@@ -673,15 +673,15 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
         const bankNames = Array.from(new Set(offers.map((o: any) => o.name)));
 
         if (top) {
-            sessionData.lastOffers = sortedOffers;
-            sessionData.allOffers = offers;
+            sessionData.lastOffers = JSON.parse(JSON.stringify(sortedOffers));
+            sessionData.allOffers = JSON.parse(JSON.stringify(offers));
             sessionData.lastOfertadoBank = top.name;
         }
 
         try {
             await db.collection('simulations').doc(generateUUID()).set({
-                userId: userProfile.uid || 'bot', userName: userProfile.name || 'WhatsApp',
-                userAvatar: userProfile.logoUrl || userProfile.avatarUrl || '',
+                userId: userProfile.uid || userProfile.id || 'bot', userName: userProfile.name || 'WhatsApp',
+                userAvatar: userProfile.logoUrl || userProfile.avatarUrl || userProfile.photoUrl || userProfile.photoURL || '',
                 convenio: params.convenio, bancoAtual: params.bancoAtual, valorParcela: params.valorParcela,
                 saldoDevedor: params.saldoDevedor, selectedOffer: top, topOffer: top?.name || '',
                 topOfferContrato: top?.valorContrato || 0, topOfferTroco: top?.valorTroco || 0,
@@ -698,7 +698,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
     }
 }
 
-async function internalProcessWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserId: string = '') {
+async function internalProcessWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserIdOrProfile: any = null) {
     const ai = getAI();
     await loadRules();
 
@@ -710,9 +710,11 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     let userProfile = { role: 'admin' } as any;
     const db = getAdminDb();
     if (db) {
-        if (webUserId) {
+        if (webUserIdOrProfile && typeof webUserIdOrProfile === 'object') {
+            userProfile = webUserIdOrProfile;
+        } else if (webUserIdOrProfile && typeof webUserIdOrProfile === 'string') {
             try {
-                const userDoc = await db.collection('users').doc(webUserId).get();
+                const userDoc = await db.collection('users').doc(webUserIdOrProfile).get();
                 if (userDoc.exists) {
                     userProfile = { uid: userDoc.id, ...userDoc.data() };
                 }
@@ -799,7 +801,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                                 sd?.blockedBanks || []
                             );
                             if (recalcOffers.length > 0) {
-                                sessionData.allOffers = recalcOffers;
+                                sessionData.allOffers = JSON.parse(JSON.stringify(recalcOffers));
                                 lastOffers = recalcOffers;
                                 
                                 if (simDoc.topOffer) {
@@ -1131,7 +1133,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     if (hasAllRequired(extracted)) {
         console.log(`[Gutto] All required data present! Performing simulation...`);
         const res = await doCalculation(extracted as SimulationParams, userProfile, undefined, sessionData);
-        sessionData.lastExtractedParams = { ...extracted }; // Salva no histórico da sessão
+        sessionData.lastExtractedParams = JSON.parse(JSON.stringify(extracted)); // Salva no histórico da sessão
         sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
         return res;
     }
@@ -1389,7 +1391,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
             // Mescla com lastExtractedParams para usar os dados que a IA omitiu
             const mergedParams = { ...(sessionData.lastExtractedParams || {}), ...params };
             
-            sessionData.lastExtractedParams = { ...mergedParams };
+            sessionData.lastExtractedParams = JSON.parse(JSON.stringify(mergedParams));
             sessionData.extractedParams = {};
             return await doCalculation(mergedParams, userProfile, params.targetBankName, sessionData);
         }
@@ -1406,7 +1408,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         console.error("Agent Error:", error);
         if (hasAllRequired(extracted)) {
             const res = await doCalculation(extracted as SimulationParams, userProfile, undefined, sessionData);
-            sessionData.lastExtractedParams = { ...extracted }; // Salva no histórico da sessão
+            sessionData.lastExtractedParams = JSON.parse(JSON.stringify(extracted)); // Salva no histórico da sessão
             sessionData.extractedParams = {}; // Limpa parâmetros pós-sucesso
             return res;
         }
@@ -1459,7 +1461,7 @@ function dedupBanks(rawBanks: any[]): any[] {
     return Array.from(seenKeys.values());
 }
 
-export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserId: string = ''): Promise<string> {
-    const rawResult = await internalProcessWhatsAppMessage(message, history, currentPhone, sessionData, webUserId);
+export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserIdOrProfile: any = null): Promise<string> {
+    const rawResult = await internalProcessWhatsAppMessage(message, history, currentPhone, sessionData, webUserIdOrProfile);
     return formatForWhatsApp(rawResult);
 }
