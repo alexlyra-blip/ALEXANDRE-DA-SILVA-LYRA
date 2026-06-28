@@ -1076,7 +1076,9 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         sessionData.allOffers = [];
         
         console.log(`[Gutto] Resetting session parameters and generating new protocol: ${sessionData.protocolNumber}`);
-        return `🔄 *Tudo pronto!* Encerrei o protocolo anterior e reiniciei a nossa simulação.\n\nO seu novo protocolo de atendimento é: *${sessionData.protocolNumber}*.\n\nPara iniciarmos a sua simulação personalizada e rápida, por favor, me informe qual é o seu **convênio**: 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**`;
+        const userName = sessionData.pushName || userProfile.name || '';
+        const greetingName = userName ? `Olá ${userName}, ` : 'Olá, ';
+        return `${greetingName}👋 Eu sou o Gutto, especialista em portabilidade de crédito consignado. 🤖✨\n\nO seu protocolo de atendimento é: *${sessionData.protocolNumber}*.\n\nPodemos seguir para uma nova simulação de portabilidade? Ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: "Regras do Bradesco" ou "Tabelas do C6"!, Ou se quiser tirar apenas uma dúvida é so falar 🤝💼`;
     } else {
         const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
         
@@ -1375,7 +1377,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         ];
 
         const result = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
+            model: "gemini-1.5-flash",
             contents,
             config: { systemInstruction: sysInst, tools: [{ functionDeclarations: [calculateLoanOffersTool] }] }
         });
