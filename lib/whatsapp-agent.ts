@@ -1333,9 +1333,9 @@ REGRA CRÍTICA ABSOLUTA: Faça APENAS UMA pergunta por vez. Nunca pergunte dois 
 DADOS JÁ COLETADOS ATÉ AGORA (Nunca pergunte estes novamente!):
 ${dataSummary || 'Nenhum dado coletado ainda.'}
 
-VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EXATA ABAIXO. IMPORTANTE: Só inicie esta coleta de dados SE O CLIENTE CONFIRMAR QUE QUER FAZER UMA SIMULAÇÃO!
+VOCÊ DEVE IDENTIFICAR O PRÓXIMO DADO QUE FALTA E PERGUNTAR SEGUINDO A ORDEM EXATA ABAIXO. IMPORTANTE: Se o cliente iniciar a conversa (ex: "olá", "oi"), comece imediatamente o atendimento perguntando o Convênio (Passo 1). Nunca pergunte se ele deseja fazer uma simulação, apenas inicie o fluxo diretamente!
 1. Convênio (INSS, SIAPE, Governo, Forças Armadas ou CLT Privado)
-   - IMPORTANTE: Para pedir o convênio, use EXATAMENTE a frase: "Para iniciarmos a sua simulação personalizada e rápida, por favor, me informe qual é o seu convênio? 👇" e liste as opções abaixo:
+   - IMPORTANTE: Para pedir o convênio, use EXATAMENTE a frase: "Para iniciarmos a sua simulação personalizada e rápida, por favor, me informe qual é o seu convênio: 👇" e liste as opções abaixo:
      👉 **INSS**
      👉 **SIAPE**
      👉 **GOVERNO**
@@ -1375,7 +1375,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         ];
 
         const result = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.0-flash",
             contents,
             config: { systemInstruction: sysInst, tools: [{ functionDeclarations: [calculateLoanOffersTool] }] }
         });
