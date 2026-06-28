@@ -340,7 +340,7 @@ export default function Recomendacoes() {
       ).join('\n');
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         contents: `Você é um assistente técnico especializado para corretores de crédito consignado. 
         Sua tarefa é gerar um resumo técnico e persuasivo de uma simulação de portabilidade para que o corretor envie ao seu parceiro ou cliente final, mas com foco na clareza PROFISSIONAL.
 

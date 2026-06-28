@@ -91,8 +91,7 @@ const calculateLoanOffersTool = {
             negativeCardValue: { type: Type.NUMBER, description: "Card discount" },
             taxaJurosMensal: { type: Type.NUMBER, description: "Client's current contract interest rate as percentage (e.g. 1.59). Optional." },
             targetBankName: { type: Type.STRING, description: "Optional explicit bank name requested by the user for the new simulation (e.g., 'Facta', 'Bradesco'). Only fill this if the user explicitly asks to see the simulation in a specific bank." }
-        },
-        required: ["convenio"]
+        required: ["convenio", "idade", "bancoAtual", "valorParcela", "saldoDevedor", "prazoTotal", "parcelasRestantes"]
     }
 };
 
@@ -1050,9 +1049,14 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     let extracted = sessionData.extractedParams || {};
     let lastExtracted = sessionData.lastExtractedParams;
 
-    // Resetar parâmetros se palavras-chave de reinício forem encontradas
-    const restartKeywords = ['simular', 'nova simulação', 'começar', 'reiniciar', 'iniciar', 'resetar'];
-    const isRestart = restartKeywords.some(kw => lower.includes(kw));
+    // Resetar parâmetros se palavras‑chave de reinício forem encontradas
+    // ou se o usuário indicar um novo convênio após terminar a simulação.
+    const restartKeywords = ['simular', 'nova simulação', 'começar', 'reiniciar', 'iniciar', 'resetar', 'olá', 'ola', 'oi', 'hello'];
+    const convenioKeywords = ['inss', 'siape', 'governo', 'forças armadas', 'clt'];
+    const isRestart = restartKeywords.some(kw => lower.includes(kw)) ||
+        (sessionData.status === 'finished' && convenioKeywords.some(kw => lower.includes(kw)));
+
+
 
     if (isRestart) {
         extracted = {};
@@ -1367,7 +1371,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         ];
 
         const result = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
+            model: "gemini-2.5-flash",
             contents,
             config: { systemInstruction: sysInst, tools: [{ functionDeclarations: [calculateLoanOffersTool] }] }
         });
