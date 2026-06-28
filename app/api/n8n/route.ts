@@ -109,23 +109,29 @@ export async function POST(req: NextRequest) {
     ];
 
     try {
-      if (responseText.includes('[END_SESSION]')) {
-        // Salva o histórico no arquivo permanente antes de resetar (end session explicit)
-        await adminDb.collection('whatsappHistory').add({
-          phone: senderNumber,
-          userId: auth.user?.id || null,
-          userName: auth.user?.name || 'User',
-          userPhotoURL: auth.user?.avatarUrl || auth.user?.photoUrl || auth.user?.photoURL || null,
-          protocolNumber: sessionData.protocolNumber,
-          history: updatedHistory,
-          createdAt: now,
-          status: 'finished'
-        });
-        await sessionRef.set({ ...sessionData, history: [], lastUpdate: now, status: 'finished' });
-        responseText = responseText.replace('[END_SESSION]', '').trim();
-      } else {
-        await sessionRef.set({ ...sessionData, history: updatedHistory, lastUpdate: now });
-      }
+        // Firestore rejects NaN values, so we sanitize the object before saving
+        const sanitizedSessionData = JSON.parse(JSON.stringify(sessionData, (key, value) => {
+          if (typeof value === 'number' && Number.isNaN(value)) return null;
+          return value;
+        }));
+
+        if (responseText.includes('[END_SESSION]')) {
+          // Salva o histórico no arquivo permanente antes de resetar (end session explicit)
+          await adminDb.collection('whatsappHistory').add({
+            phone: senderNumber,
+            userId: auth.user?.id || null,
+            userName: auth.user?.name || 'User',
+            userPhotoURL: auth.user?.avatarUrl || auth.user?.photoUrl || auth.user?.photoURL || null,
+            protocolNumber: sessionData.protocolNumber,
+            history: updatedHistory,
+            createdAt: now,
+            status: 'finished'
+          });
+          await sessionRef.set({ ...sanitizedSessionData, history: [], lastUpdate: now, status: 'finished' });
+          responseText = responseText.replace('[END_SESSION]', '').trim();
+        } else {
+          await sessionRef.set({ ...sanitizedSessionData, history: updatedHistory, lastUpdate: now });
+        }
     } catch (e: any) {
       console.error("Erro ao salvar sessão (n8n):", e.message);
     }

@@ -1391,8 +1391,13 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
             const params = fc.functionCall.args as any;
             console.log("[Gutto] AI calling calculation:", params);
             
-            // Mescla com lastExtractedParams para usar os dados que a IA omitiu
-            const mergedParams = { ...(sessionData.lastExtractedParams || {}), ...params };
+            // Mescla com lastExtractedParams garantindo que null/undefined/'' da IA não sobrescreva os dados reais já coletados
+            const mergedParams = { ...(sessionData.lastExtractedParams || {}) };
+            for (const key of Object.keys(params)) {
+                if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+                    mergedParams[key] = params[key];
+                }
+            }
             
             sessionData.lastExtractedParams = JSON.parse(JSON.stringify(mergedParams));
             sessionData.extractedParams = {};
