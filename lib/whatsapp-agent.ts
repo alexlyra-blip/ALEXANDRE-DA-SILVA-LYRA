@@ -1376,6 +1376,17 @@ Você DEVE coletar o Saldo Devedor do cliente na pergunta 11. REGRA ABSOLUTA: Fa
 Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas respostas do usuário (incluindo o saldo devedor real), chame a ferramenta apropriada imediatamente para exibir os resultados das ofertas.`;
 
     try {
+        const words = cleanMsg.split(/\s+/);
+        if (words.length <= 3 && sessionData.status !== 'finished' && lastExtracted && Object.keys(lastExtracted).length > 0) {
+            const matchedBank = cachedBankRules.find(b => checkBankMatch(b.name, cleanMsg));
+            if (matchedBank) {
+                console.log(`[Gutto] CATCH-ALL: User typed just bank name '${matchedBank.name}'. Forcing calculation to bypass LLM.`);
+                const p = sessionData.extractedParams || {};
+                const merged = { ...lastExtracted, ...p };
+                return await doCalculation(merged as SimulationParams, userProfile, matchedBank.name, sessionData);
+            }
+        }
+
         const contents = [
             ...history.slice(-16).map(h => ({ role: h.role === 'user' ? 'user' as const : 'model' as const, parts: [{ text: h.content }] })),
             { role: "user" as const, parts: [{ text: message }] }
