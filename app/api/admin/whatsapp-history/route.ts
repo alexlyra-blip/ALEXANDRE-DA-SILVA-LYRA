@@ -52,12 +52,17 @@ export async function GET(req: NextRequest) {
           let createdAt: Date;
           if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
             createdAt = data.createdAt.toDate();
+          } else if (data.createdAt._seconds) {
+            createdAt = new Date(data.createdAt._seconds * 1000);
           } else {
             createdAt = new Date(data.createdAt);
           }
           
           if (!isNaN(createdAt.getTime())) {
-            const docDateStr = createdAt.toISOString().split('T')[0];
+            // Formata a data em pt-BR usando o timezone do Brasil para a filtragem local
+            const ptBrFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+            const parts = ptBrFormatter.formatToParts(createdAt);
+            const docDateStr = `${parts.find(p => p.type === 'year')?.value}-${parts.find(p => p.type === 'month')?.value}-${parts.find(p => p.type === 'day')?.value}`;
             
             // Single date filter
             if (dateStr && docDateStr !== dateStr) {
@@ -74,12 +79,12 @@ export async function GET(req: NextRequest) {
               createdAt: createdAt.toISOString()
             });
           } else {
-            // Invalid date, just push without filtering
-            history.push({ id: doc.id, ...data });
+            // Invalid date, try to fallback to document creation fallback
+            history.push({ id: doc.id, ...data, createdAt: new Date().toISOString() });
           }
         } else {
-          // No createdAt field, just push
-          history.push({ id: doc.id, ...data });
+          // No createdAt field, fallback to now to avoid frontend crash
+          history.push({ id: doc.id, ...data, createdAt: new Date().toISOString() });
         }
       } catch (err) {
         console.error(`Erro ao processar doc ${doc.id}:`, err);
