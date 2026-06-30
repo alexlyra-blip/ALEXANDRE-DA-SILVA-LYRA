@@ -109,6 +109,9 @@ export async function POST(req: NextRequest) {
     ];
 
     try {
+        // Remove extremely large data arrays to prevent Firestore 1MB limit crashes
+        delete sessionData.allOffers;
+
         // Firestore rejects NaN values, so we sanitize the object before saving
         const sanitizedSessionData = JSON.parse(JSON.stringify(sessionData, (key, value) => {
           if (typeof value === 'number' && Number.isNaN(value)) return null;
