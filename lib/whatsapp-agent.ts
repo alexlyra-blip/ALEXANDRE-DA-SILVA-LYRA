@@ -1054,9 +1054,15 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
     // Resetar parâmetros se palavras‑chave de reinício forem encontradas
     // ou se o usuário indicar um novo convênio após terminar a simulação.
-    const restartKeywords = ['simular', 'nova simulação', 'começar', 'reiniciar', 'iniciar', 'resetar', 'olá', 'ola', 'oi', 'hello'];
-    const convenioKeywords = ['inss', 'siape', 'governo', 'forças armadas', 'clt'];
-    const isRestart = restartKeywords.some(kw => lower.includes(kw)) ||
+    const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
+    
+    // Apenas reiniciar se for explicitamente solicitado, ou se for uma saudação isolada no meio da conversa
+    const explicitRestart = ['reiniciar', 'resetar', 'cancelar simulação', 'cancelar simulacao', 'recomeçar', 'recomecar'];
+    const exactGreetings = ['ola', 'oi', 'hello', 'bom dia', 'boa tarde', 'boa noite'];
+    const convenioKeywords = ['inss', 'siape', 'governo', 'forças armadas', 'forcas armadas', 'clt'];
+    
+    const isRestart = explicitRestart.some(kw => lower.includes(kw)) ||
+        exactGreetings.includes(cleanMsg) ||
         (sessionData.status === 'finished' && convenioKeywords.some(kw => lower.includes(kw)));
 
 
@@ -1080,8 +1086,6 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         const greetingName = userName ? `Olá ${userName}, ` : 'Olá, ';
         return `${greetingName}👋 Eu sou o Gutto, especialista em portabilidade de crédito consignado. 🤖✨\n\nO seu protocolo de atendimento é: *${sessionData.protocolNumber}*.\n\nPodemos seguir para uma nova simulação de portabilidade? Ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: "Regras do C6" ou "Tabelas do Daycoval"!, Ou se quiser tirar apenas uma dúvida é so falar 🤝💼`;
     } else {
-        const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
-        
         // Se a simulação acabou de ser feita e o usuário está apenas agradecendo/concordando
         if (lastExtracted && Object.keys(extracted).length === 0) {
             const endWords = ['obrigado', 'obrigada', 'valeu', 'obg', 'tchau', 'agradeço', 'perfeito', 'ok', 'certo', 'joia', 'entendi', 'ótimo', 'otimo', 'bom', 'show', 'top', 'legal'];
