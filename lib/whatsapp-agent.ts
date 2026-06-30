@@ -898,10 +898,9 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     const isThanks = thanksKeywords.some(kw => lower.includes(kw));
 
     if (isThanks && wasLastMsgSimulation) {
-        sessionData.history = []; // Clear completely
         sessionData.extractedParams = {}; 
         sessionData.lastExtractedParams = null;
-        return `Por nada! 😊 Fico extremamente feliz em ajudar na sua busca pelas melhores taxas.\n\nEstou à sua total disposição sempre que precisar de uma nova simulação ou tirar dúvidas sobre portabilidade. Tenha um excelente dia e ótimos negócios! 🚀💼`;
+        return `Por nada! 😊 Fico extremamente feliz em ajudar na sua busca pelas melhores taxas.\n\nEstou à sua total disposição sempre que precisar de uma nova simulação ou tirar dúvidas sobre portabilidade. Tenha um excelente dia e ótimos negócios! 🚀💼\n[END_SESSION]`;
     }
 
     // Interceptar consulta específica de tabelas de um determinado banco (ex: "tabelas do C6", "tabelas Daycoval")
