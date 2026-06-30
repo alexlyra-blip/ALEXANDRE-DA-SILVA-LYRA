@@ -47,25 +47,44 @@ export async function GET(req: NextRequest) {
     snapshot.forEach((doc: any) => {
       const data = doc.data();
       
-      if (data.createdAt) {
-        const createdAt = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-        const docDateStr = createdAt.toISOString().split('T')[0];
-        
-        // Single date filter
-        if (dateStr && docDateStr !== dateStr) {
-          return;
+      try {
+        if (data.createdAt) {
+          let createdAt: Date;
+          if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+            createdAt = data.createdAt.toDate();
+          } else {
+            createdAt = new Date(data.createdAt);
+          }
+          
+          if (!isNaN(createdAt.getTime())) {
+            const docDateStr = createdAt.toISOString().split('T')[0];
+            
+            // Single date filter
+            if (dateStr && docDateStr !== dateStr) {
+              return;
+            }
+            
+            // Period filter
+            if (startDateStr && docDateStr < startDateStr) return;
+            if (endDateStr && docDateStr > endDateStr) return;
+            
+            history.push({
+              id: doc.id,
+              ...data,
+              createdAt: createdAt.toISOString()
+            });
+          } else {
+            // Invalid date, just push without filtering
+            history.push({ id: doc.id, ...data });
+          }
+        } else {
+          // No createdAt field, just push
+          history.push({ id: doc.id, ...data });
         }
-        
-        // Period filter
-        if (startDateStr && docDateStr < startDateStr) return;
-        if (endDateStr && docDateStr > endDateStr) return;
+      } catch (err) {
+        console.error(`Erro ao processar doc ${doc.id}:`, err);
+        history.push({ id: doc.id, ...data });
       }
-      
-      history.push({
-        id: doc.id,
-        ...data,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt
-      });
     });
 
     return NextResponse.json({ success: true, data: history });
