@@ -487,7 +487,7 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
 }
 
 function hasAllRequired(d: any): boolean {
-    if (!d.convenio || !d.idade || !d.bancoAtual || !d.valorParcela || !d.saldoDevedor || !d.prazoTotal || !d.parcelasRestantes) {
+    if (!d.convenio || !d.idade || !d.valorParcela || !d.saldoDevedor || !d.prazoTotal || !d.parcelasRestantes) {
         return false;
     }
     if (d.convenio === 'INSS') {
@@ -1297,6 +1297,7 @@ SOBRE PROTOCOLO DE ATENDIMENTO E ENCERRAMENTO:
 
 SOBRE SIMULAR EM OUTRO BANCO APÓS A PRIMEIRA SIMULAÇÃO (REGRA DE OURO MÁXIMA):
 - Se o usuário JÁ realizou uma simulação com sucesso e, na sequência, apenas digitar o nome de um banco (ex: "Havecred", "Pan", "Itaú") ou pedir para ver a oferta dele, isso significa que ele quer RECÁLCULO. Você DEVE IMEDIATAMENTE E OBRIGATORIAMENTE chamar a ferramenta \`calculate_client_loan_offers\` informando este nome no campo "targetBankName". 
+- É ESTRITAMENTE PROIBIDO fazer qualquer pergunta adicional (nem mesmo o Saldo Devedor) se o usuário apenas pedir para simular em outro banco. Chame a ferramenta imediatamente!
 - NUNCA, SOB HIPÓTESE ALGUMA, responda com o roteiro de regras se o cliente está claramente em um fluxo de simulação ou pedindo "e no banco X". O resumo só serve se o cliente explicitamente pedir: "Quais as regras do banco X?" ou "Me passe o roteiro do banco Y". Se ele só digitar o nome, CHAME A FERRAMENTA!
 
 SOBRE REGRAS, ROTEIROS OU RESUMOS DE PORTABILIDADE (USAR APENAS SE EXPLICITAMENTE SOLICITADO):
