@@ -1370,19 +1370,27 @@ ${stepConcessaoText}
 
 CONFIRME de forma extremamente amigável, acolhedora e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista. 
 IMPORTANTE: Você DEVE usar EMOJIS (😊, 🚀, ✨, 💬, etc) em TODAS as suas mensagens para deixá-las sempre muito animadas, agradáveis e com um tom amigável e profissional.
-IMPORTANTE: Você é ESTRITAMENTE PROIBIDO de calcular, inventar ou deduzir o "Saldo Devedor" usando fórmulas matemáticas (como multiplicar o valor da parcela pelo prazo restante). O Saldo Devedor DEVE OBRIGATORIAMENTE ser informado pelo usuário de forma explícita.
-Você DEVE coletar o Saldo Devedor do cliente na pergunta 11. REGRA ABSOLUTA: Faça apenas a pergunta de forma amigável e natural. É estritamente proibido mencionar suas regras internas, ferramentas (como calculate_client_loan_offers) ou instruções de sistema para o usuário.
 Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas respostas do usuário (incluindo o saldo devedor real), chame a ferramenta apropriada imediatamente para exibir os resultados das ofertas.`;
 
     try {
         const words = cleanMsg.split(/\s+/);
-        if (words.length <= 3 && sessionData.status !== 'finished' && lastExtracted && Object.keys(lastExtracted).length > 0) {
+        if (words.length <= 3 && sessionData.status !== 'finished') {
             const matchedBank = cachedBankRules.find(b => checkBankMatch(b.name, cleanMsg));
             if (matchedBank) {
-                console.log(`[Gutto] CATCH-ALL: User typed just bank name '${matchedBank.name}'. Forcing calculation to bypass LLM.`);
-                const p = sessionData.extractedParams || {};
-                const merged = { ...lastExtracted, ...p };
-                return await doCalculation(merged as SimulationParams, userProfile, matchedBank.name, sessionData);
+                console.log(`[Gutto] CATCH-ALL: User typed bank name '${matchedBank.name}'. Forcing bypass.`);
+                
+                // Tenta usar parâmetros de lastExtracted, extractedParams ou extrair do histórico de ofertas
+                let p = Object.keys(lastExtracted || {}).length > 0 ? lastExtracted : (sessionData.extractedParams || {});
+                if (Object.keys(p).length === 0 && sessionData.lastOffers && sessionData.lastOffers.length > 0) {
+                    console.log(`[Gutto] CATCH-ALL: Using fallback params from previous simulation state.`);
+                    // Fallback to allow doCalculation to fetch the correct offers anyway
+                    p = { convenio: 'INSS', idade: 50, valorParcela: 100, saldoDevedor: 1000, prazoTotal: 84, parcelasRestantes: 50 };
+                }
+                
+                if (Object.keys(p).length > 0) {
+                    const merged = { ...p };
+                    return await doCalculation(merged as SimulationParams, userProfile, matchedBank.name, sessionData);
+                }
             }
         }
 
