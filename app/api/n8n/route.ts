@@ -62,18 +62,11 @@ export async function POST(req: NextRequest) {
         const lastUpdateDate = sessionData.lastUpdate.toDate ? sessionData.lastUpdate.toDate() : new Date(sessionData.lastUpdate);
         const diffMinutes = (now.getTime() - lastUpdateDate.getTime()) / (1000 * 60);
         if (diffMinutes > 20 && sessionData.status !== 'finished') {
-          // Salva o histórico no arquivo permanente antes de resetar (timeout)
-          if (sessionData.history && sessionData.history.length > 0) {
-            await adminDb.collection('whatsappHistory').add({
-              phone: senderNumber,
-              userId: auth.user?.id || null,
-              userName: auth.user?.name || 'User',
-              userPhotoURL: auth.user?.avatarUrl || auth.user?.photoUrl || auth.user?.photoURL || null,
-              protocolNumber: sessionData.protocolNumber,
-              history: sessionData.history,
-              createdAt: now,
-              status: 'timeout'
-            });
+          if (sessionData.history && sessionData.history.length > 0 && sessionData.protocolNumber) {
+            await adminDb.collection('whatsappHistory').doc(sessionData.protocolNumber).set({
+              status: 'timeout',
+              updatedAt: now
+            }, { merge: true });
           }
           sessionData.history = []; // Reset session
           sessionData.extractedParams = {}; // Wipe parameters so we start completely fresh
@@ -118,22 +111,26 @@ export async function POST(req: NextRequest) {
           return value;
         }));
 
-        if (responseText.includes('[END_SESSION]')) {
-          // Salva o histórico no arquivo permanente antes de resetar (end session explicit)
-          await adminDb.collection('whatsappHistory').add({
-            phone: senderNumber,
-            userId: auth.user?.id || null,
-            userName: auth.user?.name || 'User',
-            userPhotoURL: auth.user?.avatarUrl || auth.user?.photoUrl || auth.user?.photoURL || null,
-            protocolNumber: sessionData.protocolNumber,
-            history: updatedHistory,
-            createdAt: now,
-            status: 'finished'
-          });
+        const isEndSession = responseText.includes('[END_SESSION]');
+        
+        // Sempre salva o histórico no arquivo permanente em tempo real
+        await adminDb.collection('whatsappHistory').doc(sessionData.protocolNumber).set({
+          phone: senderNumber,
+          userId: auth.user?.id || null,
+          userName: auth.user?.name || 'User',
+          userPhotoURL: auth.user?.avatarUrl || auth.user?.photoUrl || auth.user?.photoURL || null,
+          protocolNumber: sessionData.protocolNumber,
+          history: updatedHistory,
+          createdAt: sessionData.createdAt || now,
+          updatedAt: now,
+          status: isEndSession ? 'finished' : 'active'
+        }, { merge: true });
+
+        if (isEndSession) {
           await sessionRef.set({ ...sanitizedSessionData, history: [], lastUpdate: now, status: 'finished' });
           responseText = responseText.replace('[END_SESSION]', '').trim();
         } else {
-          await sessionRef.set({ ...sanitizedSessionData, history: updatedHistory, lastUpdate: now });
+          await sessionRef.set({ ...sanitizedSessionData, history: updatedHistory, lastUpdate: now, status: 'active', createdAt: sessionData.createdAt || now });
         }
     } catch (e: any) {
       console.error("Erro ao salvar sessão (n8n):", e.message);
