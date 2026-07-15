@@ -91,7 +91,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                     const formatted = ct.length === 11 ? `(${ct.slice(0,2)}) ${ct.slice(2,7)}-${ct.slice(7)}` : t;
                     return (
                       <div key={idx} className="flex items-center gap-2">
-                        <Crown className="w-4 h-4 text-amber-500" />
+                        <Phone className="w-4 h-4 text-emerald-500" />
                         <span>{formatted}</span>
                       </div>
                     );
@@ -274,14 +274,17 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 const parcelasRestantes = parseInt(emp.ParcelasRestantes || emp.prazo_restante || 0);
                                 const parcelasPagas = emp.ParcelasPagas !== undefined ? parseInt(emp.ParcelasPagas) : Math.max(0, prazoTotal - parcelasRestantes);
                                 const taxa = emp.Taxa || emp.taxa || 0;
-                                const valorOrigin = emp.ValorEmprestado || emp.ValorContrato || emp.ValorFinanciado || emp.ValorLiberado || emp.SaldoDevedor || emp.saldo || 0;
+                                
+                                const valorOriginAPI = emp.ValorEmprestado || emp.ValorContrato || emp.ValorFinanciado || emp.ValorLiberado || emp.SaldoDevedor || emp.saldo || 0;
+                                const valorOriginCalc = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), prazoTotal, taxa);
+                                const valorOrigin = parseFloat(valorOriginAPI) > 0 ? parseFloat(valorOriginAPI) : valorOriginCalc;
                                 
                                 const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
                                 return (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                                   <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap flex items-center gap-2">
-                                    <Crown className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                                    <Landmark className="w-4 h-4 text-primary flex-shrink-0" />
                                     <span>{getBancoName(emp.Banco)}</span>
                                   </td>
                                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{emp.Contrato || 'N/A'}</td>

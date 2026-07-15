@@ -206,14 +206,18 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         return;
       }
       
-      const valorOrigin = contractData.ValorEmprestado || contractData.ValorContrato || contractData.ValorFinanciado || contractData.ValorLiberado || contractData.SaldoDevedor || contractData.saldo || 0;
+      const taxa = contractData.Taxa || contractData.taxa || 0;
+      const prazoTotalCalc = parseInt(contractData.Prazo || contractData.parcelas || 0);
+      const valorOriginCalc = (contractData.ValorParcela && prazoTotalCalc && taxa) ? (parseFloat(contractData.ValorParcela) * ((1 - Math.pow(1 + (parseFloat(taxa.toString().replace('%','').replace(',','.'))/100), -prazoTotalCalc)) / (parseFloat(taxa.toString().replace('%','').replace(',','.'))/100))) : 0;
+      
+      const valorOrigin = contractData.ValorEmprestado || contractData.ValorContrato || contractData.ValorFinanciado || contractData.ValorLiberado || contractData.SaldoDevedor || contractData.saldo || valorOriginCalc || 0;
       
       const newContractInfo = {
         bancoAtual: getBancoName(contractData.Banco) || '',
         valorParcela: contractData.ValorParcela ? contractData.ValorParcela.toString() : '',
-        prazoTotal: (contractData.Prazo || contractData.parcelas || '').toString(),
+        prazoTotal: prazoTotalCalc ? prazoTotalCalc.toString() : '',
         parcelasRestantes: (contractData.ParcelasRestantes || contractData.prazo_restante || '').toString(),
-        saldoDevedor: valorOrigin.toString(),
+        saldoDevedor: (Math.floor(parseFloat(valorOrigin.toString()) * 100) / 100).toString(),
       };
       
       setAddedContractsIds([...addedContractsIds, hash]);
@@ -1057,8 +1061,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                               }}
                               onChange={(e) => setSearchTermBank(e.target.value)}
                               onKeyDown={handleKeyDownBank}
-                            />
-                            <Crown className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500 w-5 h-5 pointer-events-none" />
+                            <Landmark className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5 pointer-events-none" />
                             <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-transform duration-200 ${isDropdownOpenBank && dropdownBankIndex === index ? 'rotate-180' : ''}`} />
                           </div>
 
@@ -1098,8 +1101,9 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                                               : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                                           }`}
                                         >
-                                          <div className="flex items-center gap-3 truncate">
-                                              <Crown className="w-5 h-5 text-amber-500" />
+                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${contract.bancoAtual === b || activeIndexBank === bIndex ? 'bg-primary/20 text-primary' : 'bg-slate-100 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
+                                              <Landmark className="w-4 h-4" />
+                                            </div>
                                             <span className="truncate pr-4">{b}</span>
                                           </div>
                                           {contract.bancoAtual === b && <Check className="w-4 h-4 shrink-0" />}
