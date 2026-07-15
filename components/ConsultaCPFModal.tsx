@@ -160,9 +160,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 cartoes.forEach((c: any) => totalComprometido += parseFloat(c.ValorParcela || c.Desconto || 0));
 
                 let margemLivre = truncateDecimals(margemConsignavel - totalComprometido);
-                if (margemLivre < 0) margemLivre = 0;
                 
-                const valorLiberado = truncateDecimals(margemLivre / getMarginCoefficient());
+                const valorLiberado = margemLivre > 0 ? truncateDecimals(margemLivre / getMarginCoefficient()) : 0;
 
                 const isBlocked = beneficiario.BloqueadoEmprestimo === "1" || beneficiario.BloqueadoEmprestimo === true;
                 const isActive = beneficiario.Situacao === 'Ativo';
@@ -233,9 +232,9 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         <p className="text-xl font-black text-rose-600 dark:text-rose-400">{formatCurrency(totalComprometido)}</p>
                       </div>
 
-                      <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-500/20 text-center">
-                        <p className="text-[10px] uppercase tracking-wider text-emerald-600/80 font-bold mb-1">Margem Livre</p>
-                        <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(margemLivre)}</p>
+                      <div className={`${margemLivre < 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20' : 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20'} rounded-2xl p-4 border text-center`}>
+                        <p className={`text-[10px] uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-600/80' : 'text-emerald-600/80'} font-bold mb-1`}>Margem Livre</p>
+                        <p className={`text-xl font-black ${margemLivre < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
                       </div>
 
                       <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-4 shadow-lg text-center relative overflow-hidden text-white border border-white/10">
@@ -316,7 +315,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           <div key={`rmc-${idx}`} className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 relative overflow-hidden flex flex-col justify-between">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-full blur-2xl"></div>
                             <div className="text-center mb-6 border-b border-slate-100 dark:border-slate-800 pb-3">
-                              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Cartão Pessoal (RMC)</h3>
+                              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Cartão Consignado (RMC)</h3>
                             </div>
                             <div className="grid grid-cols-3 gap-4 text-center">
                               <div>
