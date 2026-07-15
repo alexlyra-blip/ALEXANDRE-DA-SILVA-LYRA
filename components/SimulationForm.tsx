@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { safeStringify } from '@/lib/utils';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import ConsultaCPFModal from '@/components/ConsultaCPFModal';
 
 const getAI = () => {
   let apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
@@ -43,6 +44,13 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [visibleBanksCount, setVisibleBanksCount] = useState(15);
   const [visibleBeneficiosCount, setVisibleBeneficiosCount] = useState(15);
   const [activeContractTab, setActiveContractTab] = useState(0);
+  
+  // Consulta API States
+  const [tipoConsulta, setTipoConsulta] = useState<'inss' | 'siape'>('inss');
+  const [isConsulting, setIsConsulting] = useState(false);
+  const [consultaData, setConsultaData] = useState<any>(null);
+  const [isConsultaModalOpen, setIsConsultaModalOpen] = useState(false);
+  
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const validateCPF = (cpf: string) => {
@@ -102,6 +110,68 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         setActiveContractTab(activeContractTab - 1);
       }
     }
+  };
+
+  const handleConsultaCPF = async () => {
+    if (!isCpfValid) {
+      showToast("Digite um CPF válido primeiro", "error");
+      return;
+    }
+    
+    setIsConsulting(true);
+    const loadingToastId = showToast("Consultando dados na MultiCorban...", "loading", 0);
+    try {
+      const response = await fetch('/api/multicorban/consulta-cpf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ cpf: cpfCliente, type: tipoConsulta })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Falha na consulta');
+      }
+      
+      setConsultaData(data);
+      setIsConsultaModalOpen(true);
+      
+      // Auto-fill some personal data if available
+      const personalInfo = data.dados_pessoais || data.cliente || data;
+      if (personalInfo?.nome && !nomeCliente) setNomeCliente(personalInfo.nome);
+      
+    } catch (error: any) {
+      console.error("Consulta CPF Error:", error);
+      showToast(error.message || "Erro ao consultar CPF. Verifique sua conexão.", "error");
+    } finally {
+      setIsConsulting(false);
+      // @ts-ignore
+      if (window.hideToast) window.hideToast(loadingToastId);
+    }
+  };
+
+  const handleSimulateFromConsulta = (contractData: any) => {
+    setIsConsultaModalOpen(false);
+    
+    // Auto-fill the first contract with data
+    const newContracts = [...contracts];
+    newContracts[0] = {
+      ...newContracts[0],
+      bancoAtual: contractData.bancoAtual || '',
+      valorParcela: contractData.valorParcela ? contractData.valorParcela.toString() : '',
+      prazoTotal: contractData.prazoTotal ? contractData.prazoTotal.toString() : '',
+      parcelasRestantes: contractData.parcelasRestantes ? contractData.parcelasRestantes.toString() : '',
+      saldoDevedor: contractData.saldoDevedor ? contractData.saldoDevedor.toString() : '',
+    };
+    setContracts(newContracts);
+    
+    if (contractData.beneficio && !codigoBeneficio) {
+      setCodigoBeneficio(contractData.beneficio.toString());
+    }
+    
+    showToast("Dados importados para a simulação com sucesso!", "success");
   };
 
   const updateContract = (index: number, fields: Partial<Contract>) => {
@@ -632,6 +702,54 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                       </div>
                     )}
                   </div>
+                  
+                  {/* Multicorban Consulta Area */}
+                  <AnimatePresence>
+                    {isCpfValid && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                        animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                        className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-3 flex flex-col gap-3"
+                      >
+                        <div className="flex flex-col sm:flex-row gap-3 items-center">
+                          <div className="flex-1 w-full flex items-center bg-white dark:bg-slate-900 rounded-lg p-1 border border-primary/10">
+                            <button
+                              type="button"
+                              onClick={() => setTipoConsulta('inss')}
+                              className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${tipoConsulta === 'inss' ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'}`}
+                            >
+                              INSS
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTipoConsulta('siape')}
+                              className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${tipoConsulta === 'siape' ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'}`}
+                            >
+                              SIAPE
+                            </button>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={handleConsultaCPF}
+                            disabled={isConsulting}
+                            className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-primary to-primary-dark hover:from-primary-light hover:to-primary text-white text-xs font-bold rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 min-w-[140px]"
+                          >
+                            {isConsulting ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Search className="w-4 h-4" />
+                            )}
+                            {isConsulting ? 'Consultando...' : 'Consultar Dados'}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-500 text-center sm:text-left flex items-center justify-center sm:justify-start gap-1">
+                          <Crown className="w-3 h-3 text-amber-500" /> Consultar dados na base nacional.
+                        </p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
@@ -1046,6 +1164,13 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
           </div>
         )}
       </AnimatePresence>
+
+      <ConsultaCPFModal
+        isOpen={isConsultaModalOpen}
+        onClose={() => setIsConsultaModalOpen(false)}
+        data={consultaData}
+        onSimulate={handleSimulateFromConsulta}
+      />
 
       {!isEmbedded && (
         <div className="hidden md:flex flex-1 items-center justify-center bg-slate-50 dark:bg-black p-8">
