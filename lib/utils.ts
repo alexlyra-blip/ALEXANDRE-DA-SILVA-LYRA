@@ -53,8 +53,8 @@ export const formatCurrency = (value: number) => {
 
 export const formatCPF = (value: string) => {
   if (!value) return '';
-  return value
-    .replace(/\D/g, '')
+  const cleanValue = value.replace(/\D/g, '').padStart(11, '0');
+  return cleanValue
     .replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d{1,2})/, '$1-$2')

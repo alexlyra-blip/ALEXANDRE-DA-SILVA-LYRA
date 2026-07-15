@@ -1,18 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2 } from 'lucide-react';
+import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone } from 'lucide-react';
 import { formatCurrency, formatCPF } from '@/lib/utils';
+import { getEspecieName, getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ConsultaCPFModalProps {
   isOpen: boolean;
   onClose: () => void;
   data: any; // The raw data from MultiCorban API
-  onSimulate: (contractData: any) => void;
+  addedContractsIds?: string[];
+  onToggleContract?: (contractData: any, action: 'add' | 'remove') => void;
 }
 
-export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: ConsultaCPFModalProps) {
+export default function ConsultaCPFModal({ isOpen, onClose, data, addedContractsIds = [], onToggleContract }: ConsultaCPFModalProps) {
   const [activeTab, setActiveTab] = useState(0);
 
   if (!isOpen || !data) return null;
@@ -27,16 +29,6 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
   const personalInfo = firstBenefit.Beneficiario || {};
   const telefones = Array.isArray(firstBenefit.Telefone) ? firstBenefit.Telefone : (firstBenefit.Telefone ? [firstBenefit.Telefone] : []);
 
-  const handleSimulate = (emprestimo: any, beneficioData: any) => {
-    onSimulate({
-      bancoAtual: emprestimo.Banco || emprestimo.banco || '',
-      valorParcela: emprestimo.ValorParcela || emprestimo.parcela || 0,
-      prazoTotal: emprestimo.Prazo || emprestimo.parcelas || 0,
-      parcelasRestantes: emprestimo.ParcelasRestantes || emprestimo.prazo_restante || 0,
-      saldoDevedor: emprestimo.SaldoDevedor || emprestimo.saldo || 0,
-      beneficio: beneficioData.Beneficiario?.Beneficio || '',
-    });
-  };
 
   const getMarginCoefficient = () => 0.02270;
 
@@ -72,9 +64,9 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
+              <div className="lg:col-span-4 bg-slate-50 dark:bg-slate-900 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nome Completo</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{personalInfo.Nome || 'N/A'}</p>
+                <p className="text-lg md:text-xl font-black text-primary-dark dark:text-primary-light uppercase">{personalInfo.Nome || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">CPF</p>
@@ -82,15 +74,28 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nascimento</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{personalInfo.DataNascimento ? personalInfo.DataNascimento.split('-').reverse().join('/') : 'N/A'}</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">
+                  {personalInfo.DataNascimento ? personalInfo.DataNascimento.split('-').reverse().join('/') : 'N/A'}
+                  {personalInfo.DataNascimento && (
+                    <span className="text-slate-500 text-sm ml-2 font-normal">
+                      ({Math.floor((new Date().getTime() - new Date(personalInfo.DataNascimento).getTime()) / 31557600000)} anos)
+                    </span>
+                  )}
+                </p>
               </div>
-              <div>
+              <div className="lg:col-span-2">
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Telefone</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{telefones.length > 0 ? telefones.join(', ') : 'N/A'}</p>
+                <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200">
+                  <Phone className="w-4 h-4 text-emerald-500" />
+                  {telefones.length > 0 ? telefones.map((t: string) => {
+                    const ct = t.replace(/\D/g, '');
+                    return ct.length === 11 ? `(${ct.slice(0,2)}) ${ct.slice(2,7)}-${ct.slice(7)}` : t;
+                  }).join(', ') : 'N/A'}
+                </div>
               </div>
               <div className="lg:col-span-4">
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Endereço</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm uppercase">
                   {[personalInfo.Endereco, personalInfo.Bairro, personalInfo.Cidade, personalInfo.UF, personalInfo.CEP].filter(Boolean).join(', ') || 'N/A'}
                 </p>
               </div>
@@ -175,12 +180,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
 
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
-                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Número</p>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Benefício</p>
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.Beneficio || 'N/A'}</p>
                         </div>
-                        <div>
+                        <div className="lg:col-span-3">
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Espécie</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.Especie || 'N/A'}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{getEspecieName(beneficiario.Especie)}</p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Status</p>
@@ -252,72 +257,96 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
                                 <th className="px-4 py-3 font-bold">Banco</th>
                                 <th className="px-4 py-3 font-bold">Contrato</th>
                                 <th className="px-4 py-3 font-bold">Parcela</th>
-                                <th className="px-4 py-3 font-bold">Prazos</th>
+                                <th className="px-4 py-3 font-bold">Prazo</th>
                                 <th className="px-4 py-3 font-bold">Taxa</th>
-                                <th className="px-4 py-3 font-bold">Saldo Devedor</th>
+                                <th className="px-4 py-3 font-bold">Valor Origin</th>
+                                <th className="px-4 py-3 font-bold">Saldo Atual</th>
                                 <th className="px-4 py-3 font-bold text-right">Ação</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {emprestimos.map((emp: any, idx: number) => (
+                              {emprestimos.map((emp: any, idx: number) => {
+                                const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parseFloat(emp.ParcelasRestantes || 0), emp.Taxa || 0);
+                                const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
+                                return (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{emp.Banco || 'N/A'}</td>
+                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">{getBancoName(emp.Banco)}</td>
                                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{emp.Contrato || 'N/A'}</td>
                                   <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
                                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
-                                    Pagou {emp.ParcelasPagas || 0} / Restam {emp.ParcelasRestantes || 0} / Total {emp.Prazo || 0}
+                                    {emp.ParcelasPagas || 0}/{emp.Prazo || 0}
                                   </td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{emp.Taxa ? `${emp.Taxa}%` : 'N/A'}</td>
+                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{emp.Taxa ? `${parseFloat(emp.Taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</td>
                                   <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{formatCurrency(parseFloat(emp.SaldoDevedor || 0))}</td>
+                                  <td className="px-4 py-3 font-black text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-900/10">{formatCurrency(saldoAtual)}</td>
                                   <td className="px-4 py-3 text-right">
                                     <button
-                                      onClick={() => handleSimulate(emp, b)}
-                                      className="px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg text-xs font-bold transition-all"
+                                      onClick={() => onToggleContract ? onToggleContract(emp, isAdded ? 'remove' : 'add') : null}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${isAdded ? 'bg-rose-100 text-rose-600 hover:bg-rose-200 dark:bg-rose-900/30 dark:hover:bg-rose-900/50' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'}`}
                                     >
-                                      Simular
+                                      {isAdded ? 'Remover' : 'Adicionar'}
                                     </button>
                                   </td>
                                 </tr>
-                              ))}
+                              )})}
                             </tbody>
                           </table>
                         </div>
                       </div>
                     )}
 
-                    {/* Cartões Ativos */}
+                    {/* Cartões Ativos Grid */}
                     {cartoes.length > 0 && (
-                      <div className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-                          <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                            <CreditCard className="w-4 h-4 text-primary" />
-                            Cartões Ativos (RMC/RCC)
-                          </h3>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm text-left">
-                            <thead className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-                              <tr>
-                                <th className="px-4 py-3 font-bold">Banco</th>
-                                <th className="px-4 py-3 font-bold">Contrato</th>
-                                <th className="px-4 py-3 font-bold">Desconto</th>
-                                <th className="px-4 py-3 font-bold">Limite</th>
-                                <th className="px-4 py-3 font-bold">Saldo Devedor</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {cartoes.map((cartao: any, idx: number) => (
-                                <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{cartao.Banco || 'N/A'}</td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{cartao.Contrato || 'N/A'}</td>
-                                  <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(cartao.ValorParcela || cartao.Desconto || 0))}</td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatCurrency(parseFloat(cartao.Limite || cartao.LimiteCartao || 0))}</td>
-                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{formatCurrency(parseFloat(cartao.SaldoDevedor || 0))}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {rmc.map((cartao: any, idx: number) => (
+                          <div key={`rmc-${idx}`} className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 relative overflow-hidden flex flex-col justify-between">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-full blur-2xl"></div>
+                            <div className="text-center mb-6 border-b border-slate-100 dark:border-slate-800 pb-3">
+                              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Cartão Pessoal (RMC)</h3>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4 text-center">
+                              <div>
+                                <div className="w-8 h-8 mx-auto bg-slate-100 dark:bg-slate-800 rounded-full mb-2 flex items-center justify-center">
+                                  <CreditCard className="w-4 h-4 text-slate-500" />
+                                </div>
+                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{cartao.Banco || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem</p>
+                                <p className="font-black text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(cartao.ValorParcela || cartao.Desconto || 0))}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Limite Cartão</p>
+                                <p className="font-black text-sky-600 dark:text-sky-400">{formatCurrency(parseFloat(cartao.Limite || cartao.LimiteCartao || 0))}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {rcc.map((cartao: any, idx: number) => (
+                          <div key={`rcc-${idx}`} className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 relative overflow-hidden flex flex-col justify-between">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl"></div>
+                            <div className="text-center mb-6 border-b border-slate-100 dark:border-slate-800 pb-3">
+                              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Cartão Benefício (RCC)</h3>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4 text-center">
+                              <div>
+                                <div className="w-8 h-8 mx-auto bg-amber-100 dark:bg-amber-900/30 rounded-full mb-2 flex items-center justify-center">
+                                  <CreditCard className="w-4 h-4 text-amber-600" />
+                                </div>
+                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{cartao.Banco || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem</p>
+                                <p className="font-black text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(cartao.ValorParcela || cartao.Desconto || 0))}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Limite Cartão</p>
+                                <p className="font-black text-sky-600 dark:text-sky-400">{formatCurrency(parseFloat(cartao.Limite || cartao.LimiteCartao || 0))}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

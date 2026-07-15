@@ -50,6 +50,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [isConsulting, setIsConsulting] = useState(false);
   const [consultaData, setConsultaData] = useState<any>(null);
   const [isConsultaModalOpen, setIsConsultaModalOpen] = useState(false);
+  const [addedContractsIds, setAddedContractsIds] = useState<string[]>([]);
   
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +75,17 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   };
   
   const isCpfValid = validateCPF(cpfCliente);
+
+  const formatCPF = (value: string) => {
+    return value
+      .replace(/\D/g, '')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+      .replace(/(-\d{2})\d+?$/, '$1');
+  };
+
+  const contractsAmount = contracts.filter(c => c.bancoAtual !== '' || c.valorParcela !== '').length;
   const dropdownBankRef = useRef<HTMLDivElement>(null);
 
   interface Contract {
@@ -86,7 +98,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   }
 
   const [contracts, setContracts] = useState<Contract[]>([
-    { id: crypto.randomUUID(), bancoAtual: '', valorParcela: '', prazoTotal: '', parcelasRestantes: '', saldoDevedor: '' }
+    { id: '1', bancoAtual: '', valorParcela: '', prazoTotal: '', parcelasRestantes: '', saldoDevedor: '' }
   ]);
 
   const addContract = () => {
@@ -139,8 +151,16 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       setIsConsultaModalOpen(true);
       
       // Auto-fill some personal data if available
-      const personalInfo = data.dados_pessoais || data.cliente || data;
-      if (personalInfo?.nome && !nomeCliente) setNomeCliente(personalInfo.nome);
+      const isArray = Array.isArray(data);
+      const dataArray = isArray ? data : (data.beneficios ? data.beneficios : [data]);
+      const beneficios = dataArray.length > 0 && dataArray[0].Beneficiario ? dataArray : [];
+      const firstBenefit = beneficios[0] || {};
+      const personalInfo = firstBenefit.Beneficiario || {};
+      
+      if (personalInfo?.Nome && !nomeCliente) setNomeCliente(personalInfo.Nome);
+      if (firstBenefit?.Beneficiario?.Beneficio && !codigoBeneficio) {
+        setCodigoBeneficio(firstBenefit.Beneficiario.Beneficio.toString());
+      }
       
     } catch (error: any) {
       console.error("Consulta CPF Error:", error);
@@ -152,26 +172,55 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
     }
   };
 
-  const handleSimulateFromConsulta = (contractData: any) => {
-    setIsConsultaModalOpen(false);
+  const handleToggleContractFromConsulta = (contractData: any, action: 'add' | 'remove') => {
+    const hash = `${contractData.Banco}-${contractData.Contrato}`;
     
-    // Auto-fill the first contract with data
-    const newContracts = [...contracts];
-    newContracts[0] = {
-      ...newContracts[0],
-      bancoAtual: contractData.bancoAtual || '',
-      valorParcela: contractData.valorParcela ? contractData.valorParcela.toString() : '',
-      prazoTotal: contractData.prazoTotal ? contractData.prazoTotal.toString() : '',
-      parcelasRestantes: contractData.parcelasRestantes ? contractData.parcelasRestantes.toString() : '',
-      saldoDevedor: contractData.saldoDevedor ? contractData.saldoDevedor.toString() : '',
-    };
-    setContracts(newContracts);
-    
-    if (contractData.beneficio && !codigoBeneficio) {
-      setCodigoBeneficio(contractData.beneficio.toString());
+    if (action === 'add') {
+      const isFirstEmpty = contracts.length === 1 && !contracts[0].bancoAtual && !contracts[0].valorParcela;
+      if (contracts.length >= 5 && !isFirstEmpty) {
+        showToast("Limite máximo de 5 simulações atingido", "warning");
+        return;
+      }
+      
+      const newContractInfo = {
+        bancoAtual: contractData.Banco || '',
+        valorParcela: contractData.ValorParcela ? contractData.ValorParcela.toString() : '',
+        prazoTotal: contractData.Prazo ? contractData.Prazo.toString() : '',
+        parcelasRestantes: contractData.ParcelasRestantes ? contractData.ParcelasRestantes.toString() : '',
+        saldoDevedor: contractData.SaldoDevedor ? contractData.SaldoDevedor.toString() : '',
+      };
+      
+      setAddedContractsIds([...addedContractsIds, hash]);
+      
+      if (isFirstEmpty) {
+        const newContracts = [...contracts];
+        newContracts[0] = { ...newContracts[0], ...newContractInfo };
+        setContracts(newContracts);
+        setActiveContractTab(0);
+      } else {
+        const newId = crypto.randomUUID();
+        setContracts([...contracts, { id: newId, ...newContractInfo }]);
+        setActiveContractTab(contracts.length); // switch to the newly created tab
+      }
+      showToast("Contrato adicionado à simulação", "success");
+      
+    } else {
+      // remove
+      const indexToRemove = contracts.findIndex(c => c.bancoAtual === contractData.Banco && c.valorParcela === contractData.ValorParcela.toString());
+      if (indexToRemove !== -1) {
+        if (contracts.length === 1) {
+          const newContracts = [...contracts];
+          newContracts[0] = { id: newContracts[0].id, bancoAtual: '', valorParcela: '', prazoTotal: '', parcelasRestantes: '', saldoDevedor: '' };
+          setContracts(newContracts);
+        } else {
+          const newContracts = contracts.filter((_, i) => i !== indexToRemove);
+          setContracts(newContracts);
+          setActiveContractTab(Math.max(0, activeContractTab > indexToRemove ? activeContractTab - 1 : activeContractTab));
+        }
+        setAddedContractsIds(addedContractsIds.filter(id => id !== hash));
+        showToast("Contrato removido", "info");
+      }
     }
-    
-    showToast("Dados importados para a simulação com sucesso!", "success");
   };
 
   const updateContract = (index: number, fields: Partial<Contract>) => {
@@ -1169,7 +1218,8 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         isOpen={isConsultaModalOpen}
         onClose={() => setIsConsultaModalOpen(false)}
         data={consultaData}
-        onSimulate={handleSimulateFromConsulta}
+        addedContractsIds={addedContractsIds}
+        onToggleContract={handleToggleContractFromConsulta}
       />
 
       {!isEmbedded && (

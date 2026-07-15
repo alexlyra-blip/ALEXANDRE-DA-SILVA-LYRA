@@ -85,7 +85,7 @@ export default function ConsultaCPFPage() {
     }
   };
 
-  const handleSimulate = (contractData: any) => {
+  const handleToggleContract = (contractData: any, action: 'add' | 'remove') => {
     // In a real scenario, we might want to pass this to the simulation page via state management or URL query
     // For now, let's just close the modal and redirect to /simulacao/nova with the CPF
     setIsConsultaModalOpen(false);
@@ -181,7 +181,7 @@ export default function ConsultaCPFPage() {
         isOpen={isConsultaModalOpen}
         onClose={() => setIsConsultaModalOpen(false)}
         data={consultaData}
-        onSimulate={handleSimulate}
+        onToggleContract={handleToggleContract}
       />
     </div>
   );
