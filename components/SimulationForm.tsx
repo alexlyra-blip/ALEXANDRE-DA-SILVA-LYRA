@@ -26,7 +26,7 @@ const getAI = () => {
 export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const { profile } = useAuth();
   const { banks: rulesBanks } = useRules();
-  const { showToast } = useToast();
+  const { showToast, hideToast } = useToast();
   const router = useRouter();
   const [nomeCliente, setNomeCliente] = useState('');
   const [cpfCliente, setCpfCliente] = useState('');
@@ -168,8 +168,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       showToast(error.message || "Erro ao consultar CPF. Verifique sua conexão.", "error");
     } finally {
       setIsConsulting(false);
-      // @ts-ignore
-      if (window.hideToast) window.hideToast(loadingToastId);
+      hideToast(loadingToastId);
     }
   };
 

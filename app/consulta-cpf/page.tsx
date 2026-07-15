@@ -10,7 +10,7 @@ import ConsultaCPFModal from '@/components/ConsultaCPFModal';
 
 export default function ConsultaCPFPage() {
   const router = useRouter();
-  const { showToast } = useToast();
+  const { showToast, hideToast } = useToast();
   const [cpfCliente, setCpfCliente] = useState('');
   const [tipoConsulta, setTipoConsulta] = useState<'inss' | 'siape'>('inss');
   const [isConsulting, setIsConsulting] = useState(false);
@@ -80,8 +80,7 @@ export default function ConsultaCPFPage() {
       showToast(error.message || "Erro ao consultar CPF. Verifique sua conexão.", "error");
     } finally {
       setIsConsulting(false);
-      // @ts-ignore
-      if (window.hideToast) window.hideToast(loadingToastId);
+      hideToast(loadingToastId);
     }
   };
 

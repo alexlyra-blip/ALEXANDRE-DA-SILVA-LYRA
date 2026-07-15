@@ -144,9 +144,9 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 const margemConsignavel = truncateDecimals(valorBeneficio * percentualMargem);
                 
                 // Emprestimos e cartões
-                const emprestimos = Array.isArray(b.Emprestimos) ? b.Emprestimos : [];
-                const rmc = Array.isArray(b.Rmc) ? b.Rmc : [];
-                const rcc = Array.isArray(b.RCC) ? b.RCC : [];
+                const emprestimos = Array.isArray(b.Emprestimos) ? b.Emprestimos : (b.Emprestimos ? [b.Emprestimos] : []);
+                const rmc = Array.isArray(b.Rmc) ? b.Rmc : (b.Rmc ? [b.Rmc] : []);
+                const rcc = Array.isArray(b.RCC) ? b.RCC : (b.RCC ? [b.RCC] : []);
                 const cartoes = [...rmc, ...rcc];
                 
                 // Somar tudo que está comprometido (empréstimos e cartões)
