@@ -59,7 +59,43 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Falha ao consultar a API da MultiCorban' }, { status: response.status });
     }
 
-    const data = await response.json();
+    let data = await response.json();
+    
+    // Normalize SIAPE data to match INSS structure
+    if (searchType === 'siape' && Array.isArray(data)) {
+      data = data.map(item => ({
+        Beneficiario: {
+          Nome: item.Cadastro?.Nome,
+          CPF: item.Cadastro?.CPF,
+          DataNascimento: item.Cadastro?.DataNascimento,
+          NomeMae: item.Cadastro?.NomeMae,
+          Beneficio: item.Cadastro?.Matricula,
+          Situacao: "Ativo",
+          Especie: item.Cadastro?.AmparoLegal || item.Cadastro?.RegimeJuridico,
+        },
+        DadosBancarios: {
+          Banco: item.DadosBancarios?.Banco,
+          Agencia: item.DadosBancarios?.Agencia,
+          ContaPagto: item.DadosBancarios?.NumConta,
+        },
+        ResumoFinanceiro: {
+          ValorBeneficio: parseFloat(item.ResumoFinanceiro?.Bruto || "0"),
+          BaseCalculo: parseFloat(item.ResumoFinanceiro?.ValorLiquido || "0"),
+          MargemDisponivelEmprestimo: parseFloat(item.ResumoFinanceiro?.Margem || "0"),
+        },
+        Telefone: item.Telefone || [],
+        Rmc: item.RMC ? { ValorParcela: item.RMC.Margem } : {},
+        RCC: item.RCC ? { ValorParcela: item.RCC.Margem } : {},
+        Emprestimos: (item.Emprestimos || []).map((emp: any) => ({
+          Banco: emp.IdBanco?.toString(),
+          NomeBanco: emp.Rubrica,
+          Contrato: emp.Contrato,
+          ParcelasRestantes: emp.PrazoRestantes?.toString(),
+          ValorParcela: emp.Parcela,
+          Quitacao: emp.SaldoDevedor,
+        }))
+      }));
+    }
     
     // Save to Cache
     try {
