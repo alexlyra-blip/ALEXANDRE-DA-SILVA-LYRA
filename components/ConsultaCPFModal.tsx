@@ -38,7 +38,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="w-full max-w-4xl max-h-[90vh] bg-slate-50 dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800"
+        className="w-full max-w-6xl max-h-[90vh] bg-slate-50 dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800"
       >
         {/* Header Modal */}
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
@@ -266,19 +266,25 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                             </thead>
                             <tbody>
                               {emprestimos.map((emp: any, idx: number) => {
-                                const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parseFloat(emp.ParcelasRestantes || 0), emp.Taxa || 0);
+                                const prazoTotal = parseInt(emp.Prazo || emp.parcelas || 0);
+                                const parcelasRestantes = parseInt(emp.ParcelasRestantes || emp.prazo_restante || 0);
+                                const parcelasPagas = emp.ParcelasPagas !== undefined ? parseInt(emp.ParcelasPagas) : Math.max(0, prazoTotal - parcelasRestantes);
+                                const taxa = emp.Taxa || emp.taxa || 0;
+                                const valorOrigin = emp.ValorEmprestado || emp.ValorContrato || emp.ValorFinanciado || emp.ValorLiberado || emp.SaldoDevedor || emp.saldo || 0;
+                                
+                                const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
                                 return (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                                   <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">{getBancoName(emp.Banco)}</td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{emp.Contrato || 'N/A'}</td>
-                                  <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
-                                    {emp.ParcelasPagas || 0}/{emp.Prazo || 0}
+                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{emp.Contrato || 'N/A'}</td>
+                                  <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
+                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                    {parcelasPagas}/{prazoTotal}
                                   </td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{emp.Taxa ? `${parseFloat(emp.Taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</td>
-                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{formatCurrency(parseFloat(emp.SaldoDevedor || 0))}</td>
-                                  <td className="px-4 py-3 font-black text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-900/10">{formatCurrency(saldoAtual)}</td>
+                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{taxa ? `${parseFloat(taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</td>
+                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">{formatCurrency(parseFloat(valorOrigin))}</td>
+                                  <td className="px-4 py-3 font-black text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-900/10 whitespace-nowrap">{formatCurrency(saldoAtual)}</td>
                                   <td className="px-4 py-3 text-right">
                                     <button
                                       onClick={() => onToggleContract ? onToggleContract(emp, isAdded ? 'remove' : 'add') : null}
