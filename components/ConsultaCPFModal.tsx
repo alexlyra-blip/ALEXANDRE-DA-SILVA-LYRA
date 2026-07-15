@@ -25,7 +25,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
   // Extract personal data from the first benefit (assuming it's the same person)
   const firstBenefit = beneficios[0] || {};
   const personalInfo = firstBenefit.Beneficiario || {};
-  const telefones = firstBenefit.Telefone || [];
+  const telefones = Array.isArray(firstBenefit.Telefone) ? firstBenefit.Telefone : (firstBenefit.Telefone ? [firstBenefit.Telefone] : []);
 
   const handleSimulate = (emprestimo: any, beneficioData: any) => {
     onSimulate({
@@ -139,9 +139,9 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
                 const margemConsignavel = truncateDecimals(valorBeneficio * percentualMargem);
                 
                 // Emprestimos e cartões
-                const emprestimos = b.Emprestimos || [];
-                const rmc = b.Rmc || [];
-                const rcc = b.RCC || [];
+                const emprestimos = Array.isArray(b.Emprestimos) ? b.Emprestimos : [];
+                const rmc = Array.isArray(b.Rmc) ? b.Rmc : [];
+                const rcc = Array.isArray(b.RCC) ? b.RCC : [];
                 const cartoes = [...rmc, ...rcc];
                 
                 // Somar tudo que está comprometido (empréstimos e cartões)
