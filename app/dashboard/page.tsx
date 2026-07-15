@@ -15,7 +15,8 @@ import {
   Download,
   FileText,
   PieChart as PieChartIcon,
-  Save
+  Save,
+  Database
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { QuotaAlert } from '@/components/QuotaAlert';
@@ -59,6 +60,8 @@ export default function Dashboard() {
   const [simulations, setSimulations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [promotoraSettings, setPromotoraSettings] = useState<{ logoUrl: string, name: string } | null>(null);
+  const [saldoMulticorban, setSaldoMulticorban] = useState<any>(null);
+  const [loadingSaldo, setLoadingSaldo] = useState(false);
 
   const getDaysRemaining = (profile: any) => {
     const baseDate = profile.trialResetAt || profile.createdAt;
@@ -145,6 +148,24 @@ export default function Dashboard() {
   }, [profile]);
 
   useEffect(() => {
+    if (profile?.role === 'admin') {
+      const fetchSaldo = async () => {
+        setLoadingSaldo(true);
+        try {
+          const res = await fetch('/api/multicorban/saldo');
+          const data = await res.json();
+          setSaldoMulticorban(data);
+        } catch (err) {
+          console.error("Erro ao buscar saldo:", err);
+        } finally {
+          setLoadingSaldo(false);
+        }
+      };
+      fetchSaldo();
+    }
+  }, [profile]);
+
+  const uniqueBanks = useMemo(() => {
     if (!profile) return;
 
     const startDateObj = new Date();
@@ -745,6 +766,43 @@ export default function Dashboard() {
               <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">Simulações Hoje</p>
             </div>
           </motion.div>
+
+          {profile?.role === 'admin' && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="professional-card p-6 relative overflow-hidden group dark:bg-slate-800 border border-slate-100 dark:border-slate-800"
+            >
+              <div className="absolute -right-6 -top-6 size-24 bg-amber-500/5 rounded-full group-hover:scale-150 transition-transform duration-500" />
+              <div className="flex items-center justify-between mb-4 relative z-10">
+                <div className="size-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+                  <Database className="w-5 h-5" />
+                </div>
+                <span className="text-[10px] font-bold text-amber-600 bg-amber-500/10 px-2 py-1 rounded-full">MultiCorban</span>
+              </div>
+              <div className="relative z-10">
+                {loadingSaldo ? (
+                  <div className="animate-pulse flex flex-col gap-2">
+                    <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                  </div>
+                ) : saldoMulticorban && !saldoMulticorban.raw ? (
+                  <>
+                    <p className="text-xl font-black text-foreground">{saldoMulticorban['Consultas Restantes'] || 0}</p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">
+                      Total: {saldoMulticorban['Total de Consultas'] || 0} | Usadas: {saldoMulticorban['Consultas Realizadas'] || 0}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-bold text-rose-500">{saldoMulticorban?.message || 'Licença expirada ou inválida'}</p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">Verifique seu Token</p>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          )}
 
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
