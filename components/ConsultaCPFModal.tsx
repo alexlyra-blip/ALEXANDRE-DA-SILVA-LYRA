@@ -67,6 +67,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
               <div className="lg:col-span-4 bg-slate-50 dark:bg-slate-900 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nome Completo</p>
                 <p className="text-lg md:text-xl font-black text-primary-dark dark:text-primary-light uppercase">{personalInfo.Nome || 'N/A'}</p>
+                {personalInfo.NomeMae && (
+                  <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Filiação (Mãe)</p>
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase">{personalInfo.NomeMae}</p>
+                  </div>
+                )}
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">CPF</p>
