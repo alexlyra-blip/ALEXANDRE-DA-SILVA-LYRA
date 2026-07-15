@@ -233,9 +233,9 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         <p className="text-[9px] text-slate-400 mt-1">({isLoas ? '35%' : '40%'} do Benefício {formatCurrency(valorBeneficio)})</p>
                       </div>
                       
-                      <div className="bg-rose-50 dark:bg-rose-500/10 rounded-2xl p-4 border border-rose-100 dark:border-rose-500/20 text-center">
-                        <p className="text-[10px] uppercase tracking-wider text-rose-500/80 font-bold mb-1">Total Comprometido</p>
-                        <p className="text-xl font-black text-rose-600 dark:text-rose-400">{formatCurrency(totalComprometido)}</p>
+                      <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Total Comprometido</p>
+                        <p className="text-xl font-black text-sky-600 dark:text-sky-400">{formatCurrency(totalComprometido)}</p>
                       </div>
 
                       <div className={`${margemLivre < 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20' : 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20'} rounded-2xl p-4 border text-center`}>
