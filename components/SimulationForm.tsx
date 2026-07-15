@@ -85,7 +85,6 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       .replace(/(-\d{2})\d+?$/, '$1');
   };
 
-  const contractsAmount = contracts.filter(c => c.bancoAtual !== '' || c.valorParcela !== '').length;
   const dropdownBankRef = useRef<HTMLDivElement>(null);
 
   interface Contract {
@@ -100,6 +99,8 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const [contracts, setContracts] = useState<Contract[]>([
     { id: '1', bancoAtual: '', valorParcela: '', prazoTotal: '', parcelasRestantes: '', saldoDevedor: '' }
   ]);
+
+  const contractsAmount = contracts.filter(c => c.bancoAtual !== '' || c.valorParcela !== '').length;
 
   const addContract = () => {
     if (contracts.length < 5) {
