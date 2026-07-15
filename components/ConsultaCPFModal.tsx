@@ -331,7 +331,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 <div className="w-8 h-8 mx-auto bg-slate-100 dark:bg-slate-800 rounded-full mb-2 flex items-center justify-center">
                                   <CreditCard className="w-4 h-4 text-slate-500" />
                                 </div>
-                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{cartao.Banco || 'N/A'}</p>
+                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{getBancoName(cartao.Banco)}</p>
                               </div>
                               <div>
                                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem</p>
@@ -356,7 +356,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 <div className="w-8 h-8 mx-auto bg-amber-100 dark:bg-amber-900/30 rounded-full mb-2 flex items-center justify-center">
                                   <CreditCard className="w-4 h-4 text-amber-600" />
                                 </div>
-                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{cartao.Banco || 'N/A'}</p>
+                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{getBancoName(cartao.Banco)}</p>
                               </div>
                               <div>
                                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem</p>
