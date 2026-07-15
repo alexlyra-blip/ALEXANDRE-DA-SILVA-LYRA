@@ -1101,6 +1101,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                                               : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                                           }`}
                                         >
+                                          <div className="flex items-center gap-3 truncate">
                                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${contract.bancoAtual === b || activeIndexBank === bIndex ? 'bg-primary/20 text-primary' : 'bg-slate-100 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
                                               <Landmark className="w-4 h-4" />
                                             </div>
