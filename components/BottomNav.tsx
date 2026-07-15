@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, LayoutDashboard, Calculator, Settings, Sun, Moon, ClipboardList, LogOut } from 'lucide-react';
+import { Home, LayoutDashboard, Calculator, Settings, Sun, Moon, ClipboardList, LogOut, Search } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { PromotoraAvatar } from './PromotoraAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -35,6 +35,10 @@ export default function BottomNav() {
         <Link href="/simulacao/nova" className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'nova' ? 'text-white scale-110' : 'text-white/50 hover:text-white/80'}`}>
           <Calculator className="w-6 h-6" />
           <p className="text-[10px] font-black uppercase tracking-tighter">Simulação</p>
+        </Link>
+        <Link href="/consulta-cpf" className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'consulta' ? 'text-white scale-110' : 'text-white/50 hover:text-white/80'}`}>
+          <Search className="w-6 h-6" />
+          <p className="text-[10px] font-black uppercase tracking-tighter">Consulta</p>
         </Link>
         <Link href="/simulacao/recomendacoes" className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'ofertas' ? 'text-white scale-110' : 'text-white/50 hover:text-white/80'}`}>
           <LayoutDashboard className="w-6 h-6" />

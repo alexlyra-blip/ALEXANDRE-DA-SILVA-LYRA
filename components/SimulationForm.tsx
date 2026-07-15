@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2, AlertCircle, Crown } from 'lucide-react';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
