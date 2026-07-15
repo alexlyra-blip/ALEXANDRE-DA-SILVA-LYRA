@@ -67,6 +67,7 @@ export const BANCOS_BRASIL: Record<string, string> = {
   '243': 'BANCO MASTER S.A.',
   '254': 'PARANA BANCO S.A.',
   '336': 'BANCO C6 S.A.',
+  '925': 'BRB FINANCEIRA',
 };
 
 export function getEspecieName(codigo: string): string {
