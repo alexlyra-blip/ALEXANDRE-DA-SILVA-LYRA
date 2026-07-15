@@ -1061,6 +1061,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                               }}
                               onChange={(e) => setSearchTermBank(e.target.value)}
                               onKeyDown={handleKeyDownBank}
+                            />
                             <Landmark className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5 pointer-events-none" />
                             <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-transform duration-200 ${isDropdownOpenBank && dropdownBankIndex === index ? 'rotate-180' : ''}`} />
                           </div>
