@@ -513,16 +513,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
     return parseFloat(value.replace(/\./g, '').replace(',', '.'));
   };
 
-  const formatCPF = (value: string) => {
-    const numeric = value.replace(/\D/g, '');
-    if (numeric.length <= 11) {
-      return numeric
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-    }
-    return numeric.slice(0, 11);
-  };
+
 
   const calculateInterestRate = (saldoDevedor: string, valorParcela: string, parcelasRestantes: string) => {
     const pv = parseCurrency(saldoDevedor);

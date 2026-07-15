@@ -133,10 +133,10 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 const valorBeneficio = parseFloat(resumo.ValorBeneficio || 0);
                 
                 // Cálculo de margens
-                // Exceção LOAS 87 e 88 (30%), demais 35%
+                // Exceção LOAS 87 e 88 (35%), demais 40%
                 const especie = (beneficiario.Especie || '').toString();
                 const isLoas = especie.includes('87') || especie.includes('88');
-                const percentualMargem = isLoas ? 0.30 : 0.35;
+                const percentualMargem = isLoas ? 0.35 : 0.40;
                 
                 // Função para não arredondar para cima (trunca em 2 casas decimais)
                 const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
@@ -220,7 +220,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                       <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 text-center">
                         <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem Consignável</p>
                         <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavel)}</p>
-                        <p className="text-[9px] text-slate-400 mt-1">({isLoas ? '30%' : '35%'} do Benefício {formatCurrency(valorBeneficio)})</p>
+                        <p className="text-[9px] text-slate-400 mt-1">({isLoas ? '35%' : '40%'} do Benefício {formatCurrency(valorBeneficio)})</p>
                       </div>
                       
                       <div className="bg-rose-50 dark:bg-rose-500/10 rounded-2xl p-4 border border-rose-100 dark:border-rose-500/20 text-center">
