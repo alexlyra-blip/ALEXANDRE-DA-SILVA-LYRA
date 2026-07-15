@@ -133,6 +133,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               return;
             }
 
+            if (data.status === 'inactive' || data.status === 'bloqueado') {
+              console.warn("AuthContext: User is blocked/inactive on init. Force logging out.");
+              setBlockedError("Seu acesso foi suspenso. Entre em contato com o administrador.");
+              setProfile({ ...data, uid: firebaseUser.uid });
+              setIsPending(true);
+              setIsAuthReady(true);
+              logout();
+              return;
+            }
+
             console.log("AuthContext: Perfil carregado inicialmente via getDoc");
             setProfile({ ...data, uid: firebaseUser.uid });
             setIsPending(data.status !== 'active');
@@ -168,12 +178,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setProfile(updatedData);
                 setIsPending(true);
                 setIsAuthReady(true);
+                logout();
                 return;
               } else {
                 setBlockedError(null);
               }
             } else {
               setBlockedError(null);
+            }
+
+            // Bloquear acesso se estiver inativo/bloqueado
+            if (updatedData.status === 'inactive' || updatedData.status === 'bloqueado') {
+              console.warn("AuthContext: User is blocked/inactive. Force logging out.");
+              setBlockedError("Seu acesso foi suspenso. Entre em contato com o administrador.");
+              setProfile(updatedData);
+              setIsPending(true);
+              setIsAuthReady(true);
+              logout();
+              return;
             }
             
             // Ativação automática de admin principal

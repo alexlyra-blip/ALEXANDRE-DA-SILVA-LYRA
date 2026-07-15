@@ -911,6 +911,12 @@ function UsuariosAdminContent() {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userToResetPassword || !newPasswordForReset || !profile) return;
+    
+    const trimmedPassword = newPasswordForReset.trim();
+    if (trimmedPassword.length < 6) {
+      showToast("A senha deve ter pelo menos 6 caracteres.", "error");
+      return;
+    }
 
     setIsResettingPassword(true);
     try {
@@ -921,7 +927,7 @@ function UsuariosAdminContent() {
         },
         body: JSON.stringify({
           uid: userToResetPassword.id,
-          newPassword: newPasswordForReset,
+          newPassword: trimmedPassword,
           adminUid: profile.uid,
         }),
       });
@@ -1011,11 +1017,12 @@ function UsuariosAdminContent() {
 
     // Inline validation
     const errors: {name?: string, email?: string, password?: string} = {};
+    const trimmedPassword = newPassword.trim();
     if (!newName.trim()) errors.name = "Nome é obrigatório";
     if (!newEmail.trim()) errors.email = "E-mail é obrigatório";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) errors.email = "E-mail inválido";
-    if (!newPassword) errors.password = "Senha é obrigatória";
-    else if (newPassword.length < 6) errors.password = "Mínimo 6 caracteres";
+    if (!trimmedPassword) errors.password = "Senha é obrigatória";
+    else if (trimmedPassword.length < 6) errors.password = "Mínimo 6 caracteres";
 
     if (Object.keys(errors).length > 0) {
       setCreateFieldErrors(errors);
@@ -1054,15 +1061,15 @@ function UsuariosAdminContent() {
     try {
       let userCredential;
       try {
-        userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail, newPassword);
+        userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail, trimmedPassword);
       } catch (authError: any) {
         if (authError.code === 'auth/email-already-in-use') {
           console.log("Email already in use, checking if profile exists...");
           // Try to sign in to see if we can "recover" this partial creation
           try {
             const { signInWithEmailAndPassword } = await import('firebase/auth');
-            userCredential = await signInWithEmailAndPassword(secondaryAuth, newEmail, newPassword);
-            console.log("Successfully signed in to existing auth user for recovery.");
+            userCredential = await signInWithEmailAndPassword(secondaryAuth, newEmail, trimmedPassword);
+            console.log("AdminUsers: User existed in Auth but not in DB, successfully linked.");
           } catch (signInError: any) {
             console.error("Failed to sign in to existing auth user:", signInError);
             throw new Error("Este e-mail já está em uso por outro usuário ou a senha está incorreta.");

@@ -93,14 +93,15 @@ export default function Perfil() {
   };
 
   const handleUpdatePassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
+    const trimmedPassword = newPassword.trim();
+    if (!trimmedPassword || trimmedPassword.length < 6) {
       showToast("A senha deve ter pelo menos 6 caracteres.", "error");
       return;
     }
 
     setIsUpdatingPassword(true);
     try {
-      await updatePassword(newPassword);
+      await updatePassword(trimmedPassword);
       showToast("Senha atualizada com sucesso!", "success");
       setNewPassword('');
     } catch (error: any) {
