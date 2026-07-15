@@ -17,18 +17,24 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
 
   if (!isOpen || !data) return null;
 
-  // Extrair os dados pessoais principais (o formato pode variar dependendo da API)
-  const personalInfo = data.dados_pessoais || data.cliente || data;
-  const beneficios = data.beneficios || [];
+  // The MultiCorban API returns an array of benefit objects.
+  const isArray = Array.isArray(data);
+  const dataArray = isArray ? data : (data.beneficios ? data.beneficios : [data]);
+  const beneficios = dataArray.length > 0 && dataArray[0].Beneficiario ? dataArray : [];
+
+  // Extract personal data from the first benefit (assuming it's the same person)
+  const firstBenefit = beneficios[0] || {};
+  const personalInfo = firstBenefit.Beneficiario || {};
+  const telefones = firstBenefit.Telefone || [];
 
   const handleSimulate = (emprestimo: any, beneficioData: any) => {
     onSimulate({
-      bancoAtual: emprestimo.banco || emprestimo.instituicao || '',
-      valorParcela: emprestimo.valor_parcela || emprestimo.parcela || 0,
-      prazoTotal: emprestimo.prazo || emprestimo.parcelas || 0,
-      parcelasRestantes: emprestimo.parcelas_restantes || emprestimo.prazo_restante || 0,
-      saldoDevedor: emprestimo.saldo_devedor || emprestimo.saldo || 0,
-      beneficio: beneficioData.numero_beneficio || beneficioData.nb || '',
+      bancoAtual: emprestimo.Banco || emprestimo.banco || '',
+      valorParcela: emprestimo.ValorParcela || emprestimo.parcela || 0,
+      prazoTotal: emprestimo.Prazo || emprestimo.parcelas || 0,
+      parcelasRestantes: emprestimo.ParcelasRestantes || emprestimo.prazo_restante || 0,
+      saldoDevedor: emprestimo.SaldoDevedor || emprestimo.saldo || 0,
+      beneficio: beneficioData.Beneficiario?.Beneficio || '',
     });
   };
 
@@ -68,24 +74,24 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nome Completo</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{personalInfo.nome || 'N/A'}</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">{personalInfo.Nome || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">CPF</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{personalInfo.cpf ? formatCPF(personalInfo.cpf) : 'N/A'}</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">{personalInfo.CPF ? formatCPF(personalInfo.CPF) : 'N/A'}</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nascimento</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{personalInfo.data_nascimento || personalInfo.nascimento || 'N/A'}</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">{personalInfo.DataNascimento ? personalInfo.DataNascimento.split('-').reverse().join('/') : 'N/A'}</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Telefone</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{personalInfo.telefone || personalInfo.celular || 'N/A'}</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">{telefones.length > 0 ? telefones.join(', ') : 'N/A'}</p>
               </div>
               <div className="lg:col-span-4">
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Endereço</p>
                 <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">
-                  {[personalInfo.endereco, personalInfo.numero, personalInfo.bairro, personalInfo.cidade, personalInfo.uf].filter(Boolean).join(', ') || 'N/A'}
+                  {[personalInfo.Endereco, personalInfo.Bairro, personalInfo.Cidade, personalInfo.UF, personalInfo.CEP].filter(Boolean).join(', ') || 'N/A'}
                 </p>
               </div>
             </div>
@@ -106,7 +112,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
                       }`}
                     >
-                      Benefício {b.numero_beneficio || b.nb || index + 1}
+                      Benefício {b.Beneficiario?.Beneficio || index + 1}
                     </button>
                   ))}
                 </div>
@@ -115,11 +121,15 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
               {/* Conteúdo do Benefício Ativo */}
               {beneficios[activeTab] && (() => {
                 const b = beneficios[activeTab];
-                const valorBeneficio = parseFloat(b.valor_beneficio || b.salario || 0);
+                const beneficiario = b.Beneficiario || {};
+                const resumo = b.ResumoFinanceiro || {};
+                const dadosBancarios = b.DadosBancarios || {};
+                
+                const valorBeneficio = parseFloat(resumo.ValorBeneficio || 0);
                 
                 // Cálculo de margens
                 // Exceção LOAS 87 e 88 (30%), demais 35%
-                const especie = (b.especie || b.tipo || '').toString();
+                const especie = (beneficiario.Especie || '').toString();
                 const isLoas = especie.includes('87') || especie.includes('88');
                 const percentualMargem = isLoas ? 0.30 : 0.35;
                 
@@ -129,21 +139,23 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
                 const margemConsignavel = truncateDecimals(valorBeneficio * percentualMargem);
                 
                 // Emprestimos e cartões
-                const emprestimos = b.emprestimos || b.contratos || [];
-                const cartoes = b.cartoes || b.cartoes_rmc || [];
+                const emprestimos = b.Emprestimos || [];
+                const rmc = b.Rmc || [];
+                const rcc = b.RCC || [];
+                const cartoes = [...rmc, ...rcc];
                 
                 // Somar tudo que está comprometido (empréstimos e cartões)
                 let totalComprometido = 0;
-                emprestimos.forEach((e: any) => totalComprometido += parseFloat(e.valor_parcela || e.parcela || 0));
-                cartoes.forEach((c: any) => totalComprometido += parseFloat(c.valor_parcela || c.parcela || c.limite_utilizado || 0));
+                emprestimos.forEach((e: any) => totalComprometido += parseFloat(e.ValorParcela || 0));
+                cartoes.forEach((c: any) => totalComprometido += parseFloat(c.ValorParcela || c.Desconto || 0));
 
                 let margemLivre = truncateDecimals(margemConsignavel - totalComprometido);
                 if (margemLivre < 0) margemLivre = 0;
                 
                 const valorLiberado = truncateDecimals(margemLivre / getMarginCoefficient());
 
-                const isBlocked = b.bloqueado_emprestimo || b.bloqueado === 'S' || b.bloqueado === true;
-                const isActive = b.status === 'Ativo' || b.situacao === 'Ativo';
+                const isBlocked = beneficiario.BloqueadoEmprestimo === "1" || beneficiario.BloqueadoEmprestimo === true;
+                const isActive = beneficiario.Situacao === 'Ativo';
 
                 return (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -164,35 +176,35 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Número</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{b.numero_beneficio || b.nb || 'N/A'}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.Beneficio || 'N/A'}</p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Espécie</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{b.especie || b.tipo || 'N/A'}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.Especie || 'N/A'}</p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Status</p>
                           <div className="flex items-center gap-1">
                             <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-                            <p className="font-semibold text-slate-800 dark:text-slate-200">{b.status || b.situacao || 'N/A'}</p>
+                            <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.Situacao || 'N/A'}</p>
                           </div>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Concessão</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{b.data_concessao || b.dib || 'N/A'}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.DIB ? beneficiario.DIB.split('-').reverse().join('/') : 'N/A'}</p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">UF</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{b.uf || 'N/A'}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.UF || beneficiario.UFBeneficio || 'N/A'}</p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Meio de Pgto</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{b.meio_pagamento || 'N/A'}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{dadosBancarios.MeioPagamento === '2' ? 'Conta Corrente' : dadosBancarios.MeioPagamento === '1' ? 'Cartão Magnético' : dadosBancarios.MeioPagamento || 'N/A'}</p>
                         </div>
                         <div className="col-span-2">
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Dados Bancários</p>
                           <p className="font-semibold text-slate-800 dark:text-slate-200">
-                            Banco: {b.banco || b.banco_pagamento || 'N/A'} | Ag: {b.agencia || 'N/A'} {b.conta ? `| CC: ${b.conta}` : ''}
+                            Banco: {dadosBancarios.Banco || 'N/A'} | Ag: {dadosBancarios.Agencia || 'N/A'} {dadosBancarios.ContaPagto ? `| CC: ${dadosBancarios.ContaPagto}` : ''}
                           </p>
                         </div>
                       </div>
@@ -249,14 +261,14 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
                             <tbody>
                               {emprestimos.map((emp: any, idx: number) => (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{emp.banco || emp.instituicao || 'N/A'}</td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{emp.contrato || 'N/A'}</td>
-                                  <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(emp.valor_parcela || emp.parcela || 0))}</td>
+                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{emp.Banco || 'N/A'}</td>
+                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{emp.Contrato || 'N/A'}</td>
+                                  <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
                                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
-                                    {emp.parcelas_pagas || 0} pagas / Restam {emp.parcelas_restantes || emp.prazo_restante || 0} / Total {emp.prazo || emp.parcelas || 0}
+                                    Pagou {emp.ParcelasPagas || 0} / Restam {emp.ParcelasRestantes || 0} / Total {emp.Prazo || 0}
                                   </td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{emp.taxa ? `${emp.taxa}%` : 'N/A'}</td>
-                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{formatCurrency(parseFloat(emp.saldo_devedor || emp.saldo || 0))}</td>
+                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{emp.Taxa ? `${emp.Taxa}%` : 'N/A'}</td>
+                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{formatCurrency(parseFloat(emp.SaldoDevedor || 0))}</td>
                                   <td className="px-4 py-3 text-right">
                                     <button
                                       onClick={() => handleSimulate(emp, b)}
@@ -296,11 +308,11 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, onSimulate }: 
                             <tbody>
                               {cartoes.map((cartao: any, idx: number) => (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{cartao.banco || cartao.instituicao || 'N/A'}</td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{cartao.contrato || 'N/A'}</td>
-                                  <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(cartao.valor_parcela || cartao.parcela || cartao.desconto || 0))}</td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatCurrency(parseFloat(cartao.limite || 0))}</td>
-                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{formatCurrency(parseFloat(cartao.saldo_devedor || cartao.saldo || 0))}</td>
+                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{cartao.Banco || 'N/A'}</td>
+                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{cartao.Contrato || 'N/A'}</td>
+                                  <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(cartao.ValorParcela || cartao.Desconto || 0))}</td>
+                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatCurrency(parseFloat(cartao.Limite || cartao.LimiteCartao || 0))}</td>
+                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{formatCurrency(parseFloat(cartao.SaldoDevedor || 0))}</td>
                                 </tr>
                               ))}
                             </tbody>
