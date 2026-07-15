@@ -219,10 +219,10 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       
       const newContractInfo = {
         bancoAtual: getBancoName(contractData.Banco) || '',
-        valorParcela: contractData.ValorParcela ? contractData.ValorParcela.toString() : '',
+        valorParcela: contractData.ValorParcela ? parseFloat(contractData.ValorParcela.toString()).toFixed(2).replace('.', ',') : '',
         prazoTotal: prazoTotalCalc ? prazoTotalCalc.toString() : '',
         parcelasRestantes: (contractData.ParcelasRestantes || contractData.prazo_restante || '').toString(),
-        saldoDevedor: (Math.floor(parseFloat(valorOrigin.toString()) * 100) / 100).toString(),
+        saldoDevedor: valorOrigin ? parseFloat(valorOrigin.toString()).toFixed(2).replace('.', ',') : '',
       };
       
       setAddedContractsIds([...addedContractsIds, hash]);
