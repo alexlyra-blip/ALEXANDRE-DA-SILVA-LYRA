@@ -789,9 +789,9 @@ export default function Dashboard() {
                   </div>
                 ) : saldoMulticorban && !saldoMulticorban.raw ? (
                   <>
-                    <p className="text-xl font-black text-foreground">{saldoMulticorban['Consultas Restantes'] || 0}</p>
+                    <p className="text-xl font-black text-foreground">{saldoMulticorban.offline || 0}</p>
                     <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">
-                      Total: {saldoMulticorban['Total de Consultas'] || 0} | Usadas: {saldoMulticorban['Consultas Realizadas'] || 0}
+                      Online: {saldoMulticorban.online || 0} | IN100: {saldoMulticorban.in100 || 0}
                     </p>
                   </>
                 ) : (

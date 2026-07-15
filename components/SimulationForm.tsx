@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2, AlertCircle, Crown } from 'lucide-react';
-import { getBancoName } from '@/lib/mappings';
+import { getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
@@ -133,7 +133,6 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
     }
     
     setIsConsulting(true);
-    const loadingToastId = showToast("Consultando dados na MultiCorban...", "loading", 0);
     try {
       const response = await fetch('/api/multicorban/consulta-cpf', {
         method: 'POST',
@@ -170,8 +169,11 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         }
         if (age > 0) setIdade(age.toString());
       }
-      if (firstBenefit?.Beneficiario?.Beneficio && !codigoBeneficio) {
-        setCodigoBeneficio(firstBenefit.Beneficiario.Beneficio.toString());
+      if (firstBenefit?.Beneficiario?.Especie && !codigoBeneficio) {
+        setCodigoBeneficio(firstBenefit.Beneficiario.Especie.toString());
+      }
+      if (firstBenefit?.Beneficiario?.DDB) {
+        setDataConcessao(firstBenefit.Beneficiario.DDB);
       }
       
       const rmc = Array.isArray(firstBenefit?.Rmc) ? firstBenefit.Rmc : (firstBenefit?.Rmc ? [firstBenefit.Rmc] : []);
@@ -185,6 +187,9 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         if (maxCardValue > 0) {
           setNegativeCardValue(maxCardValue.toFixed(2).replace('.', ','));
         }
+      } else {
+        setHasTwoCards(false);
+        setNegativeCardValue('');
       }
       
     } catch (error: any) {
@@ -192,7 +197,6 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       showToast(error.message || "Erro ao consultar CPF. Verifique sua conexão.", "error");
     } finally {
       setIsConsulting(false);
-      hideToast(loadingToastId);
     }
   };
 
@@ -208,9 +212,10 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       
       const taxa = contractData.Taxa || contractData.taxa || 0;
       const prazoTotalCalc = parseInt(contractData.Prazo || contractData.parcelas || 0);
-      const valorOriginCalc = (contractData.ValorParcela && prazoTotalCalc && taxa) ? (parseFloat(contractData.ValorParcela) * ((1 - Math.pow(1 + (parseFloat(taxa.toString().replace('%','').replace(',','.'))/100), -prazoTotalCalc)) / (parseFloat(taxa.toString().replace('%','').replace(',','.'))/100))) : 0;
+      const parcelasRestantes = parseInt(contractData.ParcelasRestantes || contractData.prazo_restante || 0);
+      const saldoDevedorCalc = calculateSaldoDevedor(parseFloat(contractData.ValorParcela || 0), parcelasRestantes, taxa);
       
-      const valorOrigin = contractData.ValorEmprestado || contractData.ValorContrato || contractData.ValorFinanciado || contractData.ValorLiberado || contractData.SaldoDevedor || contractData.saldo || valorOriginCalc || 0;
+      const valorOrigin = contractData.Quitacao || contractData.SaldoDevedor || contractData.saldo || saldoDevedorCalc || 0;
       
       const newContractInfo = {
         bancoAtual: getBancoName(contractData.Banco) || '',

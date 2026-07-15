@@ -56,7 +56,6 @@ export default function ConsultaCPFPage() {
     }
     
     setIsConsulting(true);
-    const loadingToastId = showToast("Consultando dados na MultiCorban...", "loading", 0);
     try {
       const response = await fetch('/api/multicorban/consulta-cpf', {
         method: 'POST',
@@ -80,7 +79,6 @@ export default function ConsultaCPFPage() {
       showToast(error.message || "Erro ao consultar CPF. Verifique sua conexão.", "error");
     } finally {
       setIsConsulting(false);
-      hideToast(loadingToastId);
     }
   };
 
