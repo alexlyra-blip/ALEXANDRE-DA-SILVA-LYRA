@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2, AlertCircle, Crown } from 'lucide-react';
+import { getBancoName } from '@/lib/mappings';
 import { QuotaAlert } from '@/components/QuotaAlert';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
@@ -159,8 +160,31 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       const personalInfo = firstBenefit.Beneficiario || {};
       
       if (personalInfo?.Nome && !nomeCliente) setNomeCliente(personalInfo.Nome);
+      if (personalInfo?.DataNascimento && !idade) {
+        const birthDate = new Date(personalInfo.DataNascimento);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+        if (age > 0) setIdade(age.toString());
+      }
       if (firstBenefit?.Beneficiario?.Beneficio && !codigoBeneficio) {
         setCodigoBeneficio(firstBenefit.Beneficiario.Beneficio.toString());
+      }
+      
+      const rmc = Array.isArray(firstBenefit?.Rmc) ? firstBenefit.Rmc : (firstBenefit?.Rmc ? [firstBenefit.Rmc] : []);
+      const rcc = Array.isArray(firstBenefit?.RCC) ? firstBenefit.RCC : (firstBenefit?.RCC ? [firstBenefit.RCC] : []);
+      
+      if (rmc.length > 0 && rcc.length > 0) {
+        setHasTwoCards(true);
+        const cardValue1 = parseFloat(rmc[0]?.ValorParcela || rmc[0]?.Desconto || 0);
+        const cardValue2 = parseFloat(rcc[0]?.ValorParcela || rcc[0]?.Desconto || 0);
+        const maxCardValue = Math.max(cardValue1, cardValue2);
+        if (maxCardValue > 0) {
+          setNegativeCardValue(maxCardValue.toFixed(2).replace('.', ','));
+        }
       }
       
     } catch (error: any) {
@@ -182,12 +206,14 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         return;
       }
       
+      const valorOrigin = contractData.ValorEmprestado || contractData.ValorContrato || contractData.ValorFinanciado || contractData.ValorLiberado || contractData.SaldoDevedor || contractData.saldo || 0;
+      
       const newContractInfo = {
-        bancoAtual: contractData.Banco || '',
+        bancoAtual: getBancoName(contractData.Banco) || '',
         valorParcela: contractData.ValorParcela ? contractData.ValorParcela.toString() : '',
-        prazoTotal: contractData.Prazo ? contractData.Prazo.toString() : '',
-        parcelasRestantes: contractData.ParcelasRestantes ? contractData.ParcelasRestantes.toString() : '',
-        saldoDevedor: contractData.SaldoDevedor ? contractData.SaldoDevedor.toString() : '',
+        prazoTotal: (contractData.Prazo || contractData.parcelas || '').toString(),
+        parcelasRestantes: (contractData.ParcelasRestantes || contractData.prazo_restante || '').toString(),
+        saldoDevedor: valorOrigin.toString(),
       };
       
       setAddedContractsIds([...addedContractsIds, hash]);
@@ -1032,7 +1058,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                               onChange={(e) => setSearchTermBank(e.target.value)}
                               onKeyDown={handleKeyDownBank}
                             />
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+                            <Crown className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500 w-5 h-5 pointer-events-none" />
                             <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-transform duration-200 ${isDropdownOpenBank && dropdownBankIndex === index ? 'rotate-180' : ''}`} />
                           </div>
 
@@ -1073,9 +1099,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
                                           }`}
                                         >
                                           <div className="flex items-center gap-3 truncate">
-                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${contract.bancoAtual === b || activeIndexBank === bIndex ? 'bg-primary/20 text-primary' : 'bg-slate-100 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
-                                              <Landmark className="w-4 h-4" />
-                                            </div>
+                                              <Crown className="w-5 h-5 text-amber-500" />
                                             <span className="truncate pr-4">{b}</span>
                                           </div>
                                           {contract.bancoAtual === b && <Check className="w-4 h-4 shrink-0" />}

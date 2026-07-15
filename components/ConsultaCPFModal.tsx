@@ -85,12 +85,17 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
               </div>
               <div className="lg:col-span-2">
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Telefone</p>
-                <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200">
-                  <Phone className="w-4 h-4 text-emerald-500" />
-                  {telefones.length > 0 ? telefones.map((t: string) => {
+                <div className="flex flex-col gap-1 font-semibold text-slate-800 dark:text-slate-200 mt-1">
+                  {telefones.length > 0 ? telefones.map((t: string, idx: number) => {
                     const ct = t.replace(/\D/g, '');
-                    return ct.length === 11 ? `(${ct.slice(0,2)}) ${ct.slice(2,7)}-${ct.slice(7)}` : t;
-                  }).join(', ') : 'N/A'}
+                    const formatted = ct.length === 11 ? `(${ct.slice(0,2)}) ${ct.slice(2,7)}-${ct.slice(7)}` : t;
+                    return (
+                      <div key={idx} className="flex items-center gap-2">
+                        <Crown className="w-4 h-4 text-amber-500" />
+                        <span>{formatted}</span>
+                      </div>
+                    );
+                  }) : <span className="text-slate-500">N/A</span>}
                 </div>
               </div>
               <div className="lg:col-span-4">
@@ -276,7 +281,10 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
                                 return (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">{getBancoName(emp.Banco)}</td>
+                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap flex items-center gap-2">
+                                    <Crown className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                                    <span>{getBancoName(emp.Banco)}</span>
+                                  </td>
                                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{emp.Contrato || 'N/A'}</td>
                                   <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
                                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
