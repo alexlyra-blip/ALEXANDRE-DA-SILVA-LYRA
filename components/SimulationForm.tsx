@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2, AlertCircle, Crown } from 'lucide-react';
 import { getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
 import { QuotaAlert } from '@/components/QuotaAlert';
@@ -49,6 +49,8 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
   const { banks: rulesBanks } = useRules();
   const { showToast, hideToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const hasTriggeredRef = useRef(false);
   const [nomeCliente, setNomeCliente] = useState('');
   const [cpfCliente, setCpfCliente] = useState('');
   const [idade, setIdade] = useState('');
@@ -526,6 +528,77 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       }
     }
   }, [activeIndexBank]);
+
+  useEffect(() => {
+    const cpfParam = searchParams?.get('cpf');
+    const typeParam = searchParams?.get('type');
+    if (cpfParam && !hasTriggeredRef.current) {
+      const cleanCpf = cpfParam.replace(/\D/g, '');
+      if (cleanCpf.length === 11) {
+        hasTriggeredRef.current = true;
+        setCpfCliente(formatCPF(cleanCpf));
+        const searchType = typeParam === 'siape' ? 'siape' : 'inss';
+        setTipoConsulta(searchType);
+        
+        setIsConsulting(true);
+        fetch('/api/multicorban/consulta-cpf', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ cpf: cleanCpf, type: searchType })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data && !data.error) {
+              setConsultaData(data);
+              setIsConsultaModalOpen(true);
+              
+              const isArray = Array.isArray(data);
+              const dataArray = isArray ? data : (data.beneficios ? data.beneficios : (data.value ? data.value : [data]));
+              const beneficiosList = dataArray.length > 0 && dataArray[0].Beneficiario ? dataArray : [];
+              const firstBenefit = beneficiosList[0] || {};
+              const personalInfo = firstBenefit.Beneficiario || {};
+              
+              if (personalInfo?.Nome) setNomeCliente(personalInfo.Nome);
+              if (personalInfo?.DataNascimento) {
+                const birthDate = new Date(personalInfo.DataNascimento);
+                const today = new Date();
+                let age = today.getFullYear() - birthDate.getFullYear();
+                const m = today.getMonth() - birthDate.getMonth();
+                if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                  age--;
+                }
+                if (age > 0) setIdade(age.toString());
+              }
+              
+              if (searchType === 'siape') {
+                setConvenio('SIAPE');
+                const regime = personalInfo.Especie?.toString().toUpperCase() || '';
+                if (regime.includes('PENSIONISTA') || regime.includes('PENSÃO') || regime.includes('PENSAO')) {
+                  setCodigoBeneficio('S2');
+                  setSubConvenio('Beneficiário de Pensão');
+                } else {
+                  setCodigoBeneficio('S1');
+                  setSubConvenio('Ativo/Aposentado');
+                }
+              } else {
+                setConvenio('INSS');
+                if (firstBenefit?.Beneficiario?.Especie) {
+                  setCodigoBeneficio(firstBenefit.Beneficiario.Especie.toString());
+                }
+              }
+              
+              if (firstBenefit?.Beneficiario?.DDB) {
+                setDataConcessao(firstBenefit.Beneficiario.DDB);
+              }
+            }
+          })
+          .catch(err => console.error("Error auto consulting CPF:", err))
+          .finally(() => setIsConsulting(false));
+      }
+    }
+  }, [searchParams]);
 
   const handleConvenioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setConvenio(e.target.value as 'INSS' | 'SIAPE' | 'GOVERNO' | 'FORÇAS ARMADAS' | 'CLT PRIVADO');

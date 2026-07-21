@@ -83,12 +83,9 @@ export default function ConsultaCPFPage() {
   };
 
   const handleToggleContract = (contractData: any, action: 'add' | 'remove') => {
-    // In a real scenario, we might want to pass this to the simulation page via state management or URL query
-    // For now, let's just close the modal and redirect to /simulacao/nova with the CPF
     setIsConsultaModalOpen(false);
     showToast("Redirecionando para simulação...", "success");
-    // Pass just the CPF for now, user can consult again there, or we could use Context API.
-    router.push('/simulacao/nova');
+    router.push(`/simulacao/nova?cpf=${cpfCliente}&type=${tipoConsulta}`);
   };
 
   return (
