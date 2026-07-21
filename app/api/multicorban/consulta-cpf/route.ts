@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 
-const MULTICORBAN_API_TOKEN = '4de9d226b243a2f8903742c8fee73f22';
+const MULTICORBAN_API_TOKEN = '1a2286296a40abf27929209193a85155';
 const CACHE_DAYS = 30;
 
 export async function POST(request: Request) {
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
     // Normalize SIAPE data to match INSS structure
     if (searchType === 'siape' && Array.isArray(data)) {
       data = data.map(item => ({
+        isSiape: true,
         Beneficiario: {
           Nome: item.Cadastro?.Nome,
           CPF: item.Cadastro?.CPF,
@@ -72,6 +73,7 @@ export async function POST(request: Request) {
           Beneficio: item.Cadastro?.Matricula,
           Situacao: "Ativo",
           Especie: item.Cadastro?.AmparoLegal || item.Cadastro?.RegimeJuridico,
+          isSiape: true,
         },
         DadosBancarios: {
           Banco: item.DadosBancarios?.Banco,
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
           ParcelasRestantes: emp.PrazoRestantes?.toString(),
           ValorParcela: emp.Parcela,
           Quitacao: emp.SaldoDevedor,
+          Taxa: "1.60",
         }))
       }));
     }

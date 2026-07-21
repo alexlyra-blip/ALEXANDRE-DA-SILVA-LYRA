@@ -21,7 +21,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
 
   // The MultiCorban API returns an array of benefit objects.
   const isArray = Array.isArray(data);
-  const dataArray = isArray ? data : (data.beneficios ? data.beneficios : [data]);
+  const dataArray = isArray ? data : (data.beneficios ? data.beneficios : (data.value ? data.value : [data]));
   const beneficios = dataArray.length > 0 && dataArray[0].Beneficiario ? dataArray : [];
 
   // Extract personal data from the first benefit (assuming it's the same person)
@@ -141,18 +141,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 const resumo = b.ResumoFinanceiro || {};
                 const dadosBancarios = b.DadosBancarios || {};
                 
+                const isSiape = !!b.isSiape || !!beneficiario.isSiape;
                 const valorBeneficio = parseFloat(resumo.ValorBeneficio || 0);
-                
-                // Cálculo de margens
-                // Exceção LOAS 87 e 88 (35%), demais 40%
-                const especie = (beneficiario.Especie || '').toString();
-                const isLoas = especie.includes('87') || especie.includes('88');
-                const percentualMargem = isLoas ? 0.35 : 0.40;
-                
-                // Função para não arredondar para cima (trunca em 2 casas decimais)
-                const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
-                
-                const margemConsignavel = truncateDecimals(valorBeneficio * percentualMargem);
                 
                 // Emprestimos e cartões
                 const emprestimos = Array.isArray(b.Emprestimos) ? b.Emprestimos : (b.Emprestimos ? [b.Emprestimos] : []);
@@ -163,9 +153,38 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 // Somar tudo que está comprometido (empréstimos e cartões)
                 let totalComprometido = 0;
                 emprestimos.forEach((e: any) => totalComprometido += parseFloat(e.ValorParcela || 0));
-                cartoes.forEach((c: any) => totalComprometido += parseFloat(c.ValorParcela || c.Desconto || 0));
+                
+                if (!isSiape) {
+                  cartoes.forEach((c: any) => totalComprometido += parseFloat(c.ValorParcela || c.Desconto || 0));
+                }
 
-                let margemLivre = truncateDecimals(margemConsignavel - totalComprometido);
+                // Cálculo de margens
+                // Função para não arredondar para cima (trunca em 2 casas decimais)
+                const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
+
+                // Base de cálculo para o SIAPE
+                const baseSiape = rmc.length > 0 && parseFloat(rmc[0]?.ValorParcela || 0) > 0 
+                  ? parseFloat(rmc[0]?.ValorParcela) / 0.05 
+                  : (rcc.length > 0 && parseFloat(rcc[0]?.ValorParcela || 0) > 0 
+                      ? parseFloat(rcc[0]?.ValorParcela) / 0.05 
+                      : valorBeneficio);
+
+                const base = isSiape ? baseSiape : valorBeneficio;
+                
+                // Exceção LOAS 87 e 88 (35%), demais 40% (ou 35% para SIAPE)
+                const especie = (beneficiario.Especie || '').toString();
+                const isLoas = especie.includes('87') || especie.includes('88');
+                const percentualMargem = isSiape ? 0.35 : (isLoas ? 0.35 : 0.40);
+                
+                const margemConsignavel = truncateDecimals(base * percentualMargem);
+                
+                let margemLivre = 0;
+                if (isSiape) {
+                  const margemResumo = parseFloat(resumo.MargemDisponivelEmprestimo || 0);
+                  margemLivre = margemResumo > 0 ? margemResumo : truncateDecimals(margemConsignavel - totalComprometido);
+                } else {
+                  margemLivre = truncateDecimals(margemConsignavel - totalComprometido);
+                }
                 
                 const valorLiberado = margemLivre > 0 ? truncateDecimals(margemLivre / getMarginCoefficient()) : 0;
 
@@ -190,12 +209,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
 
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
-                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Benefício</p>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{isSiape ? 'Matrícula' : 'Benefício'}</p>
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.Beneficio || 'N/A'}</p>
                         </div>
                         <div className="lg:col-span-3">
-                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Espécie</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{getEspecieName(beneficiario.Especie)}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{isSiape ? 'Regime Jurídico / Amparo Legal' : 'Espécie'}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{isSiape ? (beneficiario.Especie || 'N/A') : getEspecieName(beneficiario.Especie)}</p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Status</p>
@@ -219,7 +238,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         <div className="col-span-2">
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Dados Bancários</p>
                           <p className="font-semibold text-slate-800 dark:text-slate-200">
-                            Banco: {dadosBancarios.Banco || 'N/A'} | Ag: {dadosBancarios.Agencia || 'N/A'} {dadosBancarios.ContaPagto ? `| CC: ${dadosBancarios.ContaPagto}` : ''}
+                            Banco: {dadosBancarios.Banco ? getBancoName(dadosBancarios.Banco) : 'N/A'} | Ag: {dadosBancarios.Agencia || 'N/A'} {dadosBancarios.ContaPagto ? `| CC: ${dadosBancarios.ContaPagto}` : ''}
                           </p>
                         </div>
                       </div>
@@ -230,7 +249,11 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                       <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 text-center">
                         <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem Consignável</p>
                         <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavel)}</p>
-                        <p className="text-[9px] text-slate-400 mt-1">({isLoas ? '35%' : '40%'} do Benefício {formatCurrency(valorBeneficio)})</p>
+                        <p className="text-[9px] text-slate-400 mt-1">
+                          {isSiape 
+                            ? `(35% da Base ${formatCurrency(base)})` 
+                            : `(${isLoas ? '35%' : '40%'} do Benefício ${formatCurrency(valorBeneficio)})`}
+                        </p>
                       </div>
                       
                       <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 text-center">
@@ -287,19 +310,20 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 
                                 const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
+                                const bancoExibicao = getBancoName(emp.Banco) !== emp.Banco ? getBancoName(emp.Banco) : (emp.NomeBanco || emp.Banco);
                                 return (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                                   <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap flex items-center gap-2">
                                     <Landmark className="w-4 h-4 text-primary flex-shrink-0" />
-                                    <span>{getBancoName(emp.Banco)}</span>
+                                    <span>{bancoExibicao}</span>
                                   </td>
                                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{emp.Contrato || 'N/A'}</td>
                                   <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
                                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                                    {parcelasPagas}/{prazoTotal}
+                                    {prazoTotal > 0 ? `${parcelasPagas}/${prazoTotal}` : `${parcelasRestantes} rest.`}
                                   </td>
                                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{taxa ? `${parseFloat(taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</td>
-                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">{formatCurrency(parseFloat(valorOrigin))}</td>
+                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">{valorOrigin > 0 ? formatCurrency(parseFloat(valorOrigin)) : 'N/A'}</td>
                                   <td className="px-4 py-3 font-black text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-900/10 whitespace-nowrap">{formatCurrency(saldoAtual)}</td>
                                   <td className="px-4 py-3 text-right">
                                     <button

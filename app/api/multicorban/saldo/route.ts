@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const MULTICORBAN_API_TOKEN = '4de9d226b243a2f8903742c8fee73f22';
+const MULTICORBAN_API_TOKEN = '1a2286296a40abf27929209193a85155';
 
 export async function GET() {
   try {

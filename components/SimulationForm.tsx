@@ -153,7 +153,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       
       // Auto-fill some personal data if available
       const isArray = Array.isArray(data);
-      const dataArray = isArray ? data : (data.beneficios ? data.beneficios : [data]);
+      const dataArray = isArray ? data : (data.beneficios ? data.beneficios : (data.value ? data.value : [data]));
       const beneficios = dataArray.length > 0 && dataArray[0].Beneficiario ? dataArray : [];
       const firstBenefit = beneficios[0] || {};
       const personalInfo = firstBenefit.Beneficiario || {};
@@ -217,8 +217,12 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       
       const valorOrigin = contractData.Quitacao || contractData.SaldoDevedor || contractData.saldo || saldoDevedorCalc || 0;
       
+      const bancoExibicao = getBancoName(contractData.Banco) !== contractData.Banco 
+        ? getBancoName(contractData.Banco) 
+        : (contractData.NomeBanco || contractData.Banco || '');
+
       const newContractInfo = {
-        bancoAtual: getBancoName(contractData.Banco) || '',
+        bancoAtual: bancoExibicao,
         valorParcela: contractData.ValorParcela ? parseFloat(contractData.ValorParcela.toString()).toFixed(2).replace('.', ',') : '',
         prazoTotal: prazoTotalCalc ? prazoTotalCalc.toString() : '',
         parcelasRestantes: (contractData.ParcelasRestantes || contractData.prazo_restante || '').toString(),
