@@ -1,10 +1,46 @@
 'use client';
 
 import { useState } from 'react';
-import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone } from 'lucide-react';
+import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin } from 'lucide-react';
 import { formatCurrency, formatCPF } from '@/lib/utils';
 import { getEspecieName, getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
+
+const formatCEP = (val: string) => {
+  if (!val) return '';
+  const clean = val.replace(/\D/g, '');
+  if (clean.length === 8) {
+    return `${clean.slice(0, 5)}-${clean.slice(5)}`;
+  }
+  return val;
+};
+
+const formatAccount = (account: string) => {
+  if (!account) return 'N/A';
+  const clean = account.toString().trim();
+  if (clean.length <= 1) return clean;
+  return `${clean.slice(0, -1)}-${clean.slice(-1)}`;
+};
+
+const formatBancoComCodigo = (bancoCode: string | number, bancoNome: string) => {
+  if (!bancoCode) return bancoNome || 'N/A';
+  const cleanCode = bancoCode.toString().trim();
+  const paddedCode = cleanCode.padStart(3, '0');
+  
+  if (paddedCode === '000') {
+    if (/^\d{3}\s*-/.test(bancoNome)) {
+      return bancoNome;
+    }
+    return bancoNome || 'N/A';
+  }
+
+  if (bancoNome.startsWith(paddedCode)) {
+    return bancoNome;
+  }
+  
+  const nameWithoutCode = bancoNome.replace(/^\d+\s*-\s*/, '');
+  return `${paddedCode} - ${nameWithoutCode}`;
+};
 
 interface ConsultaCPFModalProps {
   isOpen: boolean;
@@ -60,7 +96,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
             
             <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
               <User className="w-4 h-4 text-primary" />
-              Dados do Cliente
+              DADOS DO BENEFICIÁRIO
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -105,9 +141,21 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 </div>
               </div>
               <div className="lg:col-span-4">
-                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Endereço</p>
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-amber-500" />
+                  ENDEREÇO
+                </p>
                 <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm uppercase">
-                  {[personalInfo.Endereco, personalInfo.Bairro, personalInfo.Cidade, personalInfo.UF, personalInfo.CEP].filter(Boolean).join(', ') || 'N/A'}
+                  {(() => {
+                    const logradouro = personalInfo.Endereco || '';
+                    const bairro = personalInfo.Bairro || '';
+                    const cidade = personalInfo.Cidade || personalInfo.Municipio || '';
+                    const uf = personalInfo.UF || personalInfo.UFBeneficio || '';
+                    const cep = personalInfo.CEP ? formatCEP(personalInfo.CEP) : '';
+                    
+                    const parts = [logradouro, bairro, cidade, uf, cep].map(p => p.toString().trim()).filter(Boolean);
+                    return parts.join(', ') || 'N/A';
+                  })()}
                 </p>
               </div>
             </div>
@@ -199,7 +247,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
                           <FileText className="w-4 h-4 text-primary" />
-                          Dados do Benefício
+                          DADOS DO BENEFÍCIO
                         </h3>
                         <div className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${isBlocked ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/20' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20'}`}>
                           {isBlocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
@@ -212,7 +260,11 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{isSiape ? 'Matrícula' : 'Benefício'}</p>
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.Beneficio || 'N/A'}</p>
                         </div>
-                        <div className="lg:col-span-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Valor do Benefício</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(valorBeneficio)}</p>
+                        </div>
+                        <div className="lg:col-span-2">
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{isSiape ? 'Regime Jurídico / Amparo Legal' : 'Espécie'}</p>
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{isSiape ? (beneficiario.Especie || 'N/A') : getEspecieName(beneficiario.Especie)}</p>
                         </div>
@@ -236,9 +288,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{dadosBancarios.MeioPagamento === '2' ? 'Conta Corrente' : dadosBancarios.MeioPagamento === '1' ? 'Cartão Magnético' : dadosBancarios.MeioPagamento || 'N/A'}</p>
                         </div>
                         <div className="col-span-2">
-                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Dados Bancários</p>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1">
+                            <Landmark className="w-3.5 h-3.5 text-amber-500" />
+                            DADOS BANCÁRIOS
+                          </p>
                           <p className="font-semibold text-slate-800 dark:text-slate-200">
-                            Banco: {dadosBancarios.Banco ? getBancoName(dadosBancarios.Banco) : 'N/A'} | Ag: {dadosBancarios.Agencia || 'N/A'} {dadosBancarios.ContaPagto ? `| CC: ${dadosBancarios.ContaPagto}` : ''}
+                            Banco: {dadosBancarios.Banco ? formatBancoComCodigo(dadosBancarios.Banco, getBancoName(dadosBancarios.Banco)) : 'N/A'} | Ag: {dadosBancarios.Agencia || 'N/A'} | CC: {dadosBancarios.ContaPagto ? formatAccount(dadosBancarios.ContaPagto) : 'N/A'}
                           </p>
                         </div>
                       </div>
@@ -310,7 +365,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 
                                 const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
-                                const bancoExibicao = getBancoName(emp.Banco) !== emp.Banco ? getBancoName(emp.Banco) : (emp.NomeBanco || emp.Banco);
+                                const bancoNomeSemPrefixo = getBancoName(emp.Banco) !== emp.Banco ? getBancoName(emp.Banco) : (emp.NomeBanco || emp.Banco);
+                                const bancoExibicao = formatBancoComCodigo(emp.Banco, bancoNomeSemPrefixo);
                                 return (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                                   <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap flex items-center gap-2">

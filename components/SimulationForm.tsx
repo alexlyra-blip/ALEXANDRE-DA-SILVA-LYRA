@@ -16,6 +16,26 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import ConsultaCPFModal from '@/components/ConsultaCPFModal';
 
+const formatBancoComCodigo = (bancoCode: string | number, bancoNome: string) => {
+  if (!bancoCode) return bancoNome || '';
+  const cleanCode = bancoCode.toString().trim();
+  const paddedCode = cleanCode.padStart(3, '0');
+  
+  if (paddedCode === '000') {
+    if (/^\d{3}\s*-/.test(bancoNome)) {
+      return bancoNome;
+    }
+    return bancoNome || '';
+  }
+
+  if (bancoNome.startsWith(paddedCode)) {
+    return bancoNome;
+  }
+  
+  const nameWithoutCode = bancoNome.replace(/^\d+\s*-\s*/, '');
+  return `${paddedCode} - ${nameWithoutCode}`;
+};
+
 const getAI = () => {
   let apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
   if (apiKey.includes("MY_GEMINI") || !apiKey) {
@@ -217,9 +237,10 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       
       const valorOrigin = contractData.Quitacao || contractData.SaldoDevedor || contractData.saldo || saldoDevedorCalc || 0;
       
-      const bancoExibicao = getBancoName(contractData.Banco) !== contractData.Banco 
+      const bancoNomeSemPrefixo = getBancoName(contractData.Banco) !== contractData.Banco 
         ? getBancoName(contractData.Banco) 
         : (contractData.NomeBanco || contractData.Banco || '');
+      const bancoExibicao = formatBancoComCodigo(contractData.Banco, bancoNomeSemPrefixo);
 
       const newContractInfo = {
         bancoAtual: bancoExibicao,

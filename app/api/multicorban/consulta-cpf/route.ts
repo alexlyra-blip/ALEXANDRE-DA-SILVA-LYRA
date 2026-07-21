@@ -29,11 +29,19 @@ export async function POST(request: Request) {
         const diffMs = now - cachedData.createdAt;
         const diffDays = diffMs / (1000 * 60 * 60 * 24);
         
-        if (diffDays < CACHE_DAYS) {
+        // Garantir que os dados do SIAPE contêm o mapeamento de endereço e normalização
+        const isSiapeDataValid = searchType !== 'siape' || (
+          Array.isArray(cachedData.data) && 
+          cachedData.data.length > 0 && 
+          cachedData.data[0].isSiape === true &&
+          cachedData.data[0].Beneficiario?.Endereco !== undefined
+        );
+
+        if (diffDays < CACHE_DAYS && isSiapeDataValid) {
           console.log(`[Cache Hit] Retornando CPF ${cleanCpf} do banco (idade: ${Math.round(diffDays)} dias)`);
           return NextResponse.json(cachedData.data);
         } else {
-          console.log(`[Cache Expired] CPF ${cleanCpf} expirou. Buscando novo...`);
+          console.log(`[Cache Expired or Outdated] CPF ${cleanCpf} expirou ou precisa ser re-normalizado. Buscando novo...`);
         }
       }
     }
@@ -74,6 +82,11 @@ export async function POST(request: Request) {
           Situacao: "Ativo",
           Especie: item.Cadastro?.AmparoLegal || item.Cadastro?.RegimeJuridico,
           isSiape: true,
+          Endereco: item.Endereco?.Logradouro || "",
+          Bairro: item.Endereco?.Bairro || "",
+          Cidade: item.Endereco?.Municipio || item.Endereco?.Cidade || "",
+          UF: item.Endereco?.Uf || item.Endereco?.UF || "",
+          CEP: item.Endereco?.CEP || "",
         },
         DadosBancarios: {
           Banco: item.DadosBancarios?.Banco,
