@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin } from 'lucide-react';
+import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap } from 'lucide-react';
 import { formatCurrency, formatCPF } from '@/lib/utils';
 import { getEspecieName, getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
@@ -206,10 +206,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 // Somar tudo que está comprometido (empréstimos e cartões)
                 let totalComprometido = 0;
                 emprestimos.forEach((e: any) => totalComprometido += parseFloat(e.ValorParcela || 0));
-                
-                if (!isSiape) {
-                  cartoes.forEach((c: any) => totalComprometido += parseFloat(c.ValorParcela || c.Desconto || 0));
-                }
+                cartoes.forEach((c: any) => totalComprometido += parseFloat(c.ValorParcela || c.Desconto || c.Margem || 0));
 
                 // Cálculo de margens
                 // Função para não arredondar para cima (trunca em 2 casas decimais)
@@ -402,58 +399,99 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                       </div>
                     )}
 
-                    {/* Cartões Ativos Grid */}
+                    {/* Cartões Ativos Grid Premium */}
                     {cartoes.length > 0 && (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {rmc.map((cartao: any, idx: number) => (
-                          <div key={`rmc-${idx}`} className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 relative overflow-hidden flex flex-col justify-between">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-full blur-2xl"></div>
-                            <div className="text-center mb-6 border-b border-slate-100 dark:border-slate-800 pb-3">
-                              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Cartão Consignado (RMC)</h3>
-                            </div>
-                            <div className="grid grid-cols-3 gap-4 text-center">
-                              <div>
-                                <div className="w-8 h-8 mx-auto bg-slate-100 dark:bg-slate-800 rounded-full mb-2 flex items-center justify-center">
-                                  <CreditCard className="w-4 h-4 text-slate-500" />
-                                </div>
-                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{getBancoName(cartao.Banco)}</p>
-                              </div>
-                              <div>
-                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem</p>
-                                <p className="font-black text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(cartao.ValorParcela || cartao.Desconto || 0))}</p>
-                              </div>
-                              <div>
-                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Limite Cartão</p>
-                                <p className="font-black text-sky-600 dark:text-sky-400">{formatCurrency(parseFloat(cartao.Limite || cartao.LimiteCartao || 0))}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                            <CreditCard className="w-4 h-4 text-amber-500" />
+                            Cartões Ativos (RMC & RCC)
+                          </h3>
+                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-amber-500" />
+                            {cartoes.length} {cartoes.length === 1 ? 'Cartão Registrado' : 'Cartões Registrados'}
+                          </span>
+                        </div>
 
-                        {rcc.map((cartao: any, idx: number) => (
-                          <div key={`rcc-${idx}`} className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 relative overflow-hidden flex flex-col justify-between">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl"></div>
-                            <div className="text-center mb-6 border-b border-slate-100 dark:border-slate-800 pb-3">
-                              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Cartão Benefício (RCC)</h3>
-                            </div>
-                            <div className="grid grid-cols-3 gap-4 text-center">
-                              <div>
-                                <div className="w-8 h-8 mx-auto bg-amber-100 dark:bg-amber-900/30 rounded-full mb-2 flex items-center justify-center">
-                                  <CreditCard className="w-4 h-4 text-amber-600" />
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {rmc.map((cartao: any, idx: number) => {
+                            const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
+                            const margemValor = parseFloat(cartao.ValorParcela || cartao.Desconto || cartao.Margem || 0);
+                            const limiteValor = parseFloat(cartao.Limite || cartao.LimiteCartao || 0);
+
+                            return (
+                              <div key={`rmc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-sky-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-sky-950/20 rounded-2xl border border-sky-200/60 dark:border-sky-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-2xl"></div>
+                                
+                                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400 font-black text-xs">
+                                      <CreditCard className="w-4.5 h-4.5" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Consignado (RMC)</h4>
+                                      <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
+                                    </div>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 uppercase tracking-wider">
+                                    Desconto em Folha
+                                  </span>
                                 </div>
-                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{getBancoName(cartao.Banco)}</p>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
+                                    <p className="text-base font-black text-rose-600 dark:text-rose-400">{formatCurrency(margemValor)}</p>
+                                  </div>
+
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Limite do Cartão</p>
+                                    <p className="text-base font-black text-sky-600 dark:text-sky-400">{formatCurrency(limiteValor)}</p>
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem</p>
-                                <p className="font-black text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(cartao.ValorParcela || cartao.Desconto || 0))}</p>
+                            );
+                          })}
+
+                          {rcc.map((cartao: any, idx: number) => {
+                            const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
+                            const margemValor = parseFloat(cartao.ValorParcela || cartao.Desconto || cartao.Margem || 0);
+                            const limiteValor = parseFloat(cartao.Limite || cartao.LimiteCartao || 0);
+
+                            return (
+                              <div key={`rcc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-amber-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-amber-950/20 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl"></div>
+                                
+                                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-black text-xs">
+                                      <Wallet className="w-4.5 h-4.5" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Benefício (RCC)</h4>
+                                      <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
+                                    </div>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 uppercase tracking-wider">
+                                    Cartão Benefício
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
+                                    <p className="text-base font-black text-rose-600 dark:text-rose-400">{formatCurrency(margemValor)}</p>
+                                  </div>
+
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Limite do Cartão</p>
+                                    <p className="text-base font-black text-amber-600 dark:text-amber-400">{formatCurrency(limiteValor)}</p>
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Limite Cartão</p>
-                                <p className="font-black text-sky-600 dark:text-sky-400">{formatCurrency(parseFloat(cartao.Limite || cartao.LimiteCartao || 0))}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>

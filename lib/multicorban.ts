@@ -1,5 +1,40 @@
 import { getBancoName } from './mappings';
 
+function parseCardList(raw: any, cardType: 'RMC' | 'RCC'): any[] {
+  if (!raw) return [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  
+  return list.map((c: any) => {
+    if (!c || typeof c !== 'object') return null;
+    
+    const valorParcela = parseFloat(
+      c.ValorParcela || c.ValorDesconto || c.Desconto || c.Margem || c.ValorMargem || c.Parcela || c.desconto || c.margem || c.valorParcela || c.valorDesconto || c.Valor || 0
+    );
+    let limite = parseFloat(
+      c.Limite || c.LimiteCartao || c.ValorLimite || c.limite || c.limiteCartao || c.valorLimite || 0
+    );
+    
+    if ((isNaN(limite) || limite <= 0) && valorParcela > 0) {
+      limite = valorParcela / 0.05; // Estimar limite padrão (20x o valor da parcela/margem)
+    }
+    
+    const bancoCode = c.Banco !== undefined && c.Banco !== null ? String(c.Banco).trim() : (c.IdBanco !== undefined && c.IdBanco !== null ? String(c.IdBanco).trim() : '');
+    const nomeBanco = String(c.NomeBanco || c.Rubrica || c.nomeBanco || c.rubrica || '').trim();
+
+    if (isNaN(valorParcela) || valorParcela <= 0) {
+      if (limite <= 0 && !bancoCode && !nomeBanco) return null;
+    }
+
+    return {
+      Tipo: cardType,
+      Banco: bancoCode,
+      NomeBanco: nomeBanco,
+      ValorParcela: isNaN(valorParcela) ? 0 : valorParcela,
+      Limite: isNaN(limite) ? 0 : limite,
+    };
+  }).filter(Boolean);
+}
+
 export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
   if (!item || typeof item !== 'object') return null;
 
@@ -75,28 +110,50 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
     return String(t.Numero || t.numero || t.telefone || '').trim();
   }).filter((t: string) => t.length > 0);
 
-  // RMC & RCC
-  const rawRmc = item.Rmc || item.RMC || {};
-  const rmcVal = parseFloat(rawRmc.ValorParcela || rawRmc.Desconto || rawRmc.Margem || 0);
-  const rmcLim = parseFloat(rawRmc.Limite || rawRmc.LimiteCartao || rawRmc.Margem || 0);
-  const rmcNormalized = (rmcVal > 0 || rmcLim > 0 || rawRmc.Banco) ? [{
-    Banco: rawRmc.Banco ? String(rawRmc.Banco).trim() : '',
-    ValorParcela: isNaN(rmcVal) ? 0 : rmcVal,
-    Limite: isNaN(rmcLim) ? 0 : rmcLim,
-  }] : [];
+  // Extração Inteligente de Cartões RMC e RCC
+  let rawRmc = item.Rmc || item.RMC || item.rmc || item.ReservaMargemConsignavel || item.rmcBeneficio;
+  let rawRcc = item.RCC || item.Rcc || item.rcc || item.ReservaCartaoConsignado || item.rccBeneficio;
 
-  const rawRcc = item.RCC || item.Rcc || {};
-  const rccVal = parseFloat(rawRcc.ValorParcela || rawRcc.Desconto || rawRcc.Margem || 0);
-  const rccLim = parseFloat(rawRcc.Limite || rawRcc.LimiteCartao || rawRcc.Margem || 0);
-  const rccNormalized = (rccVal > 0 || rccLim > 0 || rawRcc.Banco) ? [{
-    Banco: rawRcc.Banco ? String(rawRcc.Banco).trim() : '',
-    ValorParcela: isNaN(rccVal) ? 0 : rccVal,
-    Limite: isNaN(rccLim) ? 0 : rccLim,
-  }] : [];
+  if (Array.isArray(item.Cartoes) || Array.isArray(item.cartoes)) {
+    const arr = item.Cartoes || item.cartoes;
+    arr.forEach((c: any) => {
+      const tipo = String(c.Tipo || c.tipo || c.Especie || c.especie || c.Rubrica || c.rubrica || '').toUpperCase();
+      if (tipo.includes('RCC') || tipo.includes('BENEFICIO') || tipo.includes('BENEFÍCIO')) {
+        rawRcc = rawRcc ? (Array.isArray(rawRcc) ? [...rawRcc, c] : [rawRcc, c]) : [c];
+      } else {
+        rawRmc = rawRmc ? (Array.isArray(rawRmc) ? [...rawRmc, c] : [rawRmc, c]) : [c];
+      }
+    });
+  }
 
-  // Emprestimos
+  // Filtrar empréstimos e identificar cartões que por ventura venham na lista de empréstimos
   const rawEmprestimos = Array.isArray(item.Emprestimos) ? item.Emprestimos : (item.Emprestimos ? [item.Emprestimos] : []);
-  const emprestimosNormalized = rawEmprestimos.map((emp: any) => {
+  const extraRmcFromEmp: any[] = [];
+  const extraRccFromEmp: any[] = [];
+  const cleanEmprestimosList: any[] = [];
+
+  rawEmprestimos.forEach((emp: any) => {
+    if (!emp || typeof emp !== 'object') return;
+    const rubricaUpper = String(emp.Rubrica || emp.NomeBanco || emp.bancoNome || emp.rubrica || '').toUpperCase();
+    const tipoUpper = String(emp.Tipo || emp.tipo || emp.TipoEmprestimo || '').toUpperCase();
+    const combinedStr = `${rubricaUpper} ${tipoUpper}`;
+
+    if (combinedStr.includes('RMC') || combinedStr.includes('RESERVA DE MARGEM') || combinedStr.includes('CARTAO CONSIGNADO') || combinedStr.includes('CARTÃO CONSIGNADO')) {
+      extraRmcFromEmp.push(emp);
+    } else if (combinedStr.includes('RCC') || combinedStr.includes('CARTAO BENEFICIO') || combinedStr.includes('CARTÃO BENEFÍCIO') || combinedStr.includes('CARTAO BENEF')) {
+      extraRccFromEmp.push(emp);
+    } else {
+      cleanEmprestimosList.push(emp);
+    }
+  });
+
+  const mergedRmc = rawRmc ? (Array.isArray(rawRmc) ? [...rawRmc, ...extraRmcFromEmp] : [rawRmc, ...extraRmcFromEmp]) : extraRmcFromEmp;
+  const mergedRcc = rawRcc ? (Array.isArray(rawRcc) ? [...rawRcc, ...extraRccFromEmp] : [rawRcc, ...extraRccFromEmp]) : extraRccFromEmp;
+
+  const rmcNormalized = parseCardList(mergedRmc, 'RMC');
+  const rccNormalized = parseCardList(mergedRcc, 'RCC');
+
+  const emprestimosNormalized = cleanEmprestimosList.map((emp: any) => {
     if (!emp || typeof emp !== 'object') return null;
     
     let bancoCode = emp.Banco !== undefined && emp.Banco !== null ? String(emp.Banco).trim() : (emp.IdBanco !== undefined && emp.IdBanco !== null ? String(emp.IdBanco).trim() : '');
