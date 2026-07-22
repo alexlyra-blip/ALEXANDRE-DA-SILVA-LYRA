@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap } from 'lucide-react';
 import { formatCurrency, formatCPF } from '@/lib/utils';
 import { getEspecieName, getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
 import { parseConsultaResponse } from '@/lib/multicorban';
+import { getLatestCoefficient, getCachedCoefficientSync } from '@/lib/coefficients';
 
 const formatCEP = (val: any) => {
   if (!val) return '';
@@ -68,7 +69,25 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
   const telefones = Array.isArray(firstBenefit.Telefone) ? firstBenefit.Telefone : (firstBenefit.Telefone ? [firstBenefit.Telefone] : []);
 
 
-  const getMarginCoefficient = () => 0.02270;
+  const [dailyCoef, setDailyCoef] = useState<number>(0.02270);
+  const [coefDate, setCoefDate] = useState<string>('');
+
+  useEffect(() => {
+    if (!isOpen || !data) return;
+    const list = parseConsultaResponse(data);
+    const first = list[0] || {};
+    const isSiape = !!first?.Beneficiario?.isSiape;
+    const conv = isSiape ? 'SIAPE' : 'INSS';
+
+    getLatestCoefficient(conv).then(info => {
+      if (info && info.coeficiente > 0) {
+        setDailyCoef(info.coeficiente);
+        setCoefDate(info.date);
+      }
+    });
+  }, [isOpen, data]);
+
+  const getMarginCoefficient = () => dailyCoef || getCachedCoefficientSync(firstBenefit?.Beneficiario?.isSiape ? 'SIAPE' : 'INSS');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -327,7 +346,9 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                         <p className="text-[10px] uppercase tracking-wider text-white/80 font-bold mb-1">Valor Liberado</p>
                         <p className="text-2xl font-black">{formatCurrency(valorLiberado)}</p>
-                        <p className="text-[9px] text-white/60 mt-1">Coeficiente {getMarginCoefficient().toString().replace('.', ',')}</p>
+                        <p className="text-[9px] text-white/80 mt-1 font-semibold">
+                          Coef. Diário ({isSiape ? 'SIAPE' : 'INSS'}): {getMarginCoefficient().toString().replace('.', ',')} {coefDate ? `(${coefDate})` : ''}
+                        </p>
                       </div>
                     </div>
 
