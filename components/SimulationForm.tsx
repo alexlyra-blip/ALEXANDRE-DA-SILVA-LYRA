@@ -15,25 +15,28 @@ import { safeStringify } from '@/lib/utils';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import ConsultaCPFModal from '@/components/ConsultaCPFModal';
+import { parseConsultaResponse } from '@/lib/multicorban';
 
-const formatBancoComCodigo = (bancoCode: string | number, bancoNome: string) => {
-  if (!bancoCode) return bancoNome || '';
-  const cleanCode = bancoCode.toString().trim();
+const formatBancoComCodigo = (bancoCode: string | number | null | undefined, bancoNome: string | null | undefined) => {
+  const strNome = bancoNome ? String(bancoNome).trim() : '';
+  if (!bancoCode) return strNome || '';
+  const cleanCode = String(bancoCode).trim();
+  if (!cleanCode) return strNome || '';
   const paddedCode = cleanCode.padStart(3, '0');
   
   if (paddedCode === '000') {
-    if (/^\d{3}\s*-/.test(bancoNome)) {
-      return bancoNome;
+    if (strNome && /^\d{3}\s*-/.test(strNome)) {
+      return strNome;
     }
-    return bancoNome || '';
+    return strNome || '';
   }
 
-  if (bancoNome.startsWith(paddedCode)) {
-    return bancoNome;
+  if (strNome && strNome.startsWith(paddedCode)) {
+    return strNome;
   }
   
-  const nameWithoutCode = bancoNome.replace(/^\d+\s*-\s*/, '');
-  return `${paddedCode} - ${nameWithoutCode}`;
+  const nameWithoutCode = strNome.replace(/^\d+\s*-\s*/, '');
+  return nameWithoutCode ? `${paddedCode} - ${nameWithoutCode}` : paddedCode;
 };
 
 const getAI = () => {
@@ -174,9 +177,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       setIsConsultaModalOpen(true);
       
       // Auto-fill some personal data if available
-      const isArray = Array.isArray(data);
-      const dataArray = isArray ? data : (data.beneficios ? data.beneficios : (data.value ? data.value : [data]));
-      const beneficios = dataArray.length > 0 && dataArray[0].Beneficiario ? dataArray : [];
+      const beneficios = parseConsultaResponse(data);
       const firstBenefit = beneficios[0] || {};
       const personalInfo = firstBenefit.Beneficiario || {};
       
@@ -239,7 +240,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
       
       const valorOrigin = contractData.Quitacao || contractData.SaldoDevedor || contractData.saldo || saldoDevedorCalc || 0;
       
-      const bancoNomeSemPrefixo = getBancoName(contractData.Banco) !== contractData.Banco 
+      const bancoNomeSemPrefixo = getBancoName(contractData.Banco) !== String(contractData.Banco || '') 
         ? getBancoName(contractData.Banco) 
         : (contractData.NomeBanco || contractData.Banco || '');
       const bancoExibicao = formatBancoComCodigo(contractData.Banco, bancoNomeSemPrefixo);
@@ -554,9 +555,7 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
               setConsultaData(data);
               setIsConsultaModalOpen(true);
               
-              const isArray = Array.isArray(data);
-              const dataArray = isArray ? data : (data.beneficios ? data.beneficios : (data.value ? data.value : [data]));
-              const beneficiosList = dataArray.length > 0 && dataArray[0].Beneficiario ? dataArray : [];
+              const beneficiosList = parseConsultaResponse(data);
               const firstBenefit = beneficiosList[0] || {};
               const personalInfo = firstBenefit.Beneficiario || {};
               

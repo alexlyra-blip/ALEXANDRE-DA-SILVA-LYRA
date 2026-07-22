@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { parseConsultaResponse } from '@/lib/multicorban';
 
 const MULTICORBAN_API_TOKEN = '1a2286296a40abf27929209193a85155';
 const CACHE_DAYS = 30;
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
 
     const cleanCpf = cpf.replace(/\D/g, '');
     const searchType = type === 'siape' ? 'siape' : 'inss';
+    const isSiape = searchType === 'siape';
     const docId = `${cleanCpf}_${searchType}`;
 
     const db = getAdminDb();
@@ -28,18 +30,13 @@ export async function POST(request: Request) {
         const now = new Date().getTime();
         const diffMs = now - cachedData.createdAt;
         const diffDays = diffMs / (1000 * 60 * 60 * 24);
-        
-        // Garantir que os dados do SIAPE contêm o mapeamento de endereço e normalização
-        const isSiapeDataValid = searchType !== 'siape' || (
-          Array.isArray(cachedData.data) && 
-          cachedData.data.length > 0 && 
-          cachedData.data[0].isSiape === true &&
-          cachedData.data[0].Beneficiario?.Endereco !== undefined
-        );
 
-        if (diffDays < CACHE_DAYS && isSiapeDataValid) {
+        if (diffDays < CACHE_DAYS && cachedData.data) {
           console.log(`[Cache Hit] Retornando CPF ${cleanCpf} do banco (idade: ${Math.round(diffDays)} dias)`);
-          return NextResponse.json(cachedData.data);
+          const normalizedCache = parseConsultaResponse(cachedData.data, isSiape);
+          if (normalizedCache.length > 0) {
+            return NextResponse.json(normalizedCache);
+          }
         } else {
           console.log(`[Cache Expired or Outdated] CPF ${cleanCpf} expirou ou precisa ser re-normalizado. Buscando novo...`);
         }
@@ -48,7 +45,7 @@ export async function POST(request: Request) {
 
     // Cache miss or expired, fetch from API
     let url = 'https://api.bancodatahub.com/cpf';
-    if (searchType === 'siape') {
+    if (isSiape) {
       url = 'https://api.bancodatahub.com/siape';
     }
 
@@ -67,50 +64,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Falha ao consultar a API da MultiCorban' }, { status: response.status });
     }
 
-    let data = await response.json();
-    
-    // Normalize SIAPE data to match INSS structure
-    if (searchType === 'siape' && Array.isArray(data)) {
-      data = data.map(item => ({
-        isSiape: true,
-        Beneficiario: {
-          Nome: item.Cadastro?.Nome,
-          CPF: item.Cadastro?.CPF,
-          DataNascimento: item.Cadastro?.DataNascimento,
-          NomeMae: item.Cadastro?.NomeMae,
-          Beneficio: item.Cadastro?.Matricula,
-          Situacao: "Ativo",
-          Especie: item.Cadastro?.AmparoLegal || item.Cadastro?.RegimeJuridico,
-          isSiape: true,
-          Endereco: item.Endereco?.Logradouro || "",
-          Bairro: item.Endereco?.Bairro || "",
-          Cidade: item.Endereco?.Municipio || item.Endereco?.Cidade || "",
-          UF: item.Endereco?.Uf || item.Endereco?.UF || "",
-          CEP: item.Endereco?.CEP || "",
-        },
-        DadosBancarios: {
-          Banco: item.DadosBancarios?.Banco,
-          Agencia: item.DadosBancarios?.Agencia,
-          ContaPagto: item.DadosBancarios?.NumConta,
-        },
-        ResumoFinanceiro: {
-          ValorBeneficio: parseFloat(item.ResumoFinanceiro?.Bruto || "0"),
-          BaseCalculo: parseFloat(item.ResumoFinanceiro?.ValorLiquido || "0"),
-          MargemDisponivelEmprestimo: parseFloat(item.ResumoFinanceiro?.Margem || "0"),
-        },
-        Telefone: item.Telefone || [],
-        Rmc: item.RMC ? { ValorParcela: item.RMC.Margem } : {},
-        RCC: item.RCC ? { ValorParcela: item.RCC.Margem } : {},
-        Emprestimos: (item.Emprestimos || []).map((emp: any) => ({
-          Banco: emp.IdBanco?.toString(),
-          NomeBanco: emp.Rubrica,
-          Contrato: emp.Contrato,
-          ParcelasRestantes: emp.PrazoRestantes?.toString(),
-          ValorParcela: emp.Parcela,
-          Quitacao: emp.SaldoDevedor,
-          Taxa: "1.60",
-        }))
-      }));
+    let rawData = await response.json();
+    const normalizedData = parseConsultaResponse(rawData, isSiape);
+
+    if (normalizedData.length === 0 && rawData && (rawData.message || rawData.error)) {
+      return NextResponse.json({ error: rawData.message || rawData.error || 'Nenhum benefício encontrado' }, { status: 404 });
     }
     
     // Save to Cache
@@ -119,14 +77,14 @@ export async function POST(request: Request) {
         cpf: cleanCpf,
         type: searchType,
         createdAt: new Date().getTime(),
-        data: data
+        data: normalizedData
       });
     } catch (dbError) {
       console.error("Erro ao salvar cache no Firestore:", dbError);
       // Não falhar a request se o cache falhar
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json(normalizedData);
   } catch (error: any) {
     console.error("MultiCorban CPF Route Error:", error);
     return NextResponse.json({ error: 'Erro interno no servidor' }, { status: 500 });

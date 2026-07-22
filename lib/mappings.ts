@@ -70,23 +70,27 @@ export const BANCOS_BRASIL: Record<string, string> = {
   '925': 'BRB FINANCEIRA',
 };
 
-export function getEspecieName(codigo: string): string {
-  if (!codigo) return 'N/A';
-  const cleanCode = codigo.toString().trim().padStart(2, '0');
-  return INSS_ESPECIES[cleanCode] ? `${cleanCode} - ${INSS_ESPECIES[cleanCode]}` : codigo;
+export function getEspecieName(codigo: any): string {
+  if (codigo === undefined || codigo === null || codigo === '') return 'N/A';
+  const strCod = String(codigo).trim();
+  if (!strCod) return 'N/A';
+  const cleanCode = strCod.padStart(2, '0');
+  return INSS_ESPECIES[cleanCode] ? `${cleanCode} - ${INSS_ESPECIES[cleanCode]}` : strCod;
 }
 
-export function getBancoName(codigo: string): string {
-  if (!codigo) return 'N/A';
-  const cleanCode = codigo.toString().trim().padStart(3, '0');
-  return BANCOS_BRASIL[cleanCode] ? `${cleanCode} - ${BANCOS_BRASIL[cleanCode]}` : codigo;
+export function getBancoName(codigo: any): string {
+  if (codigo === undefined || codigo === null || codigo === '') return 'N/A';
+  const strCod = String(codigo).trim();
+  if (!strCod) return 'N/A';
+  const cleanCode = strCod.padStart(3, '0');
+  return BANCOS_BRASIL[cleanCode] ? `${cleanCode} - ${BANCOS_BRASIL[cleanCode]}` : strCod;
 }
 
 export function calculateSaldoDevedor(valorParcela: number, parcelasRestantes: number, taxaMensalStr: string | number): number {
   if (!valorParcela || !parcelasRestantes || !taxaMensalStr) return 0;
   
   // Taxa pode vir como "1.98" ou "1,98" ou "1.98%"
-  let taxaFormatada = taxaMensalStr.toString().replace('%', '').replace(',', '.').trim();
+  let taxaFormatada = String(taxaMensalStr).replace('%', '').replace(',', '.').trim();
   let taxaMensal = parseFloat(taxaFormatada) / 100;
 
   if (isNaN(taxaMensal) || taxaMensal <= 0) return valorParcela * parcelasRestantes;
@@ -95,3 +99,4 @@ export function calculateSaldoDevedor(valorParcela: number, parcelasRestantes: n
   const pv = valorParcela * ((1 - Math.pow(1 + taxaMensal, -parcelasRestantes)) / taxaMensal);
   return Math.floor(pv * 100) / 100; // Truncate 2 decimals
 }
+

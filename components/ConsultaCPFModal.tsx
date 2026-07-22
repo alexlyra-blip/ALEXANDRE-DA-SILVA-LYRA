@@ -5,41 +5,45 @@ import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Cr
 import { formatCurrency, formatCPF } from '@/lib/utils';
 import { getEspecieName, getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
+import { parseConsultaResponse } from '@/lib/multicorban';
 
-const formatCEP = (val: string) => {
+const formatCEP = (val: any) => {
   if (!val) return '';
-  const clean = val.replace(/\D/g, '');
+  const strVal = String(val);
+  const clean = strVal.replace(/\D/g, '');
   if (clean.length === 8) {
     return `${clean.slice(0, 5)}-${clean.slice(5)}`;
   }
-  return val;
+  return strVal;
 };
 
-const formatAccount = (account: string) => {
+const formatAccount = (account: any) => {
   if (!account) return 'N/A';
-  const clean = account.toString().trim();
+  const clean = String(account).trim();
   if (clean.length <= 1) return clean;
   return `${clean.slice(0, -1)}-${clean.slice(-1)}`;
 };
 
-const formatBancoComCodigo = (bancoCode: string | number, bancoNome: string) => {
-  if (!bancoCode) return bancoNome || 'N/A';
-  const cleanCode = bancoCode.toString().trim();
+const formatBancoComCodigo = (bancoCode: string | number | null | undefined, bancoNome: string | null | undefined) => {
+  const strNome = bancoNome ? String(bancoNome).trim() : '';
+  if (!bancoCode) return strNome || 'N/A';
+  const cleanCode = String(bancoCode).trim();
+  if (!cleanCode) return strNome || 'N/A';
   const paddedCode = cleanCode.padStart(3, '0');
   
   if (paddedCode === '000') {
-    if (/^\d{3}\s*-/.test(bancoNome)) {
-      return bancoNome;
+    if (strNome && /^\d{3}\s*-/.test(strNome)) {
+      return strNome;
     }
-    return bancoNome || 'N/A';
+    return strNome || 'N/A';
   }
 
-  if (bancoNome.startsWith(paddedCode)) {
-    return bancoNome;
+  if (strNome && strNome.startsWith(paddedCode)) {
+    return strNome;
   }
   
-  const nameWithoutCode = bancoNome.replace(/^\d+\s*-\s*/, '');
-  return `${paddedCode} - ${nameWithoutCode}`;
+  const nameWithoutCode = strNome.replace(/^\d+\s*-\s*/, '');
+  return nameWithoutCode ? `${paddedCode} - ${nameWithoutCode}` : paddedCode;
 };
 
 interface ConsultaCPFModalProps {
@@ -55,10 +59,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
 
   if (!isOpen || !data) return null;
 
-  // The MultiCorban API returns an array of benefit objects.
-  const isArray = Array.isArray(data);
-  const dataArray = isArray ? data : (data.beneficios ? data.beneficios : (data.value ? data.value : [data]));
-  const beneficios = dataArray.length > 0 && dataArray[0].Beneficiario ? dataArray : [];
+  // Normalize data safely using parseConsultaResponse
+  const beneficios = parseConsultaResponse(data);
 
   // Extract personal data from the first benefit (assuming it's the same person)
   const firstBenefit = beneficios[0] || {};
@@ -117,7 +119,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nascimento</p>
                 <p className="font-semibold text-slate-800 dark:text-slate-200">
-                  {personalInfo.DataNascimento ? personalInfo.DataNascimento.split('-').reverse().join('/') : 'N/A'}
+                  {typeof personalInfo.DataNascimento === 'string' && personalInfo.DataNascimento.includes('-') ? personalInfo.DataNascimento.split('-').reverse().join('/') : (personalInfo.DataNascimento || 'N/A')}
                   {personalInfo.DataNascimento && (
                     <span className="text-slate-500 text-sm ml-2 font-normal">
                       ({Math.floor((new Date().getTime() - new Date(personalInfo.DataNascimento).getTime()) / 31557600000)} anos)
@@ -128,9 +130,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
               <div className="lg:col-span-2">
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Telefone</p>
                 <div className="flex flex-col gap-1 font-semibold text-slate-800 dark:text-slate-200 mt-1">
-                  {telefones.length > 0 ? telefones.map((t: string, idx: number) => {
-                    const ct = t.replace(/\D/g, '');
-                    const formatted = ct.length === 11 ? `(${ct.slice(0,2)}) ${ct.slice(2,7)}-${ct.slice(7)}` : t;
+                  {telefones.length > 0 ? telefones.map((t: any, idx: number) => {
+                    if (!t) return null;
+                    const strT = typeof t === 'string' ? t : (typeof t === 'number' ? String(t) : (t?.Numero || t?.numero || t?.telefone || ''));
+                    if (!strT || typeof strT !== 'string') return null;
+                    const ct = strT.replace(/\D/g, '');
+                    const formatted = ct.length === 11 ? `(${ct.slice(0,2)}) ${ct.slice(2,7)}-${ct.slice(7)}` : strT;
                     return (
                       <div key={idx} className="flex items-center gap-2">
                         <Phone className="w-4 h-4 text-emerald-500" />
@@ -277,7 +282,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Concessão</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.DIB ? beneficiario.DIB.split('-').reverse().join('/') : 'N/A'}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{typeof beneficiario.DIB === 'string' && beneficiario.DIB.includes('-') ? beneficiario.DIB.split('-').reverse().join('/') : (beneficiario.DIB || 'N/A')}</p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">UF</p>
@@ -365,7 +370,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 
                                 const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
-                                const bancoNomeSemPrefixo = getBancoName(emp.Banco) !== emp.Banco ? getBancoName(emp.Banco) : (emp.NomeBanco || emp.Banco);
+                                const bancoNomeSemPrefixo = getBancoName(emp.Banco) !== String(emp.Banco || '') ? getBancoName(emp.Banco) : (emp.NomeBanco || emp.Banco || '');
                                 const bancoExibicao = formatBancoComCodigo(emp.Banco, bancoNomeSemPrefixo);
                                 return (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">

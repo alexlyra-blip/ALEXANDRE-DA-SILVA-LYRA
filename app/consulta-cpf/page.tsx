@@ -17,8 +17,9 @@ export default function ConsultaCPFPage() {
   const [consultaData, setConsultaData] = useState<any>(null);
   const [isConsultaModalOpen, setIsConsultaModalOpen] = useState(false);
 
-  const formatCPF = (value: string) => {
-    return value
+  const formatCPF = (value: any) => {
+    if (!value) return '';
+    return String(value)
       .replace(/\D/g, '')
       .replace(/(\d{3})(\d)/, '$1.$2')
       .replace(/(\d{3})(\d)/, '$1.$2')
@@ -26,8 +27,9 @@ export default function ConsultaCPFPage() {
       .replace(/(-\d{2})\d+?$/, '$1');
   };
 
-  const validateCPF = (cpf: string) => {
-    const cleanCpf = cpf.replace(/\D/g, '');
+  const validateCPF = (cpf: any) => {
+    if (!cpf) return false;
+    const cleanCpf = String(cpf).replace(/\D/g, '');
     if (cleanCpf.length !== 11) return false;
     if (/^(\d)\1{10}$/.test(cleanCpf)) return false;
     
