@@ -1,11 +1,13 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowLeft, ChevronDown, Banknote, FileText, Download, Calendar, Percent, Calculator, ChevronLeft, ChevronRight, MessageCircle, Sparkles, Loader2, LayoutDashboard, ShieldCheck, CheckCircle2, History, DollarSign, Star, Landmark } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuotaAlert } from '@/components/QuotaAlert';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/firebase';
@@ -1220,7 +1222,9 @@ export default function Recomendacoes() {
         className="hidden md:flex flex-col shrink-0 border-r border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark sticky top-0 h-screen overflow-y-auto"
       >
         <div className="w-[520px]">
-          <SimulationForm isEmbedded={true} />
+          <Suspense fallback={<div className="flex items-center justify-center p-8 min-h-[300px]"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
+            <SimulationForm isEmbedded={true} />
+          </Suspense>
         </div>
       </motion.div>
 

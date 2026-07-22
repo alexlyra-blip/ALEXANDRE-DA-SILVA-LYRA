@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { HelpCircle, User, CreditCard, FileText, ChevronDown, TrendingUp, Sparkles, X, Loader2, Search, Check, Landmark, Plus, Trash2, AlertCircle, Crown } from 'lucide-react';
 import { getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
 import { QuotaAlert } from '@/components/QuotaAlert';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, Suspense } from 'react';
 import TransitionAnimation from '@/components/TransitionAnimation';
 import { useRules } from '@/contexts/RuleContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -47,7 +47,7 @@ const getAI = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: boolean }) {
+function SimulationFormContent({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const { profile } = useAuth();
   const { banks: rulesBanks } = useRules();
   const { showToast, hideToast } = useToast();
@@ -1357,5 +1357,17 @@ export default function SimulationForm({ isEmbedded = false }: { isEmbedded?: bo
         </div>
       )}
     </div>
+  );
+}
+
+export default function SimulationForm(props: { isEmbedded?: boolean }) {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center p-8 min-h-[200px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    }>
+      <SimulationFormContent {...props} />
+    </Suspense>
   );
 }
