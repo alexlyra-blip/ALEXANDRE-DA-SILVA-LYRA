@@ -709,11 +709,6 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                     <div>
                                       <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Consignado (RMC)</h4>
                                       <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
-                                      {numeroContrato && (
-                                        <p className="text-[10px] font-bold text-sky-600 dark:text-sky-400 mt-0.5">
-                                          Contrato: <span className="font-mono text-slate-900 dark:text-white">{numeroContrato}</span>
-                                        </p>
-                                      )}
                                     </div>
                                   </div>
                                   <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 uppercase tracking-wider shrink-0">
@@ -760,11 +755,6 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                     <div>
                                       <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Benefício (RCC)</h4>
                                       <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
-                                      {numeroContrato && (
-                                        <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">
-                                          Contrato: <span className="font-mono text-slate-900 dark:text-white">{numeroContrato}</span>
-                                        </p>
-                                      )}
                                     </div>
                                   </div>
                                   <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 uppercase tracking-wider shrink-0">
