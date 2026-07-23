@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { parseConsultaResponse } from '@/lib/multicorban';
 
+export const dynamic = 'force-dynamic';
+
 const MULTICORBAN_API_TOKEN = '1a2286296a40abf27929209193a85155';
 const CACHE_DAYS = 0; // Temporariamente 0 para invalidar caches viciados
 
