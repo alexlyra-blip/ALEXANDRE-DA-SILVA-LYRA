@@ -57,18 +57,6 @@ interface ConsultaCPFModalProps {
 
 export default function ConsultaCPFModal({ isOpen, onClose, data, addedContractsIds = [], onToggleContract }: ConsultaCPFModalProps) {
   const [activeTab, setActiveTab] = useState(0);
-
-  if (!isOpen || !data) return null;
-
-  // Normalize data safely using parseConsultaResponse
-  const beneficios = parseConsultaResponse(data);
-
-  // Extract personal data from the first benefit (assuming it's the same person)
-  const firstBenefit = beneficios[0] || {};
-  const personalInfo = firstBenefit.Beneficiario || {};
-  const telefones = Array.isArray(firstBenefit.Telefone) ? firstBenefit.Telefone : (firstBenefit.Telefone ? [firstBenefit.Telefone] : []);
-
-
   const [dailyCoef, setDailyCoef] = useState<number>(0.02270);
   const [coefDate, setCoefDate] = useState<string>('');
 
@@ -86,6 +74,16 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
       }
     });
   }, [isOpen, data]);
+
+  if (!isOpen || !data) return null;
+
+  // Normalize data safely using parseConsultaResponse
+  const beneficios = parseConsultaResponse(data);
+
+  // Extract personal data from the first benefit (assuming it's the same person)
+  const firstBenefit = beneficios[0] || {};
+  const personalInfo = firstBenefit.Beneficiario || {};
+  const telefones = Array.isArray(firstBenefit.Telefone) ? firstBenefit.Telefone : (firstBenefit.Telefone ? [firstBenefit.Telefone] : []);
 
   const getMarginCoefficient = () => dailyCoef || getCachedCoefficientSync(firstBenefit?.Beneficiario?.isSiape ? 'SIAPE' : 'INSS');
 
@@ -438,7 +436,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           {rmc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
                             const margemValor = parseFloat(cartao.ValorParcela || cartao.Desconto || cartao.Margem || 0);
-                            const limiteValor = parseFloat(cartao.Limite || cartao.LimiteCartao || 0);
+                            const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
+                            const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
 
                             return (
                               <div key={`rmc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-sky-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-sky-950/20 rounded-2xl border border-sky-200/60 dark:border-sky-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
@@ -446,15 +445,20 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 
                                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
                                   <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400 font-black text-xs">
+                                    <div className="w-8 h-8 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400 font-black text-xs shrink-0">
                                       <CreditCard className="w-4.5 h-4.5" />
                                     </div>
                                     <div>
                                       <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Consignado (RMC)</h4>
                                       <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
+                                      {numeroContrato && (
+                                        <p className="text-[10px] font-bold text-sky-600 dark:text-sky-400 mt-0.5">
+                                          Contrato: <span className="font-mono text-slate-900 dark:text-white">{numeroContrato}</span>
+                                        </p>
+                                      )}
                                     </div>
                                   </div>
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 uppercase tracking-wider">
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 uppercase tracking-wider shrink-0">
                                     Desconto em Folha
                                   </span>
                                 </div>
@@ -477,7 +481,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           {rcc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
                             const margemValor = parseFloat(cartao.ValorParcela || cartao.Desconto || cartao.Margem || 0);
-                            const limiteValor = parseFloat(cartao.Limite || cartao.LimiteCartao || 0);
+                            const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
+                            const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
 
                             return (
                               <div key={`rcc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-amber-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-amber-950/20 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
@@ -485,15 +490,20 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 
                                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
                                   <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-black text-xs">
+                                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-black text-xs shrink-0">
                                       <Wallet className="w-4.5 h-4.5" />
                                     </div>
                                     <div>
                                       <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Benefício (RCC)</h4>
                                       <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
+                                      {numeroContrato && (
+                                        <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                                          Contrato: <span className="font-mono text-slate-900 dark:text-white">{numeroContrato}</span>
+                                        </p>
+                                      )}
                                     </div>
                                   </div>
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 uppercase tracking-wider">
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 uppercase tracking-wider shrink-0">
                                     Cartão Benefício
                                   </span>
                                 </div>
