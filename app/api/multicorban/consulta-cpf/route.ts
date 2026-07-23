@@ -3,7 +3,7 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { parseConsultaResponse } from '@/lib/multicorban';
 
 const MULTICORBAN_API_TOKEN = '1a2286296a40abf27929209193a85155';
-const CACHE_DAYS = 30;
+const CACHE_DAYS = 0; // Temporariamente 0 para invalidar caches viciados
 
 export async function POST(request: Request) {
   try {
