@@ -568,11 +568,6 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                             Banco: {dadosBancarios.Banco ? formatBancoComCodigo(dadosBancarios.Banco, getBancoName(dadosBancarios.Banco)) : 'N/A'} | Ag: {dadosBancarios.Agencia || 'N/A'} | CC: {dadosBancarios.ContaPagto ? formatAccount(dadosBancarios.ContaPagto) : 'N/A'}
                           </p>
                         </div>
-                        {/* DEBUG BLOCK */}
-                        <div className="text-[10px] text-red-500 mt-2 font-mono">
-                           DEBUG INFO: API CardLoansList Length: {Array.isArray(b?.CardLoansList) ? b.CardLoansList.length : 'NULL/UNDEFINED'} | UI CardLoansList Length: {cardLoansList.length} | SIAPE: {isSiape ? 'YES' : 'NO'} | Total Utilizado Cartões: {totalComprometidoCartoes}
-                        </div>
-                      </div>
                     </div>
 
                     {/* Margens */}
