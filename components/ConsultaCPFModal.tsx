@@ -360,30 +360,30 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                   <MapPin className="w-3.5 h-3.5 text-amber-500" />
                   ENDEREÇO RESIDENCIAL DETALHADO
                 </p>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                  <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-3">
+                  <div className="lg:col-span-4">
                     <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Endereço</p>
-                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase truncate" title={personalInfo.Endereco || 'N/A'}>{personalInfo.Endereco || 'N/A'}</p>
+                    <p className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase break-words">{personalInfo.Endereco || 'N/A'}</p>
                   </div>
-                  <div>
+                  <div className="lg:col-span-1">
                     <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Nº</p>
-                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase">{personalInfo.Numero || 'S/N'}</p>
+                    <p className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase">{personalInfo.Numero || 'S/N'}</p>
                   </div>
-                  <div>
+                  <div className="lg:col-span-2">
                     <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Bairro</p>
-                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase truncate" title={personalInfo.Bairro || 'N/A'}>{personalInfo.Bairro || 'N/A'}</p>
+                    <p className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase break-words">{personalInfo.Bairro || 'N/A'}</p>
                   </div>
-                  <div>
+                  <div className="lg:col-span-3">
                     <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Cidade</p>
-                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase truncate" title={personalInfo.Cidade || 'N/A'}>{personalInfo.Cidade || 'N/A'}</p>
+                    <p className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase break-words">{personalInfo.Cidade || 'N/A'}</p>
                   </div>
-                  <div>
+                  <div className="lg:col-span-1">
                     <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">UF</p>
-                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase">{personalInfo.UF || personalInfo.UFBeneficio || 'N/A'}</p>
+                    <p className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase">{personalInfo.UF || personalInfo.UFBeneficio || 'N/A'}</p>
                   </div>
-                  <div>
+                  <div className="lg:col-span-1">
                     <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">CEP</p>
-                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase">{formatCEP(personalInfo.CEP) || 'N/A'}</p>
+                    <p className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase">{formatCEP(personalInfo.CEP) || 'N/A'}</p>
                   </div>
                 </div>
               </div>
@@ -436,7 +436,40 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
 
                 const rmcMargem = parseFloat(rmc[0]?.ValorParcela || rmc[0]?.MargemTotal || 0);
                 const rccMargem = parseFloat(rcc[0]?.ValorParcela || rcc[0]?.MargemTotal || 0);
-                const cardLoansList = Array.isArray(b.CardLoansList) ? b.CardLoansList : [];
+                
+                const getCardLoans = (item: any) => {
+                  if (Array.isArray(item.CardLoansList) && item.CardLoansList.length > 0) {
+                    return item.CardLoansList;
+                  }
+                  const rawEmp = Array.isArray(item.Emprestimos) ? item.Emprestimos : [];
+                  const list: any[] = [];
+                  rawEmp.forEach((emp: any) => {
+                    if (!emp || typeof emp !== 'object') return;
+                    const rubricaUpper = String(emp.NomeBanco || emp.Rubrica || emp.rubrica || '').toUpperCase();
+                    const bancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).trim();
+
+                    if (rubricaUpper.includes('RCC') || rubricaUpper.includes('RMC') || ((bancoCode === '0' || bancoCode === '') && !rubricaUpper)) {
+                      const pr = parseInt(emp.ParcelasRestantes || emp.PrazoRestantes || emp.prazoRestante || 0);
+                      const pt = parseInt(emp.Prazo || emp.prazo || emp.parcelas || (pr > 0 ? pr : 0));
+                      const p = parseFloat(emp.ValorParcela || emp.Parcela || emp.parcela || 0);
+                      const vl = parseFloat(emp.ValorLiberado || emp.ValorEmprestado || emp.ValorContrato || emp.SaldoDevedor || emp.saldo || 0);
+
+                      list.push({
+                        TipoCartao: rubricaUpper.includes('RMC') ? 'RMC' : 'RCC',
+                        Banco: bancoCode || '0',
+                        NomeBanco: String(emp.NomeBanco || emp.Rubrica || emp.rubrica || '').trim(),
+                        Contrato: String(emp.Contrato || emp.contrato || '').trim(),
+                        ValorParcela: isNaN(p) ? 0 : p,
+                        Prazo: String(pt || pr || 0),
+                        ParcelasRestantes: String(pr || 0),
+                        ValorLiberado: isNaN(vl) ? 0 : vl,
+                      });
+                    }
+                  });
+                  return list;
+                };
+
+                const cardLoansList = getCardLoans(b);
                 const cardLoansSum = cardLoansList.reduce((acc: number, item: any) => acc + parseFloat(item.ValorParcela || 0), 0);
 
                 // No SIAPE: Total Comprometido da margem consignável (35%) = Desconto Total da Folha - (Margem RMC + Margem RCC + Saques de Cartões) = 21.963,37
