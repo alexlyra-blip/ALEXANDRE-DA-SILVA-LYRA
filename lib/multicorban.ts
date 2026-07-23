@@ -195,7 +195,7 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
       extraRmcFromEmp.push({ ...emp, TipoCartao: 'RMC' });
     } else if (combinedStr.includes('RCC') || combinedStr.includes('CARTAO BENEFICIO') || combinedStr.includes('CARTÃO BENEFÍCIO') || combinedStr.includes('CARTAO BENEF')) {
       extraRccFromEmp.push({ ...emp, TipoCartao: 'RCC' });
-    } else if ((bancoCode === '0' || bancoCode === '') && !rubricaUpper) {
+    } else if (bancoCode === '0' || bancoCode === '' || !rubricaUpper || rubricaUpper === 'NULL') {
       if (isSiape) {
         extraRccFromEmp.push({ ...emp, TipoCartao: 'RCC' });
       } else {
