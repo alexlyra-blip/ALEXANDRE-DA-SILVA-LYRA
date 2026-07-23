@@ -19,40 +19,67 @@ function parseStreetAndNumber(rawAddressStr: string): { street: string; number: 
   return { street: str, number: 'S/N' };
 }
 
-function parseCardList(raw: any, cardType: 'RMC' | 'RCC'): any[] {
-  if (!raw) return [];
-  const list = Array.isArray(raw) ? raw : [raw];
-  
-  return list.map((c: any) => {
-    if (!c || typeof c !== 'object') return null;
-    
-    const valorParcela = parseFloat(
-      c.ValorParcela || c.ValorDesconto || c.Desconto || c.Margem || c.ValorMargem || c.Parcela || c.desconto || c.margem || c.valorParcela || c.valorDesconto || 0
-    );
-    let limite = parseFloat(
-      c.Limite || c.LimiteCartao || c.ValorLimite || c.Valor || c.Valor_emprestimo || c.limite || c.limiteCartao || c.valorLimite || 0
-    );
-    
-    if ((isNaN(limite) || limite <= 0) && valorParcela > 0) {
-      limite = valorParcela / 0.05; // Estimar limite padrão (20x o valor da parcela)
-    }
-    
-    const bancoCode = c.Banco !== undefined && c.Banco !== null ? String(c.Banco).trim() : (c.IdBanco !== undefined && c.IdBanco !== null ? String(c.IdBanco).trim() : '');
-    const nomeBanco = String(c.NomeBanco || c.Rubrica || c.nomeBanco || c.rubrica || '').trim();
+function parseCardList(rawInput: any, cardType: 'RMC' | 'RCC'): any[] {
+  if (!rawInput) return [];
+  const rawList = Array.isArray(rawInput) ? rawInput : [rawInput];
+  if (rawList.length === 0) return [];
 
-    if ((isNaN(valorParcela) || valorParcela <= 0) && (isNaN(limite) || limite <= 0) && !bancoCode && !nomeBanco) {
-      return null;
+  // Encontrar a entrada principal do cartão (que traz a Margem Total / Limite da Parcela)
+  let mainCard = rawList.find(c => c && (c.Margem !== undefined || c.ValorMargem !== undefined || c.MargemTotal !== undefined || c.ValorDesconto !== undefined || c.Desconto !== undefined));
+  if (!mainCard) mainCard = rawList[0];
+
+  const margemTotal = parseFloat(
+    mainCard.Margem || mainCard.ValorMargem || mainCard.ValorParcela || mainCard.Desconto || mainCard.ValorDesconto || mainCard.Parcela || mainCard.margem || 0
+  );
+
+  let limiteCredito = parseFloat(
+    mainCard.Limite || mainCard.LimiteCartao || mainCard.ValorLimite || mainCard.Valor || mainCard.Valor_emprestimo || mainCard.limite || 0
+  );
+
+  if ((isNaN(limiteCredito) || limiteCredito <= 0) && margemTotal > 0) {
+    limiteCredito = margemTotal / 0.05; // Estimar limite padrão (20x o valor da parcela)
+  }
+
+  // Somar parcelas de saques/empréstimos descontados no cartão
+  let totalUtilizado = 0;
+  const contratos: string[] = [];
+
+  rawList.forEach((c: any) => {
+    if (!c || typeof c !== 'object') return;
+    const contrato = String(c.Contrato || c.contrato || '').trim();
+    if (contrato && !contratos.includes(contrato)) {
+      contratos.push(contrato);
     }
 
-    return {
-      Tipo: cardType,
-      Banco: bancoCode,
-      NomeBanco: nomeBanco,
-      ValorParcela: isNaN(valorParcela) ? 0 : valorParcela,
-      Limite: isNaN(limite) ? 0 : limite,
-      Contrato: String(c.Contrato || c.contrato || '').trim(),
-    };
-  }).filter(Boolean);
+    // Se for um contrato de empréstimo/saque associado ao cartão (e não o objeto principal de margem)
+    if (c !== mainCard) {
+      const p = parseFloat(c.Parcela || c.ValorParcela || c.Desconto || c.desconto || c.parcela || 0);
+      if (!isNaN(p) && p > 0) {
+        totalUtilizado += p;
+      }
+    }
+  });
+
+  const margemDisponivel = Math.max(0, Math.round((margemTotal - totalUtilizado) * 100) / 100);
+
+  const bancoCode = mainCard.Banco !== undefined && mainCard.Banco !== null ? String(mainCard.Banco).trim() : (mainCard.IdBanco !== undefined && mainCard.IdBanco !== null ? String(mainCard.IdBanco).trim() : '');
+  const nomeBanco = String(mainCard.NomeBanco || mainCard.Rubrica || mainCard.nomeBanco || mainCard.rubrica || '').trim();
+
+  if (margemTotal <= 0 && limiteCredito <= 0 && totalUtilizado <= 0 && !bancoCode && !nomeBanco) {
+    return [];
+  }
+
+  return [{
+    Tipo: cardType,
+    Banco: bancoCode,
+    NomeBanco: nomeBanco,
+    ValorParcela: margemTotal, // Margem/Parcela Total (ex: 2.179,41)
+    MargemTotal: margemTotal,
+    TotalUtilizado: totalUtilizado,
+    MargemDisponivel: margemDisponivel, // Margem Disponível Real (ex: 2.179,41 no RMC e 15,75 no RCC)
+    Limite: limiteCredito, // Limite do Cartão (ex: 43.588,20)
+    Contrato: contratos.join(', '),
+  }];
 }
 
 export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
@@ -117,8 +144,8 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
 
   // Resumo Financeiro
   const rawResumo = item.ResumoFinanceiro || {};
-  const bruto = parseFloat(rawResumo.ValorBeneficio || rawResumo.Bruto || item.ValorBeneficio || 0);
-  const liquido = parseFloat(rawResumo.BaseCalculo || rawResumo.ValorLiquido || item.BaseCalculo || 0);
+  const bruto = parseFloat(rawResumo.ValorBeneficio || rawResumo.Bruto || item.ValorBeneficio || item.Bruto || 0);
+  const liquido = parseFloat(rawResumo.BaseCalculo || rawResumo.ValorLiquido || item.BaseCalculo || item.ValorLiquido || 0);
   const margemResumo = parseFloat(rawResumo.MargemDisponivelEmprestimo || rawResumo.Margem || item.MargemDisponivelEmprestimo || 0);
   const descontoTotal = parseFloat(rawResumo.Desconto || item.Desconto || 0);
 
@@ -156,7 +183,7 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
     });
   }
 
-  // Filtrar empréstimos e separar contratos que são cartões/reservas
+  // Filtrar empréstimos e separar contratos que pertencem a cartões/reservas
   const rawEmprestimos = Array.isArray(item.Emprestimos) ? item.Emprestimos : (item.Emprestimos ? [item.Emprestimos] : []);
   const extraRmcFromEmp: any[] = [];
   const extraRccFromEmp: any[] = [];
@@ -169,14 +196,17 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
     const bancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).trim();
     const combinedStr = `${rubricaUpper} ${tipoUpper}`;
 
-    // Se o item for RMC/RCC ou reserva sem banco/rubrica (contratos de cartão soltos no final da lista)
     if (combinedStr.includes('RMC') || combinedStr.includes('RESERVA DE MARGEM') || combinedStr.includes('CARTAO CONSIGNADO') || combinedStr.includes('CARTÃO CONSIGNADO')) {
       extraRmcFromEmp.push(emp);
     } else if (combinedStr.includes('RCC') || combinedStr.includes('CARTAO BENEFICIO') || combinedStr.includes('CARTÃO BENEFÍCIO') || combinedStr.includes('CARTAO BENEF')) {
       extraRccFromEmp.push(emp);
     } else if ((bancoCode === '0' || bancoCode === '') && !rubricaUpper) {
-      // Contrato de cartão/reserva averbado sem rubrica
-      extraRmcFromEmp.push(emp);
+      // No SIAPE, os contratos averbados sem rubrica pertencem ao Cartão Benefício (RCC)
+      if (isSiape) {
+        extraRccFromEmp.push(emp);
+      } else {
+        extraRmcFromEmp.push(emp);
+      }
     } else {
       cleanEmprestimosList.push(emp);
     }

@@ -427,23 +427,20 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 const rcc = Array.isArray(b.RCC) ? b.RCC : (b.RCC ? [b.RCC] : []);
                 const cartoes = [...rmc, ...rcc];
                 
-                // Somar tudo que está comprometido (empréstimos e cartões)
-                let totalComprometido = 0;
-                emprestimos.forEach((e: any) => totalComprometido += parseFloat(e.ValorParcela || 0));
-                cartoes.forEach((c: any) => totalComprometido += parseFloat(c.ValorParcela || c.Desconto || c.Margem || 0));
+                // Somar parcelas de empréstimos e cartões
+                let totalComprometidoEmprestimos = 0;
+                emprestimos.forEach((e: any) => totalComprometidoEmprestimos += parseFloat(e.ValorParcela || 0));
 
-                // Cálculo de margens
-                // Função para não arredondar para cima (trunca em 2 casas decimais)
+                let totalComprometidoCartoes = 0;
+                cartoes.forEach((c: any) => totalComprometidoCartoes += parseFloat(c.ValorParcela || c.Desconto || c.Margem || 0));
+
+                // No SIAPE, o comprometido da margem de empréstimo (35%) é a soma das parcelas dos empréstimos consignados
+                const totalComprometido = isSiape ? totalComprometidoEmprestimos : (totalComprometidoEmprestimos + totalComprometidoCartoes);
+
+                // Função para trancar em 2 casas decimais sem arredondar para cima
                 const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
 
-                // Base de cálculo para o SIAPE
-                const baseSiape = rmc.length > 0 && parseFloat(rmc[0]?.ValorParcela || 0) > 0 
-                  ? parseFloat(rmc[0]?.ValorParcela) / 0.05 
-                  : (rcc.length > 0 && parseFloat(rcc[0]?.ValorParcela || 0) > 0 
-                      ? parseFloat(rcc[0]?.ValorParcela) / 0.05 
-                      : valorBeneficio);
-
-                const base = isSiape ? baseSiape : valorBeneficio;
+                const base = isSiape ? parseFloat(resumo.ValorBeneficio || valorBeneficio || 0) : valorBeneficio;
                 
                 // Exceção LOAS 87 e 88 (35%), demais 40% (ou 35% para SIAPE)
                 const especie = (beneficiario.Especie || '').toString();
@@ -451,15 +448,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 const percentualMargem = isSiape ? 0.35 : (isLoas ? 0.35 : 0.40);
                 
                 const margemConsignavel = truncateDecimals(base * percentualMargem);
-                
-                let margemLivre = 0;
-                if (isSiape) {
-                  const margemResumo = parseFloat(resumo.MargemDisponivelEmprestimo || 0);
-                  margemLivre = margemResumo > 0 ? margemResumo : truncateDecimals(margemConsignavel - totalComprometido);
-                } else {
-                  margemLivre = truncateDecimals(margemConsignavel - totalComprometido);
-                }
-                
+                const margemLivre = truncateDecimals(margemConsignavel - totalComprometido);
                 const valorLiberado = margemLivre > 0 ? truncateDecimals(margemLivre / getMarginCoefficient()) : 0;
 
                 const isBlocked = beneficiario.BloqueadoEmprestimo === "1" || beneficiario.BloqueadoEmprestimo === true;
@@ -659,7 +648,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           {rmc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
-                            const margemValor = parseFloat(cartao.ValorParcela || cartao.Desconto || cartao.Margem || 0);
+                            const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || 0);
+                            const margemDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
                             const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
                             const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
 
@@ -687,15 +677,20 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                   </span>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
                                     <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
-                                    <p className="text-base font-black text-rose-600 dark:text-rose-400">{formatCurrency(margemValor)}</p>
+                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemTotal)}</p>
                                   </div>
 
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30 text-center bg-emerald-50/20">
+                                    <p className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold mb-0.5">Disponível</p>
+                                    <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(margemDisponivel)}</p>
+                                  </div>
+
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
                                     <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Limite do Cartão</p>
-                                    <p className="text-base font-black text-sky-600 dark:text-sky-400">{formatCurrency(limiteValor)}</p>
+                                    <p className="text-sm font-black text-sky-600 dark:text-sky-400">{formatCurrency(limiteValor)}</p>
                                   </div>
                                 </div>
                               </div>
@@ -704,7 +699,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
 
                           {rcc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
-                            const margemValor = parseFloat(cartao.ValorParcela || cartao.Desconto || cartao.Margem || 0);
+                            const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || 0);
+                            const margemDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
                             const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
                             const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
 
@@ -732,15 +728,20 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                   </span>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
                                     <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
-                                    <p className="text-base font-black text-rose-600 dark:text-rose-400">{formatCurrency(margemValor)}</p>
+                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemTotal)}</p>
                                   </div>
 
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-amber-100 dark:border-amber-900/30 text-center bg-amber-50/20">
+                                    <p className="text-[9px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-bold mb-0.5">Disponível</p>
+                                    <p className="text-sm font-black text-amber-600 dark:text-amber-400">{formatCurrency(margemDisponivel)}</p>
+                                  </div>
+
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
                                     <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Limite do Cartão</p>
-                                    <p className="text-base font-black text-amber-600 dark:text-amber-400">{formatCurrency(limiteValor)}</p>
+                                    <p className="text-sm font-black text-amber-600 dark:text-amber-400">{formatCurrency(limiteValor)}</p>
                                   </div>
                                 </div>
                               </div>
