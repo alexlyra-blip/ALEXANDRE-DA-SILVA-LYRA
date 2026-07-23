@@ -32,10 +32,17 @@ export async function POST(request: Request) {
         const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
         if (diffDays < CACHE_DAYS && cachedData.data) {
-          console.log(`[Cache Hit] Retornando CPF ${cleanCpf} do banco (idade: ${Math.round(diffDays)} dias)`);
-          const normalizedCache = parseConsultaResponse(cachedData.data, isSiape);
-          if (normalizedCache.length > 0) {
-            return NextResponse.json(normalizedCache);
+          // Verifica se o cache é do formato antigo (já normalizado)
+          const isOldCache = Array.isArray(cachedData.data) && cachedData.data.length > 0 && cachedData.data[0].Beneficiario !== undefined;
+          
+          if (!isOldCache) {
+            console.log(`[Cache Hit] Retornando CPF ${cleanCpf} do banco (idade: ${Math.round(diffDays)} dias)`);
+            const normalizedCache = parseConsultaResponse(cachedData.data, isSiape);
+            if (normalizedCache.length > 0) {
+              return NextResponse.json(normalizedCache);
+            }
+          } else {
+            console.log(`[Cache Ignorado] Formato de cache antigo detectado para o CPF ${cleanCpf}. Buscando novo...`);
           }
         } else {
           console.log(`[Cache Expired or Outdated] CPF ${cleanCpf} expirou ou precisa ser re-normalizado. Buscando novo...`);
