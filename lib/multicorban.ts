@@ -8,21 +8,21 @@ function parseCardList(raw: any, cardType: 'RMC' | 'RCC'): any[] {
     if (!c || typeof c !== 'object') return null;
     
     const valorParcela = parseFloat(
-      c.ValorParcela || c.ValorDesconto || c.Desconto || c.Margem || c.ValorMargem || c.Parcela || c.desconto || c.margem || c.valorParcela || c.valorDesconto || c.Valor || 0
+      c.ValorParcela || c.ValorDesconto || c.Desconto || c.Margem || c.ValorMargem || c.Parcela || c.desconto || c.margem || c.valorParcela || c.valorDesconto || 0
     );
     let limite = parseFloat(
-      c.Limite || c.LimiteCartao || c.ValorLimite || c.limite || c.limiteCartao || c.valorLimite || 0
+      c.Limite || c.LimiteCartao || c.ValorLimite || c.Valor || c.Valor_emprestimo || c.limite || c.limiteCartao || c.valorLimite || 0
     );
     
     if ((isNaN(limite) || limite <= 0) && valorParcela > 0) {
-      limite = valorParcela / 0.05; // Estimar limite padrão (20x o valor da parcela/margem)
+      limite = valorParcela / 0.05; // Estimar limite padrão (20x o valor da parcela)
     }
     
     const bancoCode = c.Banco !== undefined && c.Banco !== null ? String(c.Banco).trim() : (c.IdBanco !== undefined && c.IdBanco !== null ? String(c.IdBanco).trim() : '');
     const nomeBanco = String(c.NomeBanco || c.Rubrica || c.nomeBanco || c.rubrica || '').trim();
 
-    if (isNaN(valorParcela) || valorParcela <= 0) {
-      if (limite <= 0 && !bancoCode && !nomeBanco) return null;
+    if ((isNaN(valorParcela) || valorParcela <= 0) && (isNaN(limite) || limite <= 0) && !bancoCode && !nomeBanco) {
+      return null;
     }
 
     return {
@@ -31,6 +31,7 @@ function parseCardList(raw: any, cardType: 'RMC' | 'RCC'): any[] {
       NomeBanco: nomeBanco,
       ValorParcela: isNaN(valorParcela) ? 0 : valorParcela,
       Limite: isNaN(limite) ? 0 : limite,
+      Contrato: String(c.Contrato || c.contrato || '').trim(),
     };
   }).filter(Boolean);
 }
