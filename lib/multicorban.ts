@@ -1,5 +1,24 @@
 import { getBancoName } from './mappings';
 
+function parseStreetAndNumber(rawAddressStr: string): { street: string; number: string } {
+  if (!rawAddressStr) return { street: '', number: 'S/N' };
+
+  const str = String(rawAddressStr).trim();
+  const match = str.match(/(?:Nº|NR|N°|N|\bNUMERO\b|\bNÚMERO\b|,)\s*[:.]?\s*(\d+[A-Z]?|\d+)/i);
+  if (match) {
+    const num = match[1];
+    const street = str.replace(match[0], '').replace(/,\s*$/, '').trim();
+    return { street: street || str, number: num };
+  }
+
+  const endMatch = str.match(/^(.*?)\s+(\d+[A-Z]?)$/i);
+  if (endMatch && endMatch[1].length > 3) {
+    return { street: endMatch[1].trim(), number: endMatch[2] };
+  }
+
+  return { street: str, number: 'S/N' };
+}
+
 function parseCardList(raw: any, cardType: 'RMC' | 'RCC'): any[] {
   if (!raw) return [];
   const list = Array.isArray(raw) ? raw : [raw];
@@ -55,11 +74,16 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
   const dib = rawBeneficiario.DIB || item.DIB || item.dib || '';
   const bloqueado = rawBeneficiario.BloqueadoEmprestimo === '1' || rawBeneficiario.BloqueadoEmprestimo === true || item.BloqueadoEmprestimo === '1' || item.BloqueadoEmprestimo === true;
 
-  const logradouro = rawBeneficiario.Endereco || rawEndereco.Logradouro || rawEndereco.Endereco || item.Endereco || item.logradouro || '';
+  const orgao = rawCadastro.Orgao || item.Orgao || item.orgao || '';
+  const instituto = rawCadastro.Instituto || item.Instituto || item.instituto || '';
+
+  const rawLogradouro = rawBeneficiario.Endereco || rawEndereco.Logradouro || rawEndereco.Endereco || item.Endereco || item.logradouro || '';
   const bairro = rawBeneficiario.Bairro || rawEndereco.Bairro || item.Bairro || item.bairro || '';
   const cidade = rawBeneficiario.Cidade || rawBeneficiario.Municipio || rawEndereco.Municipio || rawEndereco.Cidade || item.Cidade || item.cidade || '';
   const uf = rawBeneficiario.UF || rawBeneficiario.UFBeneficio || rawEndereco.Uf || rawEndereco.UF || item.UF || item.uf || '';
   const cep = rawBeneficiario.CEP || rawEndereco.CEP || item.CEP || item.cep || '';
+
+  const { street, number } = parseStreetAndNumber(rawLogradouro);
 
   const beneficiarioNormalized = {
     Nome: String(nome || '').trim(),
@@ -72,7 +96,10 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
     DIB: String(dib || '').trim(),
     BloqueadoEmprestimo: bloqueado,
     isSiape,
-    Endereco: String(logradouro || '').trim(),
+    Orgao: String(orgao || '').trim(),
+    Instituto: String(instituto || '').trim(),
+    Endereco: street,
+    Numero: number,
     Bairro: String(bairro || '').trim(),
     Cidade: String(cidade || '').trim(),
     UF: String(uf || '').trim(),
@@ -93,11 +120,13 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
   const bruto = parseFloat(rawResumo.ValorBeneficio || rawResumo.Bruto || item.ValorBeneficio || 0);
   const liquido = parseFloat(rawResumo.BaseCalculo || rawResumo.ValorLiquido || item.BaseCalculo || 0);
   const margemResumo = parseFloat(rawResumo.MargemDisponivelEmprestimo || rawResumo.Margem || item.MargemDisponivelEmprestimo || 0);
+  const descontoTotal = parseFloat(rawResumo.Desconto || item.Desconto || 0);
 
   const resumoFinanceiroNormalized = {
     ValorBeneficio: isNaN(bruto) ? 0 : bruto,
     BaseCalculo: isNaN(liquido) ? 0 : liquido,
     MargemDisponivelEmprestimo: isNaN(margemResumo) ? 0 : margemResumo,
+    DescontoTotal: isNaN(descontoTotal) ? 0 : descontoTotal,
   };
 
   // Telefones
@@ -127,7 +156,7 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
     });
   }
 
-  // Filtrar empréstimos e identificar cartões que por ventura venham na lista de empréstimos
+  // Filtrar empréstimos e separar contratos que são cartões/reservas
   const rawEmprestimos = Array.isArray(item.Emprestimos) ? item.Emprestimos : (item.Emprestimos ? [item.Emprestimos] : []);
   const extraRmcFromEmp: any[] = [];
   const extraRccFromEmp: any[] = [];
@@ -137,12 +166,17 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
     if (!emp || typeof emp !== 'object') return;
     const rubricaUpper = String(emp.Rubrica || emp.NomeBanco || emp.bancoNome || emp.rubrica || '').toUpperCase();
     const tipoUpper = String(emp.Tipo || emp.tipo || emp.TipoEmprestimo || '').toUpperCase();
+    const bancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).trim();
     const combinedStr = `${rubricaUpper} ${tipoUpper}`;
 
+    // Se o item for RMC/RCC ou reserva sem banco/rubrica (contratos de cartão soltos no final da lista)
     if (combinedStr.includes('RMC') || combinedStr.includes('RESERVA DE MARGEM') || combinedStr.includes('CARTAO CONSIGNADO') || combinedStr.includes('CARTÃO CONSIGNADO')) {
       extraRmcFromEmp.push(emp);
     } else if (combinedStr.includes('RCC') || combinedStr.includes('CARTAO BENEFICIO') || combinedStr.includes('CARTÃO BENEFÍCIO') || combinedStr.includes('CARTAO BENEF')) {
       extraRccFromEmp.push(emp);
+    } else if ((bancoCode === '0' || bancoCode === '') && !rubricaUpper) {
+      // Contrato de cartão/reserva averbado sem rubrica
+      extraRmcFromEmp.push(emp);
     } else {
       cleanEmprestimosList.push(emp);
     }

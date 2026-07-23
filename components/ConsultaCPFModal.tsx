@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap } from 'lucide-react';
+import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap, Download } from 'lucide-react';
 import { formatCurrency, formatCPF } from '@/lib/utils';
 import { getEspecieName, getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
 import { parseConsultaResponse } from '@/lib/multicorban';
 import { getLatestCoefficient, getCachedCoefficientSync } from '@/lib/coefficients';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const formatCEP = (val: any) => {
   if (!val) return '';
@@ -87,6 +89,188 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
 
   const getMarginCoefficient = () => dailyCoef || getCachedCoefficientSync(firstBenefit?.Beneficiario?.isSiape ? 'SIAPE' : 'INSS');
 
+  const handleGeneratePDF = () => {
+    const doc = new jsPDF();
+    const isSiape = !!personalInfo.isSiape;
+
+    // Header Banner
+    doc.setFillColor(17, 82, 212);
+    doc.rect(0, 0, 210, 24, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`RELATÓRIO DE CONSULTA CPF (${isSiape ? 'SIAPE' : 'INSS'})`, 14, 15);
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    const todayStr = new Date().toLocaleDateString('pt-BR');
+    doc.text(`Emissão: ${todayStr}`, 196, 15, { align: 'right' });
+
+    // 1. Dados Pessoais
+    let y = 32;
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text("1. Dados do Beneficiário", 14, y);
+    y += 4;
+
+    const clientRows = [
+      [
+        `Nome: ${personalInfo.Nome || 'N/A'}`,
+        `CPF: ${formatCPF(personalInfo.CPF)}`,
+        `Nascimento: ${personalInfo.DataNascimento || 'N/A'}`
+      ],
+      [
+        `${isSiape ? 'Matrícula' : 'Benefício'}: ${personalInfo.Beneficio || 'N/A'}`,
+        `Mãe: ${personalInfo.NomeMae || 'N/A'}`,
+        `Situação: ${personalInfo.Situacao || 'Ativo'}`
+      ],
+      [
+        isSiape ? `Órgão: ${personalInfo.Orgao || 'N/A'}` : `Espécie: ${getEspecieName(personalInfo.Especie)}`,
+        isSiape ? `Instituto: ${personalInfo.Instituto || 'N/A'}` : `Bloqueado: ${personalInfo.BloqueadoEmprestimo ? 'Sim' : 'Não'}`,
+        `DIB: ${personalInfo.DIB || 'N/A'}`
+      ]
+    ];
+
+    autoTable(doc, {
+      startY: y,
+      body: clientRows,
+      theme: 'plain',
+      styles: { fontSize: 8, cellPadding: 2 },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 6;
+
+    // 2. Endereço Residencial Detalhado
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text("2. Endereço Residencial Detalhado", 14, y);
+    y += 4;
+
+    const addressRows = [
+      [
+        `Endereço: ${personalInfo.Endereco || 'N/A'}`,
+        `Nº: ${personalInfo.Numero || 'S/N'}`,
+        `Bairro: ${personalInfo.Bairro || 'N/A'}`
+      ],
+      [
+        `Cidade: ${personalInfo.Cidade || 'N/A'}`,
+        `UF: ${personalInfo.UF || 'N/A'}`,
+        `CEP: ${formatCEP(personalInfo.CEP) || 'N/A'}`
+      ]
+    ];
+
+    autoTable(doc, {
+      startY: y,
+      body: addressRows,
+      theme: 'plain',
+      styles: { fontSize: 8, cellPadding: 2 },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 6;
+
+    // 3. Resumo Financeiro & Margens
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text("3. Resumo Financeiro e Margens", 14, y);
+    y += 4;
+
+    const activeBen = beneficios[activeTab] || firstBenefit;
+    const resFin = activeBen.ResumoFinanceiro || {};
+    const empList = activeBen.Emprestimos || [];
+    const rmcList = activeBen.Rmc || [];
+    const rccList = activeBen.RCC || [];
+    const allCards = [...rmcList, ...rccList];
+
+    let totalComp = 0;
+    empList.forEach((e: any) => totalComp += parseFloat(e.ValorParcela || 0));
+    allCards.forEach((c: any) => totalComp += parseFloat(c.ValorParcela || 0));
+
+    const valBen = parseFloat(resFin.ValorBeneficio || 0);
+    const margemCons = valBen * (isSiape ? 0.35 : 0.40);
+    const margemLivreVal = Math.floor((margemCons - totalComp) * 100) / 100;
+    const valLiberadoVal = margemLivreVal > 0 ? Math.floor((margemLivreVal / getMarginCoefficient()) * 100) / 100 : 0;
+
+    const finRows = [
+      [
+        `Valor Benefício/Bruto: ${formatCurrency(valBen)}`,
+        `Margem Consignável: ${formatCurrency(margemCons)}`,
+        `Total Comprometido: ${formatCurrency(totalComp)}`
+      ],
+      [
+        `Margem Livre: ${formatCurrency(margemLivreVal)}`,
+        `Valor Liberado: ${formatCurrency(valLiberadoVal)}`,
+        `Coeficiente Diário: ${getMarginCoefficient()}`
+      ]
+    ];
+
+    autoTable(doc, {
+      startY: y,
+      body: finRows,
+      theme: 'grid',
+      headStyles: { fillColor: [240, 240, 240] },
+      styles: { fontSize: 8, cellPadding: 2, fontStyle: 'bold' },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // 4. Cartões Ativos Table
+    if (allCards.length > 0) {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`4. Cartões Ativos (RMC & RCC) - Total (${allCards.length})`, 14, y);
+      y += 4;
+
+      const cardsRows = allCards.map((c: any) => [
+        c.Tipo || 'Cartão',
+        formatBancoComCodigo(c.Banco, c.NomeBanco || getBancoName(c.Banco)),
+        c.Contrato || 'N/A',
+        formatCurrency(c.ValorParcela || 0),
+        formatCurrency(c.Limite || 0)
+      ]);
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Tipo', 'Banco', 'Contrato', 'Margem/Parcela', 'Limite Cartão']],
+        body: cardsRows,
+        theme: 'striped',
+        headStyles: { fillColor: [217, 119, 6] },
+        styles: { fontSize: 8, cellPadding: 2 },
+      });
+
+      y = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    // 5. Empréstimos Ativos Table
+    if (empList.length > 0) {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`5. Empréstimos Ativos - Total (${empList.length} Contratos)`, 14, y);
+      y += 4;
+
+      const loansRows = empList.map((e: any) => [
+        formatBancoComCodigo(e.Banco, e.NomeBanco || getBancoName(e.Banco)),
+        e.Contrato || 'N/A',
+        formatCurrency(e.ValorParcela || 0),
+        formatCurrency(e.SaldoDevedor || 0),
+        `${e.ParcelasRestantes || 0}/${e.Prazo || 0}x`,
+        `${e.Taxa || '1.60'}%`
+      ]);
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Banco / Rubrica', 'Contrato', 'Parcela', 'Saldo Devedor', 'Prazo/Rest.', 'Taxa']],
+        body: loansRows,
+        theme: 'striped',
+        headStyles: { fillColor: [17, 82, 212] },
+        styles: { fontSize: 8, cellPadding: 2 },
+      });
+    }
+
+    doc.save(`Consulta_CPF_${personalInfo.CPF}_${isSiape ? 'SIAPE' : 'INSS'}.pdf`);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <motion.div
@@ -103,9 +287,18 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
             </div>
             <h2 className="text-lg font-bold text-slate-800 dark:text-white">Consulta Detalhada</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            <X className="w-5 h-5 text-slate-500" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleGeneratePDF}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md active:scale-95"
+            >
+              <Download className="w-4 h-4" />
+              Baixar Relatório PDF
+            </button>
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <X className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
@@ -162,23 +355,37 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                   }) : <span className="text-slate-500">N/A</span>}
                 </div>
               </div>
-              <div className="lg:col-span-4">
-                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1">
+              <div className="lg:col-span-4 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1 mb-3">
                   <MapPin className="w-3.5 h-3.5 text-amber-500" />
-                  ENDEREÇO
+                  ENDEREÇO RESIDENCIAL DETALHADO
                 </p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm uppercase">
-                  {(() => {
-                    const logradouro = personalInfo.Endereco || '';
-                    const bairro = personalInfo.Bairro || '';
-                    const cidade = personalInfo.Cidade || personalInfo.Municipio || '';
-                    const uf = personalInfo.UF || personalInfo.UFBeneficio || '';
-                    const cep = personalInfo.CEP ? formatCEP(personalInfo.CEP) : '';
-                    
-                    const parts = [logradouro, bairro, cidade, uf, cep].map(p => p.toString().trim()).filter(Boolean);
-                    return parts.join(', ') || 'N/A';
-                  })()}
-                </p>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Endereço</p>
+                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase truncate" title={personalInfo.Endereco || 'N/A'}>{personalInfo.Endereco || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Nº</p>
+                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase">{personalInfo.Numero || 'S/N'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Bairro</p>
+                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase truncate" title={personalInfo.Bairro || 'N/A'}>{personalInfo.Bairro || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Cidade</p>
+                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase truncate" title={personalInfo.Cidade || 'N/A'}>{personalInfo.Cidade || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">UF</p>
+                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase">{personalInfo.UF || personalInfo.UFBeneficio || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">CEP</p>
+                    <p className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase">{formatCEP(personalInfo.CEP) || 'N/A'}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -283,10 +490,23 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Valor do Benefício</p>
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(valorBeneficio)}</p>
                         </div>
-                        <div className="lg:col-span-2">
-                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{isSiape ? 'Regime Jurídico / Amparo Legal' : 'Espécie'}</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{isSiape ? (beneficiario.Especie || 'N/A') : getEspecieName(beneficiario.Especie)}</p>
-                        </div>
+                        {isSiape ? (
+                          <>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Órgão</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.Orgao || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Instituto</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200">{beneficiario.Instituto || 'N/A'}</p>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="lg:col-span-2">
+                            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Espécie</p>
+                            <p className="font-semibold text-slate-800 dark:text-slate-200">{getEspecieName(beneficiario.Especie)}</p>
+                          </div>
+                        )}
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Status</p>
                           <div className="flex items-center gap-1">
@@ -353,11 +573,15 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                     {/* Tabela de Empréstimos */}
                     {emprestimos.length > 0 && (
                       <div className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
                           <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
                             <Landmark className="w-4 h-4 text-primary" />
                             Empréstimos Ativos
                           </h3>
+                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-primary" />
+                            {emprestimos.length} {emprestimos.length === 1 ? 'Contrato Ativo' : 'Contratos Ativos'}
+                          </span>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm text-left">

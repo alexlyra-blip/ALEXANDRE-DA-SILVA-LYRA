@@ -77,11 +77,10 @@ export async function POST(request: Request) {
         cpf: cleanCpf,
         type: searchType,
         createdAt: new Date().getTime(),
-        data: normalizedData
+        data: rawData
       });
     } catch (dbError) {
       console.error("Erro ao salvar cache no Firestore:", dbError);
-      // Não falhar a request se o cache falhar
     }
 
     return NextResponse.json(normalizedData);
