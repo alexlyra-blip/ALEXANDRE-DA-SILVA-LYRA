@@ -534,7 +534,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavel)}</p>
                         <p className="text-[9px] text-slate-400 mt-1">
                           {isSiape 
-                            ? `(35% da Base ${formatCurrency(base)})` 
+                            ? `(40% da Base ${formatCurrency(base)})` 
                             : `(${isLoas ? '35%' : '40%'} do Benefício ${formatCurrency(valorBeneficio)})`}
                         </p>
                       </div>
