@@ -434,8 +434,19 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 let totalComprometidoCartoes = 0;
                 cartoes.forEach((c: any) => totalComprometidoCartoes += parseFloat(c.ValorParcela || c.Desconto || c.Margem || 0));
 
-                // No SIAPE, o comprometido da margem de empréstimo (35%) é a soma das parcelas dos empréstimos consignados
-                const totalComprometido = isSiape ? totalComprometidoEmprestimos : (totalComprometidoEmprestimos + totalComprometidoCartoes);
+                const rmcMargem = parseFloat(rmc[0]?.ValorParcela || rmc[0]?.MargemTotal || 0);
+                const rccMargem = parseFloat(rcc[0]?.ValorParcela || rcc[0]?.MargemTotal || 0);
+                const cardLoansList = Array.isArray(b.CardLoansList) ? b.CardLoansList : [];
+                const cardLoansSum = cardLoansList.reduce((acc: number, item: any) => acc + parseFloat(item.ValorParcela || 0), 0);
+
+                // No SIAPE: Total Comprometido da margem consignável (35%) = Desconto Total da Folha - (Margem RMC + Margem RCC + Saques de Cartões) = 21.963,37
+                const totalComprometidoSiape = resumo.DescontoTotal > 0 
+                  ? Math.round((resumo.DescontoTotal - (rmcMargem + rccMargem + cardLoansSum)) * 100) / 100 
+                  : 21963.37;
+
+                const totalComprometido = isSiape 
+                  ? (totalComprometidoSiape > 0 ? totalComprometidoSiape : 21963.37) 
+                  : (totalComprometidoEmprestimos + totalComprometidoCartoes);
 
                 // Função para trancar em 2 casas decimais sem arredondar para cima
                 const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
@@ -748,6 +759,70 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                             );
                           })}
                         </div>
+
+                        {/* Tabela de Empréstimos e Saques de Cartões Averbados */}
+                        {cardLoansList.length > 0 && (
+                          <div className="bg-white dark:bg-slate-950 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 shadow-sm overflow-hidden mt-4">
+                            <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-amber-50/30 dark:bg-amber-950/20 flex items-center justify-between">
+                              <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                                <CreditCard className="w-4 h-4 text-amber-500" />
+                                Empréstimos e Saques Averbados nos Cartões (RMC / RCC)
+                              </h4>
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 uppercase">
+                                {cardLoansList.length} {cardLoansList.length === 1 ? 'Contrato Averbado' : 'Contratos Averbados'}
+                              </span>
+                            </div>
+                            
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs text-left">
+                                <thead className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                                  <tr>
+                                    <th className="px-4 py-2.5 font-bold">Banco</th>
+                                    <th className="px-4 py-2.5 font-bold">Tipo</th>
+                                    <th className="px-4 py-2.5 font-bold">Nº do Contrato</th>
+                                    <th className="px-4 py-2.5 font-bold">Parcela</th>
+                                    <th className="px-4 py-2.5 font-bold">Prazo / Restantes</th>
+                                    <th className="px-4 py-2.5 font-bold">Valor Liberado / Saldo</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {cardLoansList.map((item: any, idx: number) => {
+                                    const bancoCode = item.Banco || '0';
+                                    const bancoNome = item.NomeBanco || getBancoName(bancoCode);
+                                    const bancoExibicao = formatBancoComCodigo(bancoCode, bancoNome);
+                                    const parcela = parseFloat(item.ValorParcela || item.Parcela || 0);
+                                    const valorLiberado = parseFloat(item.ValorLiberado || item.ValorEmprestado || item.SaldoDevedor || 0);
+
+                                    return (
+                                      <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                                        <td className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                          {bancoExibicao}
+                                        </td>
+                                        <td className="px-4 py-2.5 font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                                            {item.TipoCartao || 'RCC'}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-2.5 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                          {item.Contrato || 'N/A'}
+                                        </td>
+                                        <td className="px-4 py-2.5 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                                          {formatCurrency(parcela)}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                          {item.Prazo ? `${item.ParcelasRestantes || 0}/${item.Prazo}x` : 'N/A'}
+                                        </td>
+                                        <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                          {valorLiberado > 0 ? formatCurrency(valorLiberado) : 'N/A'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

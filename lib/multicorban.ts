@@ -24,7 +24,6 @@ function parseCardList(rawInput: any, cardType: 'RMC' | 'RCC'): any[] {
   const rawList = Array.isArray(rawInput) ? rawInput : [rawInput];
   if (rawList.length === 0) return [];
 
-  // Encontrar a entrada principal do cartão (que traz a Margem Total / Limite da Parcela)
   let mainCard = rawList.find(c => c && (c.Margem !== undefined || c.ValorMargem !== undefined || c.MargemTotal !== undefined || c.ValorDesconto !== undefined || c.Desconto !== undefined));
   if (!mainCard) mainCard = rawList[0];
 
@@ -40,7 +39,6 @@ function parseCardList(rawInput: any, cardType: 'RMC' | 'RCC'): any[] {
     limiteCredito = margemTotal / 0.05; // Estimar limite padrão (20x o valor da parcela)
   }
 
-  // Somar parcelas de saques/empréstimos descontados no cartão
   let totalUtilizado = 0;
   const contratos: string[] = [];
 
@@ -51,7 +49,6 @@ function parseCardList(rawInput: any, cardType: 'RMC' | 'RCC'): any[] {
       contratos.push(contrato);
     }
 
-    // Se for um contrato de empréstimo/saque associado ao cartão (e não o objeto principal de margem)
     if (c !== mainCard) {
       const p = parseFloat(c.Parcela || c.ValorParcela || c.Desconto || c.desconto || c.parcela || 0);
       if (!isNaN(p) && p > 0) {
@@ -73,11 +70,11 @@ function parseCardList(rawInput: any, cardType: 'RMC' | 'RCC'): any[] {
     Tipo: cardType,
     Banco: bancoCode,
     NomeBanco: nomeBanco,
-    ValorParcela: margemTotal, // Margem/Parcela Total (ex: 2.179,41)
+    ValorParcela: margemTotal,
     MargemTotal: margemTotal,
     TotalUtilizado: totalUtilizado,
-    MargemDisponivel: margemDisponivel, // Margem Disponível Real (ex: 2.179,41 no RMC e 15,75 no RCC)
-    Limite: limiteCredito, // Limite do Cartão (ex: 43.588,20)
+    MargemDisponivel: margemDisponivel,
+    Limite: limiteCredito,
     Contrato: contratos.join(', '),
   }];
 }
@@ -197,15 +194,14 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
     const combinedStr = `${rubricaUpper} ${tipoUpper}`;
 
     if (combinedStr.includes('RMC') || combinedStr.includes('RESERVA DE MARGEM') || combinedStr.includes('CARTAO CONSIGNADO') || combinedStr.includes('CARTÃO CONSIGNADO')) {
-      extraRmcFromEmp.push(emp);
+      extraRmcFromEmp.push({ ...emp, TipoCartao: 'RMC' });
     } else if (combinedStr.includes('RCC') || combinedStr.includes('CARTAO BENEFICIO') || combinedStr.includes('CARTÃO BENEFÍCIO') || combinedStr.includes('CARTAO BENEF')) {
-      extraRccFromEmp.push(emp);
+      extraRccFromEmp.push({ ...emp, TipoCartao: 'RCC' });
     } else if ((bancoCode === '0' || bancoCode === '') && !rubricaUpper) {
-      // No SIAPE, os contratos averbados sem rubrica pertencem ao Cartão Benefício (RCC)
       if (isSiape) {
-        extraRccFromEmp.push(emp);
+        extraRccFromEmp.push({ ...emp, TipoCartao: 'RCC' });
       } else {
-        extraRmcFromEmp.push(emp);
+        extraRmcFromEmp.push({ ...emp, TipoCartao: 'RMC' });
       }
     } else {
       cleanEmprestimosList.push(emp);
@@ -217,6 +213,28 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
 
   const rmcNormalized = parseCardList(mergedRmc, 'RMC');
   const rccNormalized = parseCardList(mergedRcc, 'RCC');
+
+  // Lista detalhada de todos os contratos averbados nos cartões para exibição linha a linha
+  const cardLoansNormalized = [...extraRmcFromEmp, ...extraRccFromEmp].map((emp: any) => {
+    let bancoCode = emp.Banco !== undefined && emp.Banco !== null ? String(emp.Banco).trim() : (emp.IdBanco !== undefined && emp.IdBanco !== null ? String(emp.IdBanco).trim() : '0');
+    const rubrica = emp.NomeBanco || emp.Rubrica || emp.rubrica || emp.bancoNome || '';
+    const contrato = emp.Contrato || emp.contrato || '';
+    const prazoRestantes = parseInt(emp.ParcelasRestantes || emp.PrazoRestantes || emp.prazoRestante || 0);
+    const prazoTotal = parseInt(emp.Prazo || emp.prazo || emp.parcelas || (prazoRestantes > 0 ? prazoRestantes : 0));
+    const valorParcela = parseFloat(emp.ValorParcela || emp.Parcela || emp.parcela || 0);
+    const valorLiberado = parseFloat(emp.ValorEmprestado || emp.ValorContrato || emp.ValorFinanciado || emp.ValorLiberado || emp.SaldoDevedor || emp.saldo || 0);
+
+    return {
+      Banco: bancoCode,
+      NomeBanco: String(rubrica || '').trim(),
+      Contrato: String(contrato || '').trim(),
+      ParcelasRestantes: String(prazoRestantes || 0),
+      Prazo: String(prazoTotal || prazoRestantes || 0),
+      ValorParcela: isNaN(valorParcela) ? 0 : valorParcela,
+      ValorLiberado: isNaN(valorLiberado) ? 0 : valorLiberado,
+      TipoCartao: emp.TipoCartao || 'RCC',
+    };
+  });
 
   const emprestimosNormalized = cleanEmprestimosList.map((emp: any) => {
     if (!emp || typeof emp !== 'object') return null;
@@ -252,6 +270,7 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
     Telefone: telefonesNormalized,
     Rmc: rmcNormalized,
     RCC: rccNormalized,
+    CardLoansList: cardLoansNormalized,
     Emprestimos: emprestimosNormalized,
   };
 }
