@@ -448,7 +448,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                     const rubricaUpper = String(emp.NomeBanco || emp.Rubrica || emp.rubrica || '').toUpperCase();
                     const bancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).trim();
 
-                    if (rubricaUpper.includes('RCC') || rubricaUpper.includes('RMC') || ((bancoCode === '0' || bancoCode === '') && !rubricaUpper)) {
+                    if (rubricaUpper.includes('RCC') || rubricaUpper.includes('RMC') || bancoCode === '0' || bancoCode === '' || !rubricaUpper || rubricaUpper === 'NULL') {
                       const pr = parseInt(emp.ParcelasRestantes || emp.PrazoRestantes || emp.prazoRestante || 0);
                       const pt = parseInt(emp.Prazo || emp.prazo || emp.parcelas || (pr > 0 ? pr : 0));
                       const p = parseFloat(emp.ValorParcela || emp.Parcela || emp.parcela || 0);
@@ -697,7 +697,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           {rmc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
                             const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || 0);
-                            const margemDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
+                            
+                            // Calcula utilizado no frontend como fallback absoluto
+                            const rmcLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RMC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
+                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
+                            const margemDisponivel = (rmcLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rmcLoansSum) : backendDisponivel;
+                            
                             const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
                             const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
 
@@ -743,7 +748,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           {rcc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
                             const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || 0);
-                            const margemDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
+                            
+                            // Calcula utilizado no frontend como fallback absoluto
+                            const rccLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RCC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
+                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
+                            const margemDisponivel = (rccLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rccLoansSum) : backendDisponivel;
+                            
                             const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
                             const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
 
