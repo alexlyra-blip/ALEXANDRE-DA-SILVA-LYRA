@@ -777,12 +777,13 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                               <table className="w-full text-xs text-left">
                                 <thead className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
                                   <tr>
-                                    <th className="px-4 py-2.5 font-bold">Banco</th>
                                     <th className="px-4 py-2.5 font-bold">Tipo</th>
+                                    <th className="px-4 py-2.5 font-bold">Banco</th>
                                     <th className="px-4 py-2.5 font-bold">Nº do Contrato</th>
                                     <th className="px-4 py-2.5 font-bold">Parcela</th>
-                                    <th className="px-4 py-2.5 font-bold">Prazo / Restantes</th>
-                                    <th className="px-4 py-2.5 font-bold">Valor Liberado / Saldo</th>
+                                    <th className="px-4 py-2.5 font-bold">Qtd. Parcelas</th>
+                                    <th className="px-4 py-2.5 font-bold">Qtd. Restante</th>
+                                    <th className="px-4 py-2.5 font-bold">Valor do Contrato</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -791,17 +792,19 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                     const bancoNome = item.NomeBanco || getBancoName(bancoCode);
                                     const bancoExibicao = formatBancoComCodigo(bancoCode, bancoNome);
                                     const parcela = parseFloat(item.ValorParcela || item.Parcela || 0);
-                                    const valorLiberado = parseFloat(item.ValorLiberado || item.ValorEmprestado || item.SaldoDevedor || 0);
+                                    const valorContrato = parseFloat(item.ValorLiberado || item.ValorEmprestado || item.SaldoDevedor || 0);
+                                    const prazoTotal = parseInt(item.Prazo || 0);
+                                    const parcelasRestantes = parseInt(item.ParcelasRestantes || 0);
 
                                     return (
                                       <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                        <td className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
-                                          {bancoExibicao}
-                                        </td>
                                         <td className="px-4 py-2.5 font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
-                                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 uppercase">
                                             {item.TipoCartao || 'RCC'}
                                           </span>
+                                        </td>
+                                        <td className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                          {bancoExibicao}
                                         </td>
                                         <td className="px-4 py-2.5 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
                                           {item.Contrato || 'N/A'}
@@ -809,11 +812,14 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                         <td className="px-4 py-2.5 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
                                           {formatCurrency(parcela)}
                                         </td>
+                                        <td className="px-4 py-2.5 font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                          {prazoTotal > 0 ? `${prazoTotal}x` : 'N/A'}
+                                        </td>
                                         <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                                          {item.Prazo ? `${item.ParcelasRestantes || 0}/${item.Prazo}x` : 'N/A'}
+                                          {parcelasRestantes > 0 ? `${parcelasRestantes} rest.` : 'N/A'}
                                         </td>
                                         <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
-                                          {valorLiberado > 0 ? formatCurrency(valorLiberado) : 'N/A'}
+                                          {valorContrato > 0 ? formatCurrency(valorContrato) : 'N/A'}
                                         </td>
                                       </tr>
                                     );

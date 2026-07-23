@@ -28,7 +28,7 @@ function parseCardList(rawInput: any, cardType: 'RMC' | 'RCC'): any[] {
   if (!mainCard) mainCard = rawList[0];
 
   const margemTotal = parseFloat(
-    mainCard.Margem || mainCard.ValorMargem || mainCard.ValorParcela || mainCard.Desconto || mainCard.ValorDesconto || mainCard.Parcela || mainCard.margem || 0
+    mainCard.Margem || mainCard.ValorMargem || mainCard.MargemTotal || mainCard.ValorParcela || mainCard.Desconto || mainCard.ValorDesconto || mainCard.Parcela || mainCard.margem || 0
   );
 
   let limiteCredito = parseFloat(
@@ -49,11 +49,9 @@ function parseCardList(rawInput: any, cardType: 'RMC' | 'RCC'): any[] {
       contratos.push(contrato);
     }
 
-    if (c !== mainCard) {
-      const p = parseFloat(c.Parcela || c.ValorParcela || c.Desconto || c.desconto || c.parcela || 0);
-      if (!isNaN(p) && p > 0) {
-        totalUtilizado += p;
-      }
+    const p = parseFloat(c.Parcela || c.ValorParcela || c.Desconto || c.desconto || c.parcela || 0);
+    if (!isNaN(p) && p > 0 && (c !== mainCard || (contrato && contrato !== String(mainCard.Contrato || '')))) {
+      totalUtilizado += p;
     }
   });
 
