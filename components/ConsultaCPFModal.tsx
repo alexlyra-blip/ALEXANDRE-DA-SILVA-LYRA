@@ -568,6 +568,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                             Banco: {dadosBancarios.Banco ? formatBancoComCodigo(dadosBancarios.Banco, getBancoName(dadosBancarios.Banco)) : 'N/A'} | Ag: {dadosBancarios.Agencia || 'N/A'} | CC: {dadosBancarios.ContaPagto ? formatAccount(dadosBancarios.ContaPagto) : 'N/A'}
                           </p>
                         </div>
+                      </div>
                     </div>
 
                     {/* Margens */}
