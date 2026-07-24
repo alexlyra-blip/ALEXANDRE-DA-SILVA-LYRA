@@ -3,7 +3,6 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -212,7 +211,6 @@ export default function AdminCoeficientesPage() {
 
   return (
     <div className="flex w-full min-h-screen bg-background text-foreground">
-      <Sidebar />
 
       <div className="flex flex-col flex-1 min-w-0 pb-20 pt-4 px-4 md:px-8 max-w-6xl mx-auto">
         {/* Top Header */}
