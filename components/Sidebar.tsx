@@ -72,7 +72,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex flex-col w-64 shrink-0 bg-[var(--sidebar-bg)] dark:bg-black text-white h-screen sticky top-0 shadow-2xl z-50 border-r border-white/5 dark:border-white/10 overflow-y-auto custom-scrollbar">
+    <aside className="hidden md:flex flex-col w-64 shrink-0 bg-[var(--sidebar-bg)] dark:bg-black text-white h-screen sticky top-0 shadow-2xl z-50 border-r border-white/5 dark:border-white/10 overflow-y-auto overflow-x-hidden custom-scrollbar">
       {/* Decorative elements to match dashboard header pattern */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl animate-pulse pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary/10 rounded-full -ml-12 -mb-12 blur-xl pointer-events-none" />
