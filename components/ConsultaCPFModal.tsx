@@ -199,8 +199,14 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
         `Total Comprometido: ${formatCurrency(totalComp)}`
       ],
       [
-        `Margem Livre: ${formatCurrency(margemLivreVal)}`,
-        `Valor Liberado: ${formatCurrency(valLiberadoVal)}`,
+        {
+          content: `Margem Livre: ${formatCurrency(margemLivreVal)}`,
+          styles: { fillColor: [220, 252, 231], textColor: [21, 128, 61], fontStyle: 'bold' }
+        },
+        {
+          content: `Valor Liberado: ${formatCurrency(valLiberadoVal)}`,
+          styles: { fillColor: [220, 252, 231], textColor: [21, 128, 61], fontStyle: 'bold' }
+        },
         `Coeficiente Diário: ${getMarginCoefficient()}`
       ]
     ];
