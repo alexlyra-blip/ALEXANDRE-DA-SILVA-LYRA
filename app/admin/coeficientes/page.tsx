@@ -30,7 +30,7 @@ import {
   formatDateStr, 
   isWeekend 
 } from '@/lib/coefficients';
-import { BANCOS_BRASIL } from '@/lib/mappings';
+import { getBankRules } from '@/lib/data-service';
 
 const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -49,6 +49,7 @@ export default function AdminCoeficientesPage() {
   const today = new Date();
   const [selectedConvenio, setSelectedConvenio] = useState<'INSS' | 'SIAPE'>('INSS');
   const [selectedBanco, setSelectedBanco] = useState<string>('707'); // Default to Daycoval
+  const [availableBanks, setAvailableBanks] = useState<{code: string, name: string}[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth() + 1); // 1-12
 
@@ -65,9 +66,28 @@ export default function AdminCoeficientesPage() {
     async function loadData() {
       setIsLoading(true);
       try {
+        const banksList = await getBankRules();
+        const activeBanks = banksList.filter(b => b.isActive !== false).map(b => {
+          // If the bank name starts with 3 digits, we can extract it. Otherwise use the name as code.
+          const match = b.name.match(/^(\d{3})/);
+          const code = match ? match[1] : b.name;
+          return { code, name: b.name };
+        });
+        
+        // Remove duplicates if any
+        const uniqueBanks = Array.from(new Map(activeBanks.map(item => [item.code, item])).values());
+        uniqueBanks.sort((a, b) => a.name.localeCompare(b.name));
+        setAvailableBanks(uniqueBanks);
+        
+        let currentBanco = selectedBanco;
+        if (uniqueBanks.length > 0 && !uniqueBanks.find(b => b.code === currentBanco)) {
+            currentBanco = uniqueBanks[0].code;
+            setSelectedBanco(currentBanco);
+        }
+
         const [monthlyData, latest] = await Promise.all([
-          getMonthlyCoefficients(selectedConvenio, selectedBanco, selectedYear, selectedMonth),
-          getLatestCoefficient(selectedConvenio, selectedBanco)
+          getMonthlyCoefficients(selectedConvenio, currentBanco, selectedYear, selectedMonth),
+          getLatestCoefficient(selectedConvenio, currentBanco)
         ]);
 
         const strMap: Record<string, string> = {};
@@ -250,7 +270,7 @@ export default function AdminCoeficientesPage() {
                 <Zap className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Coeficiente Ativo Hoje ({selectedConvenio} - {BANCOS_BRASIL[selectedBanco] || selectedBanco})</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Coeficiente Ativo Hoje ({selectedConvenio} - {availableBanks.find(b => b.code === selectedBanco)?.name || selectedBanco})</span>
                 <h3 className="text-lg font-black text-slate-900 dark:text-white">
                   {activeCoefInfo.coeficiente}
                   <span className="text-xs font-semibold text-slate-500 ml-2">
@@ -302,8 +322,8 @@ export default function AdminCoeficientesPage() {
               onChange={e => setSelectedBanco(e.target.value)}
               className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-2 text-xs font-bold text-slate-800 dark:text-white"
             >
-              {Object.entries(BANCOS_BRASIL).sort(([, a], [, b]) => a.localeCompare(b)).map(([code, name]) => (
-                <option key={code} value={code}>{code} - {name}</option>
+              {availableBanks.map((bank) => (
+                <option key={bank.code} value={bank.code}>{bank.name}</option>
               ))}
             </select>
           </div>

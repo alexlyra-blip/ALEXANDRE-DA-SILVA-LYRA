@@ -66,6 +66,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Coeficientes Diários
+    match /coeficientes_diarios/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // WhatsApp Sessions
     match /whatsappSessions/{document=**} {
       allow read, write: if true;
