@@ -106,7 +106,8 @@ export async function saveDailyCoefficient(
   coeficiente: number,
   userId?: string
 ): Promise<void> {
-  const docId = `${convenio}_${bancoCode}_${dateStr}`;
+  const safeBancoCode = bancoCode.replace(/[\/\\]/g, '-').replace(/\s+/g, '_');
+  const docId = `${convenio}_${safeBancoCode}_${dateStr}`;
   const docRef = doc(db, 'coeficientes_diarios', docId);
 
   await setDoc(docRef, {
