@@ -3,6 +3,7 @@ import { doc, setDoc, collection, query, where, orderBy, getDocs, limit, serverT
 
 export interface CoeficienteDiario {
   convenio: 'INSS' | 'SIAPE';
+  bancoCode: string;
   date: string; // YYYY-MM-DD
   coeficiente: number;
   updatedAt?: any;
@@ -30,13 +31,14 @@ const inMemoryCache: Record<string, number> = {};
  * Busca o coeficiente ativo para o dia informado (ou hoje).
  * Caso não haja coeficiente cadastrado na data atual, busca o do dia anterior mais recente cadastrado.
  */
-export async function getLatestCoefficient(convenio: 'INSS' | 'SIAPE', targetDateStr?: string): Promise<{ date: string; coeficiente: number }> {
+export async function getLatestCoefficient(convenio: 'INSS' | 'SIAPE', bancoCode: string, targetDateStr?: string): Promise<{ date: string; coeficiente: number }> {
   const todayStr = targetDateStr || formatDateStr();
 
   try {
     const q = query(
       collection(db, 'coeficientes_diarios'),
       where('convenio', '==', convenio),
+      where('bancoCode', '==', bancoCode),
       where('date', '<=', todayStr),
       orderBy('date', 'desc'),
       limit(1)
@@ -47,25 +49,25 @@ export async function getLatestCoefficient(convenio: 'INSS' | 'SIAPE', targetDat
       const data = snapshot.docs[0].data();
       const val = parseFloat(data.coeficiente);
       if (!isNaN(val) && val > 0) {
-        inMemoryCache[`${convenio}_current`] = val;
+        inMemoryCache[`${convenio}_${bancoCode}_current`] = val;
         return { date: data.date, coeficiente: val };
       }
     }
   } catch (err) {
-    console.warn(`[getLatestCoefficient] Aviso ao buscar coeficiente para ${convenio}:`, err);
+    console.warn(`[getLatestCoefficient] Aviso ao buscar coeficiente para ${convenio} - ${bancoCode}:`, err);
   }
 
-  // Coeficiente padrão padrão caso nenhum esteja cadastrado no banco ainda
+  // Coeficiente padrão caso nenhum esteja cadastrado no banco ainda para este banco específico
   const defaultVal = 0.02270;
-  inMemoryCache[`${convenio}_current`] = defaultVal;
+  inMemoryCache[`${convenio}_${bancoCode}_current`] = defaultVal;
   return { date: todayStr, coeficiente: defaultVal };
 }
 
-export function getCachedCoefficientSync(convenio: 'INSS' | 'SIAPE'): number {
-  return inMemoryCache[`${convenio}_current`] || 0.02270;
+export function getCachedCoefficientSync(convenio: 'INSS' | 'SIAPE', bancoCode: string): number {
+  return inMemoryCache[`${convenio}_${bancoCode}_current`] || 0.02270;
 }
 
-export async function getMonthlyCoefficients(convenio: 'INSS' | 'SIAPE', year: number, month: number): Promise<Record<string, number>> {
+export async function getMonthlyCoefficients(convenio: 'INSS' | 'SIAPE', bancoCode: string, year: number, month: number): Promise<Record<string, number>> {
   const startStr = `${year}-${String(month).padStart(2, '0')}-01`;
   const lastDay = new Date(year, month, 0).getDate();
   const endStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -76,6 +78,7 @@ export async function getMonthlyCoefficients(convenio: 'INSS' | 'SIAPE', year: n
     const q = query(
       collection(db, 'coeficientes_diarios'),
       where('convenio', '==', convenio),
+      where('bancoCode', '==', bancoCode),
       where('date', '>=', startStr),
       where('date', '<=', endStr),
       orderBy('date', 'asc')
@@ -98,20 +101,54 @@ export async function getMonthlyCoefficients(convenio: 'INSS' | 'SIAPE', year: n
 
 export async function saveDailyCoefficient(
   convenio: 'INSS' | 'SIAPE',
+  bancoCode: string,
   dateStr: string,
   coeficiente: number,
   userId?: string
 ): Promise<void> {
-  const docId = `${convenio}_${dateStr}`;
+  const docId = `${convenio}_${bancoCode}_${dateStr}`;
   const docRef = doc(db, 'coeficientes_diarios', docId);
 
   await setDoc(docRef, {
     convenio,
+    bancoCode,
     date: dateStr,
     coeficiente,
     updatedAt: serverTimestamp(),
     updatedBy: userId || 'admin'
   }, { merge: true });
 
-  inMemoryCache[`${convenio}_current`] = coeficiente;
+  inMemoryCache[`${convenio}_${bancoCode}_current`] = coeficiente;
+}
+
+/**
+ * Retorna os coeficientes atuais para todos os bancos cadastrados para um dado convênio.
+ * Útil para o assistente Gutto e para popular a tela inicial.
+ */
+export async function getAllActiveCoefficients(convenio: 'INSS' | 'SIAPE', targetDateStr?: string): Promise<Record<string, number>> {
+  const todayStr = targetDateStr || formatDateStr();
+  const result: Record<string, number> = {};
+
+  try {
+    // Busca todos os coeficientes recentes
+    const q = query(
+      collection(db, 'coeficientes_diarios'),
+      where('convenio', '==', convenio),
+      where('date', '<=', todayStr),
+      orderBy('date', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    // Como pegamos os descendentes, o primeiro que aparecer para cada banco é o mais atual
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      const banco = data.bancoCode;
+      if (banco && !result[banco]) {
+        result[banco] = parseFloat(data.coeficiente);
+      }
+    });
+  } catch (err) {
+    console.warn(`[getAllActiveCoefficients] Erro:`, err);
+  }
+  return result;
 }

@@ -3,6 +3,10 @@ import { getAI } from '@/lib/ai-config';
 import { getAdminDb } from "@/lib/firebase-admin";
 import { calculateOffers, SimulationParams, calculateRate } from "@/lib/simulation-engine";
 import { normalizePhone, validateWhatsAppUser } from "@/lib/whatsapp-utils";
+import { getAllActiveCoefficients } from "@/lib/coefficients";
+import { parseConsultaResponse } from "@/lib/multicorban";
+import { formatBancoComCodigo, getEspecieName } from "@/lib/mappings";
+import { formatCPF } from "@/lib/utils";
 
 const ai = getAI();
 
@@ -1277,11 +1281,29 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         }
     });
 
+    const activeCoefsINSS = await getAllActiveCoefficients('INSS');
+    const activeCoefsSIAPE = await getAllActiveCoefficients('SIAPE');
+    let coefsContext = '\nCOEFICIENTES DIÁRIOS (TAXA LIVRE):\n';
+    if (Object.keys(activeCoefsINSS).length > 0) {
+        coefsContext += '- INSS:\n';
+        for (const [code, val] of Object.entries(activeCoefsINSS)) {
+            coefsContext += `  * Banco ${code}: ${val}\n`;
+        }
+    }
+    if (Object.keys(activeCoefsSIAPE).length > 0) {
+        coefsContext += '- SIAPE:\n';
+        for (const [code, val] of Object.entries(activeCoefsSIAPE)) {
+            coefsContext += `  * Banco ${code}: ${val}\n`;
+        }
+    }
+
     const sysInst = `Você é o Gutto, assistente especialista em portabilidade do portal.
 
 REGRAS DE PORTABILIDADE E TABELAS DOS BANCOS CADASTRADOS NO SISTEMA:
 Use APENAS as regras abaixo para responder perguntas individuais sobre roteiro, regras, idade mínima/máxima, tabelas ou resumos de cada banco (NUNCA use ou invente dados externos):
 ${bankRulesContext}
+${coefsContext}
+
 
 SOBRE PROTOCOLO DE ATENDIMENTO E ENCERRAMENTO:
 - O número de protocolo deste atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}.
@@ -1374,6 +1396,94 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
 
     try {
         const words = cleanMsg.split(/\s+/);
+        
+        // INTERCEPTAÇÃO AUTOMÁTICA DE CPF
+        const cpfRaw = cleanMsg.replace(/\D/g, '');
+        if (cpfRaw.length === 11 && sessionData.status !== 'finished') {
+            console.log(`[Gutto] CPF detectado: ${cpfRaw}. Rodando simulação automática.`);
+            try {
+                const MULTICORBAN_API_TOKEN = '1a2286296a40abf27929209193a85155';
+                let res = await fetch('https://api.bancodatahub.com/cpf', {
+                    method: 'POST', headers: { 'Authorization': MULTICORBAN_API_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ cpf: cpfRaw })
+                });
+                let rawData = await res.json();
+                
+                let isSiape = false;
+                let list = parseConsultaResponse(rawData, false);
+                
+                if (!list || list.length === 0 || rawData.error || rawData.message) {
+                     res = await fetch('https://api.bancodatahub.com/siape', {
+                        method: 'POST', headers: { 'Authorization': MULTICORBAN_API_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ cpf: cpfRaw })
+                    });
+                    rawData = await res.json();
+                    list = parseConsultaResponse(rawData, true);
+                    isSiape = true;
+                }
+                
+                if (!list || list.length === 0) {
+                     return { message: `😕 Consultei o CPF ${formatCPF(cpfRaw)}, mas não encontrei nenhum benefício ativo no momento. Quer tentar outro ou tem alguma dúvida sobre as regras?`, state: sessionData };
+                }
+                
+                const b = list[0];
+                const nome = b.Beneficiario?.Nome || 'Cliente';
+                const idade = b.Beneficiario?.DataNascimento ? Math.floor((new Date().getTime() - new Date(b.Beneficiario.DataNascimento).getTime()) / 31557600000) : 50;
+                const convenio = isSiape ? 'SIAPE' : 'INSS';
+                const beneficio = b.Beneficiario?.Beneficio || 'N/A';
+                const especie = getEspecieName(b.Beneficiario?.Especie) || b.Beneficiario?.Especie || 'N/A';
+                const emprestimos = Array.isArray(b.Emprestimos) ? b.Emprestimos : (b.Emprestimos ? [b.Emprestimos] : []);
+                
+                let msg = `🎉 *Boas notícias, ${nome}!* Consultei o seu CPF e localizei o seu benefício.\n\n`;
+                msg += `📋 *Resumo do Benefício:*\n- *Convênio:* ${convenio}\n- *Idade:* ${idade} anos\n- *Benefício/Matrícula:* ${beneficio}\n- *Espécie:* ${especie}\n\n`;
+                
+                sessionData.extractedParams = { convenio, idade, isAnalfabeto: false };
+                
+                if (emprestimos.length > 0) {
+                     msg += `Encontrei ${emprestimos.length} empréstimos ativos! Já rodei o nosso motor de portabilidade. Veja as melhores ofertas elegíveis:\n\n`;
+                     
+                     let hasOffers = false;
+                     for (let i = 0; i < emprestimos.length; i++) {
+                         const emp = emprestimos[i];
+                         const prazoTotal = parseInt(emp.Prazo || emp.parcelas || 0);
+                         const parcelasRestantes = parseInt(emp.ParcelasRestantes || emp.prazo_restante || 0);
+                         const valorParcela = parseFloat(emp.ValorParcela || emp.parcela || 0);
+                         const saldoDevedor = parseFloat(emp.Quitacao || emp.SaldoDevedor || emp.saldo || emp.ValorEmprestado || 0);
+                         const bancoName = formatBancoComCodigo(emp.Banco, emp.NomeBanco);
+                         
+                         if (prazoTotal <= 0 || valorParcela <= 0 || saldoDevedor <= 0) continue;
+                         
+                         const simParams = {
+                             idade, convenio, bancoAtual: emp.NomeBanco || emp.Banco,
+                             valorParcela, saldoDevedor, prazoTotal, parcelasRestantes,
+                             isAnalfabeto: false, isCliente60Mais: idade >= 60
+                         };
+                         
+                         const coefs = isSiape ? activeCoefsSIAPE : activeCoefsINSS;
+                         const offers = calculateOffers(simParams, cachedBankRules, coefs);
+                         
+                         if (offers.length > 0) {
+                             hasOffers = true;
+                             offers.sort((a, b) => b.troco - a.troco);
+                             const topOffer = offers[0];
+                             msg += `✅ *Contrato ${emp.Contrato || 'N/A'} - ${bancoName}* (Parcela: R$ ${valorParcela.toFixed(2)})\n`;
+                             msg += `   👉 Melhor Oferta: *${topOffer.banco.name}* (Troco: R$ ${topOffer.troco.toFixed(2)})\n\n`;
+                         }
+                     }
+                     
+                     if (!hasOffers) {
+                         msg += `Infelizmente, neste exato momento, nenhum dos seus contratos apresentou troco positivo para portabilidade considerando as regras e taxas atuais dos bancos.\n`;
+                     } else {
+                         msg += `Qual dessas oportunidades chama mais a sua atenção para prosseguirmos? 🚀`;
+                     }
+                } else {
+                     msg += `Não encontrei empréstimos ativos para portabilidade (apenas margem livre ou cartões). Posso te ajudar com mais alguma dúvida?`;
+                }
+                return { message: msg, state: sessionData };
+            } catch(err) {
+                console.error("[Gutto] Error during auto CPF simulation:", err);
+                return { message: `😕 Houve um erro ao consultar o seu CPF no sistema. Pode tentar novamente mais tarde?`, state: sessionData };
+            }
+        }
+
         if (words.length <= 3 && sessionData.status !== 'finished') {
             const matchedBank = cachedBankRules.find(b => checkBankMatch(b.name, cleanMsg));
             if (matchedBank) {

@@ -30,6 +30,7 @@ import {
   formatDateStr, 
   isWeekend 
 } from '@/lib/coefficients';
+import { BANCOS_BRASIL } from '@/lib/mappings';
 
 const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -47,6 +48,7 @@ export default function AdminCoeficientesPage() {
 
   const today = new Date();
   const [selectedConvenio, setSelectedConvenio] = useState<'INSS' | 'SIAPE'>('INSS');
+  const [selectedBanco, setSelectedBanco] = useState<string>('707'); // Default to Daycoval
   const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth() + 1); // 1-12
 
@@ -64,8 +66,8 @@ export default function AdminCoeficientesPage() {
       setIsLoading(true);
       try {
         const [monthlyData, latest] = await Promise.all([
-          getMonthlyCoefficients(selectedConvenio, selectedYear, selectedMonth),
-          getLatestCoefficient(selectedConvenio)
+          getMonthlyCoefficients(selectedConvenio, selectedBanco, selectedYear, selectedMonth),
+          getLatestCoefficient(selectedConvenio, selectedBanco)
         ]);
 
         const strMap: Record<string, string> = {};
@@ -86,7 +88,7 @@ export default function AdminCoeficientesPage() {
     if (isAuthReady) {
       loadData();
     }
-  }, [selectedConvenio, selectedYear, selectedMonth, isAuthReady]);
+  }, [selectedConvenio, selectedBanco, selectedYear, selectedMonth, isAuthReady]);
 
   // Dias do mês selecionado
   const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -127,11 +129,11 @@ export default function AdminCoeficientesPage() {
 
     setSavingDay(dateStr);
     try {
-      await saveDailyCoefficient(selectedConvenio, dateStr, numVal, profile?.uid);
+      await saveDailyCoefficient(selectedConvenio, selectedBanco, dateStr, numVal, profile?.uid);
       showToast(`Coeficiente salvo para ${dateStr}: ${numVal}`, "success");
       
       // Atualizar status ativo
-      const latest = await getLatestCoefficient(selectedConvenio);
+      const latest = await getLatestCoefficient(selectedConvenio, selectedBanco);
       setActiveCoefInfo(latest);
     } catch (err) {
       console.error("Erro ao salvar coeficiente:", err);
@@ -169,14 +171,14 @@ export default function AdminCoeficientesPage() {
         if (valStr) {
           const numVal = parseFloat(valStr.replace(',', '.'));
           if (!isNaN(numVal) && numVal > 0) {
-            await saveDailyCoefficient(selectedConvenio, d.dateStr, numVal, profile?.uid);
+            await saveDailyCoefficient(selectedConvenio, selectedBanco, d.dateStr, numVal, profile?.uid);
             savedCount++;
           }
         }
       }
 
       showToast(`${savedCount} coeficientes de dias úteis salvos com sucesso!`, "success");
-      const latest = await getLatestCoefficient(selectedConvenio);
+      const latest = await getLatestCoefficient(selectedConvenio, selectedBanco);
       setActiveCoefInfo(latest);
     } catch (err) {
       console.error("Erro ao salvar todos os coeficientes:", err);
@@ -248,7 +250,7 @@ export default function AdminCoeficientesPage() {
                 <Zap className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Coeficiente Ativo Hoje ({selectedConvenio})</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Coeficiente Ativo Hoje ({selectedConvenio} - {BANCOS_BRASIL[selectedBanco] || selectedBanco})</span>
                 <h3 className="text-lg font-black text-slate-900 dark:text-white">
                   {activeCoefInfo.coeficiente}
                   <span className="text-xs font-semibold text-slate-500 ml-2">
@@ -266,7 +268,7 @@ export default function AdminCoeficientesPage() {
         )}
 
         {/* Controls Bar: Convênio Tabs & Mês/Ano */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           {/* Tab Convênio */}
           <div className="bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl flex border border-slate-200 dark:border-slate-800">
             <button
@@ -291,6 +293,19 @@ export default function AdminCoeficientesPage() {
               <ShieldCheck className="w-4 h-4" />
               SIAPE
             </button>
+          </div>
+
+          {/* Select Banco */}
+          <div className="flex">
+            <select
+              value={selectedBanco}
+              onChange={e => setSelectedBanco(e.target.value)}
+              className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-2 text-xs font-bold text-slate-800 dark:text-white"
+            >
+              {Object.entries(BANCOS_BRASIL).sort(([, a], [, b]) => a.localeCompare(b)).map(([code, name]) => (
+                <option key={code} value={code}>{code} - {name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Select Mês & Ano */}

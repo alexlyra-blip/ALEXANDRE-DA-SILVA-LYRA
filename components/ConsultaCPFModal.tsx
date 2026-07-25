@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap, Download } from 'lucide-react';
 import { formatCurrency, formatCPF } from '@/lib/utils';
-import { getEspecieName, getBancoName, calculateSaldoDevedor } from '@/lib/mappings';
+import { getEspecieName, getBancoName, calculateSaldoDevedor, BANCOS_BRASIL } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
 import { parseConsultaResponse } from '@/lib/multicorban';
-import { getLatestCoefficient, getCachedCoefficientSync } from '@/lib/coefficients';
+import { getLatestCoefficient, getCachedCoefficientSync, getAllActiveCoefficients } from '@/lib/coefficients';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -59,7 +59,8 @@ interface ConsultaCPFModalProps {
 
 export default function ConsultaCPFModal({ isOpen, onClose, data, addedContractsIds = [], onToggleContract }: ConsultaCPFModalProps) {
   const [activeTab, setActiveTab] = useState(0);
-  const [dailyCoef, setDailyCoef] = useState<number>(0.02270);
+  const [bancoPriority, setBancoPriority] = useState<string>('');
+  const [activeCoefs, setActiveCoefs] = useState<Record<string, number>>({});
   const [coefDate, setCoefDate] = useState<string>('');
 
   useEffect(() => {
@@ -69,10 +70,15 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
     const isSiape = !!first?.Beneficiario?.isSiape;
     const conv = isSiape ? 'SIAPE' : 'INSS';
 
-    getLatestCoefficient(conv).then(info => {
-      if (info && info.coeficiente > 0) {
-        setDailyCoef(info.coeficiente);
-        setCoefDate(info.date);
+    getAllActiveCoefficients(conv).then(info => {
+      if (info) {
+        setActiveCoefs(info);
+        // Tenta pré-selecionar o primeiro banco que tem coeficiente (ou Daycoval '707')
+        if (info['707']) {
+          setBancoPriority('707');
+        } else if (Object.keys(info).length > 0) {
+          setBancoPriority(Object.keys(info)[0]);
+        }
       }
     });
   }, [isOpen, data]);
@@ -87,7 +93,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
   const personalInfo = firstBenefit.Beneficiario || {};
   const telefones = Array.isArray(firstBenefit.Telefone) ? firstBenefit.Telefone : (firstBenefit.Telefone ? [firstBenefit.Telefone] : []);
 
-  const getMarginCoefficient = () => dailyCoef || getCachedCoefficientSync(firstBenefit?.Beneficiario?.isSiape ? 'SIAPE' : 'INSS');
+  const getMarginCoefficient = () => bancoPriority ? activeCoefs[bancoPriority] || 0.02270 : 0.02270;
 
   const handleGeneratePDF = () => {
     const doc = new jsPDF();
@@ -599,13 +605,40 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         <p className={`text-xl font-black ${margemLivre < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
                       </div>
 
-                      <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-4 shadow-lg text-center relative overflow-hidden text-white border border-white/10">
+                      <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-4 shadow-lg text-center relative overflow-hidden text-white border border-white/10 flex flex-col justify-between">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                        <p className="text-[10px] uppercase tracking-wider text-white/80 font-bold mb-1">Valor Liberado</p>
-                        <p className="text-2xl font-black">{formatCurrency(valorLiberado)}</p>
-                        <p className="text-[9px] text-white/80 mt-1 font-semibold">
-                          Coef. Diário ({isSiape ? 'SIAPE' : 'INSS'}): {getMarginCoefficient().toString().replace('.', ',')} {coefDate ? `(${coefDate})` : ''}
+                        
+                        <div className="flex justify-between items-start w-full relative z-10 mb-2">
+                           <p className="text-[10px] uppercase tracking-wider text-white/80 font-bold mb-1">Valor Liberado</p>
+                           {bancoPriority && (
+                             <span className="text-[9px] uppercase tracking-wider bg-white/20 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
+                               <Landmark className="w-3 h-3" />
+                               {BANCOS_BRASIL[bancoPriority] || bancoPriority}
+                             </span>
+                           )}
+                        </div>
+                        
+                        <p className="text-2xl font-black relative z-10">
+                          {bancoPriority ? formatCurrency(valorLiberado) : 'R$ 0,00'}
                         </p>
+                        
+                        <div className="relative z-10 mt-3 flex flex-col gap-1 items-center w-full">
+                          <select 
+                            className="bg-white/10 border border-white/20 rounded-xl text-[10px] text-white px-2 py-1.5 outline-none w-full"
+                            value={bancoPriority}
+                            onChange={(e) => setBancoPriority(e.target.value)}
+                          >
+                             <option value="" className="text-slate-900">Selecione o Banco</option>
+                             {Object.entries(activeCoefs).map(([code, val]) => (
+                               <option key={code} value={code} className="text-slate-900">{code} - {BANCOS_BRASIL[code] || code}</option>
+                             ))}
+                          </select>
+                          {bancoPriority && activeCoefs[bancoPriority] ? (
+                            <p className="text-[9px] text-white/80 font-semibold mt-1">Coef. Aplicado: {activeCoefs[bancoPriority].toString().replace('.', ',')}</p>
+                          ) : (
+                            <p className="text-[9px] text-white/80 font-semibold mt-1 text-amber-200">Sem coeficiente para este banco</p>
+                          )}
+                        </div>
                       </div>
                     </div>
 
