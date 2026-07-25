@@ -448,7 +448,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                     const rubricaUpper = String(emp.NomeBanco || emp.Rubrica || emp.rubrica || '').toUpperCase();
                     const bancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).trim();
 
-                    if (rubricaUpper.includes('RCC') || rubricaUpper.includes('RMC') || bancoCode === '0' || bancoCode === '' || !rubricaUpper || rubricaUpper === 'NULL') {
+                    if (rubricaUpper.includes('RCC') || rubricaUpper.includes('RMC') || bancoCode === '0' || bancoCode === '' || !rubricaUpper || rubricaUpper === 'NULL' || (!rubricaUpper && (bancoCode === '0' || bancoCode === ''))) {
                       const pr = parseInt(emp.ParcelasRestantes || emp.PrazoRestantes || emp.prazoRestante || 0);
                       const pt = parseInt(emp.Prazo || emp.prazo || emp.parcelas || (pr > 0 ? pr : 0));
                       const p = parseFloat(emp.ValorParcela || emp.Parcela || emp.parcela || 0);
@@ -804,6 +804,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                               <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 uppercase">
                                 {cardLoansList.length} {cardLoansList.length === 1 ? 'Contrato Averbado' : 'Contratos Averbados'}
                               </span>
+                              {/* DEBUG */}
+                              <div className="text-xs text-rose-500 mt-2 font-mono">DEBUG INFO: {cardLoansList.length} linhas</div>
                             </div>
                             
                             <div className="overflow-x-auto">
