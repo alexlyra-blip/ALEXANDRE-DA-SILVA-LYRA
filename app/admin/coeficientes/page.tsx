@@ -33,6 +33,7 @@ import {
   isWeekend 
 } from '@/lib/coefficients';
 import { getBankRules } from '@/lib/data-service';
+import { findBankCode } from '@/lib/mappings';
 
 const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -72,9 +73,7 @@ export default function AdminCoeficientesPage() {
       try {
         const banksList = await getBankRules();
         const activeBanks = banksList.filter(b => b.isActive !== false).map(b => {
-          // If the bank name starts with 3 digits, we can extract it. Otherwise use the name as code.
-          const match = b.name.match(/^(\d{3})/);
-          const code = match ? match[1] : b.name;
+          const code = findBankCode(b.name);
           return { code, name: b.name };
         });
         

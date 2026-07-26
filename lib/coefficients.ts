@@ -37,34 +37,42 @@ export async function getLatestCoefficient(convenio: 'INSS' | 'SIAPE', bancoCode
   try {
     const q = query(
       collection(db, 'coeficientes_diarios'),
-      where('convenio', '==', convenio),
-      where('bancoCode', '==', bancoCode),
-      where('date', '<=', todayStr),
-      orderBy('date', 'desc'),
-      limit(1)
+      where('convenio', '==', convenio)
     );
 
     const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      const data = snapshot.docs[0].data();
-      const val = parseFloat(data.coeficiente);
-      if (!isNaN(val) && val > 0) {
-        inMemoryCache[`${convenio}_${bancoCode}_current`] = val;
-        return { date: data.date, coeficiente: val };
+    const docs: any[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      if (!bancoCode || data.bancoCode === bancoCode) {
+        if (data.date <= todayStr) {
+          const val = parseFloat(data.coeficiente);
+          if (!isNaN(val) && val > 0) {
+            docs.push({ date: data.date, coeficiente: val });
+          }
+        }
       }
+    });
+
+    if (docs.length > 0) {
+      docs.sort((a, b) => b.date.localeCompare(a.date));
+      const top = docs[0];
+      inMemoryCache[`${convenio}_${bancoCode}_current`] = top.coeficiente;
+      return top;
     }
   } catch (err) {
     console.warn(`[getLatestCoefficient] Aviso no SDK cliente, tentando API route:`, err);
-    try {
-      const res = await fetch(`/api/coeficientes?action=latest&convenio=${convenio}&bancoCode=${encodeURIComponent(bancoCode)}&targetDateStr=${todayStr}`);
-      const json = await res.json();
-      if (res.ok && json.coeficiente) {
-        inMemoryCache[`${convenio}_${bancoCode}_current`] = json.coeficiente;
-        return { date: json.date || todayStr, coeficiente: json.coeficiente };
-      }
-    } catch (apiErr) {
-      console.error(`[getLatestCoefficient] API route também falhou:`, apiErr);
+  }
+
+  try {
+    const res = await fetch(`/api/coeficientes?action=latest&convenio=${convenio}&bancoCode=${encodeURIComponent(bancoCode)}&targetDateStr=${todayStr}`);
+    const json = await res.json();
+    if (res.ok && json.coeficiente) {
+      inMemoryCache[`${convenio}_${bancoCode}_current`] = json.coeficiente;
+      return { date: json.date || todayStr, coeficiente: json.coeficiente };
     }
+  } catch (apiErr) {
+    console.error(`[getLatestCoefficient] API route também falhou:`, apiErr);
   }
 
   const defaultVal = 0.02270;
@@ -86,33 +94,34 @@ export async function getMonthlyCoefficients(convenio: 'INSS' | 'SIAPE', bancoCo
   try {
     const q = query(
       collection(db, 'coeficientes_diarios'),
-      where('convenio', '==', convenio),
-      where('bancoCode', '==', bancoCode),
-      where('date', '>=', startStr),
-      where('date', '<=', endStr),
-      orderBy('date', 'asc')
+      where('convenio', '==', convenio)
     );
 
     const snapshot = await getDocs(q);
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
-      const val = parseFloat(data.coeficiente);
-      if (!isNaN(val)) {
-        result[data.date] = val;
+      if (!bancoCode || data.bancoCode === bancoCode) {
+        if (data.date >= startStr && data.date <= endStr) {
+          const val = parseFloat(data.coeficiente);
+          if (!isNaN(val)) {
+            result[data.date] = val;
+          }
+        }
       }
     });
     return result;
   } catch (err) {
     console.warn(`[getMonthlyCoefficients] Aviso no SDK cliente, tentando API route:`, err);
-    try {
-      const res = await fetch(`/api/coeficientes?action=monthly&convenio=${convenio}&bancoCode=${encodeURIComponent(bancoCode)}&year=${year}&month=${month}`);
-      const json = await res.json();
-      if (res.ok && json.data) {
-        return json.data;
-      }
-    } catch (apiErr) {
-      console.error(`[getMonthlyCoefficients] API route também falhou:`, apiErr);
+  }
+
+  try {
+    const res = await fetch(`/api/coeficientes?action=monthly&convenio=${convenio}&bancoCode=${encodeURIComponent(bancoCode)}&year=${year}&month=${month}`);
+    const json = await res.json();
+    if (res.ok && json.data) {
+      return json.data;
     }
+  } catch (apiErr) {
+    console.error(`[getMonthlyCoefficients] API route também falhou:`, apiErr);
   }
 
   return result;
@@ -169,31 +178,41 @@ export async function getAllActiveCoefficients(convenio: 'INSS' | 'SIAPE', targe
   try {
     const q = query(
       collection(db, 'coeficientes_diarios'),
-      where('convenio', '==', convenio),
-      where('date', '<=', todayStr),
-      orderBy('date', 'desc')
+      where('convenio', '==', convenio)
     );
     
     const snapshot = await getDocs(q);
+    const docs: any[] = [];
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
-      const banco = data.bancoCode;
-      if (banco && !result[banco]) {
-        result[banco] = parseFloat(data.coeficiente);
+      if (data.date <= todayStr && data.bancoCode) {
+        docs.push({
+          banco: data.bancoCode,
+          date: data.date,
+          coeficiente: parseFloat(data.coeficiente)
+        });
+      }
+    });
+
+    docs.sort((a, b) => b.date.localeCompare(a.date));
+    docs.forEach(item => {
+      if (item.banco && !result[item.banco] && !isNaN(item.coeficiente) && item.coeficiente > 0) {
+        result[item.banco] = item.coeficiente;
       }
     });
     return result;
   } catch (err) {
     console.warn(`[getAllActiveCoefficients] Aviso no SDK cliente, tentando API route:`, err);
-    try {
-      const res = await fetch(`/api/coeficientes?action=allActive&convenio=${convenio}&targetDateStr=${todayStr}`);
-      const json = await res.json();
-      if (res.ok && json.data) {
-        return json.data;
-      }
-    } catch (apiErr) {
-      console.error(`[getAllActiveCoefficients] API route também falhou:`, apiErr);
+  }
+
+  try {
+    const res = await fetch(`/api/coeficientes?action=allActive&convenio=${convenio}&targetDateStr=${todayStr}`);
+    const json = await res.json();
+    if (res.ok && json.data) {
+      return json.data;
     }
+  } catch (apiErr) {
+    console.error(`[getAllActiveCoefficients] API route também falhou:`, apiErr);
   }
   return result;
 }

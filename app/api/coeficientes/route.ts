@@ -18,6 +18,19 @@ export async function GET(request: Request) {
 
     const colRef = adminDb.collection('coeficientes_diarios');
 
+    // Single field query to eliminate ALL index requirement errors
+    const snapshot = await colRef.where('convenio', '==', convenio).get();
+
+    const allDocs: any[] = [];
+    snapshot.forEach(docSnap => {
+      const d = docSnap.data();
+      allDocs.push({
+        id: docSnap.id,
+        ...d,
+        coeficiente: parseFloat(d.coeficiente) || 0
+      });
+    });
+
     if (action === 'monthly' && year && month) {
       const y = parseInt(year);
       const m = parseInt(month);
@@ -25,69 +38,46 @@ export async function GET(request: Request) {
       const lastDay = new Date(y, m, 0).getDate();
       const endStr = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-      let snapshot;
-      if (bancoCode) {
-        snapshot = await colRef
-          .where('convenio', '==', convenio)
-          .where('bancoCode', '==', bancoCode)
-          .where('date', '>=', startStr)
-          .where('date', '<=', endStr)
-          .orderBy('date', 'asc')
-          .get();
-      } else {
-        snapshot = await colRef
-          .where('convenio', '==', convenio)
-          .where('date', '>=', startStr)
-          .where('date', '<=', endStr)
-          .orderBy('date', 'asc')
-          .get();
-      }
+      const filtered = allDocs.filter(d => {
+        if (bancoCode && d.bancoCode !== bancoCode) return false;
+        return d.date >= startStr && d.date <= endStr;
+      });
 
       const result: Record<string, number> = {};
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        const val = parseFloat(data.coeficiente);
-        if (!isNaN(val)) {
-          result[data.date] = val;
+      filtered.forEach(d => {
+        if (!isNaN(d.coeficiente)) {
+          result[d.date] = d.coeficiente;
         }
       });
+
       return NextResponse.json({ success: true, data: result });
     }
 
     if (action === 'allActive') {
       const todayStr = targetDateStr || new Date().toISOString().split('T')[0];
-      const snapshot = await colRef
-        .where('convenio', '==', convenio)
-        .where('date', '<=', todayStr)
-        .orderBy('date', 'desc')
-        .get();
+      const filtered = allDocs.filter(d => d.date <= todayStr);
+      filtered.sort((a, b) => b.date.localeCompare(a.date));
 
       const result: Record<string, number> = {};
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        const banco = data.bancoCode;
-        if (banco && !result[banco]) {
-          result[banco] = parseFloat(data.coeficiente);
+      filtered.forEach(d => {
+        const banco = d.bancoCode;
+        if (banco && !result[banco] && !isNaN(d.coeficiente) && d.coeficiente > 0) {
+          result[banco] = d.coeficiente;
         }
       });
+
       return NextResponse.json({ success: true, data: result });
     }
 
     // Default: latest
     const todayStr = targetDateStr || new Date().toISOString().split('T')[0];
-    const snapshot = await colRef
-      .where('convenio', '==', convenio)
-      .where('bancoCode', '==', bancoCode)
-      .where('date', '<=', todayStr)
-      .orderBy('date', 'desc')
-      .limit(1)
-      .get();
+    const filtered = allDocs.filter(d => d.date <= todayStr && (!bancoCode || d.bancoCode === bancoCode));
+    filtered.sort((a, b) => b.date.localeCompare(a.date));
 
-    if (!snapshot.empty) {
-      const data = snapshot.docs[0].data();
-      const val = parseFloat(data.coeficiente);
-      if (!isNaN(val) && val > 0) {
-        return NextResponse.json({ success: true, date: data.date, coeficiente: val });
+    if (filtered.length > 0) {
+      const top = filtered[0];
+      if (top.coeficiente > 0) {
+        return NextResponse.json({ success: true, date: top.date, coeficiente: top.coeficiente });
       }
     }
 

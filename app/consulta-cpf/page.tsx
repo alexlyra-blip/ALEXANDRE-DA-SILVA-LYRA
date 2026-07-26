@@ -2,22 +2,68 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Loader2, CreditCard, Check, AlertCircle, Crown } from 'lucide-react';
+import { 
+  Search, 
+  Loader2, 
+  CreditCard, 
+  Check, 
+  AlertCircle, 
+  Crown, 
+  Clock, 
+  Eye, 
+  RefreshCw, 
+  User, 
+  Database 
+} from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { useToast } from '@/contexts/ToastContext';
 import ConsultaCPFModal from '@/components/ConsultaCPFModal';
 
+interface CpfHistoryItem {
+  id: string;
+  cpf: string;
+  formattedCpf: string;
+  type: 'inss' | 'siape';
+  nome: string;
+  beneficio: string;
+  createdAt: number;
+  diffDays: number;
+  cacheDaysLeft: number;
+  isExpired: boolean;
+}
+
 export default function ConsultaCPFPage() {
   const router = useRouter();
-  const { showToast, hideToast } = useToast();
+  const { showToast } = useToast();
   const [cpfCliente, setCpfCliente] = useState('');
   const [tipoConsulta, setTipoConsulta] = useState<'inss' | 'siape'>('inss');
   const [isConsulting, setIsConsulting] = useState(false);
   const [consultaData, setConsultaData] = useState<any>(null);
   const [isConsultaModalOpen, setIsConsultaModalOpen] = useState(false);
+  
+  const [history, setHistory] = useState<CpfHistoryItem[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch('/api/multicorban/consulta-cpf');
+      const data = await res.json();
+      if (data.success && data.history) {
+        setHistory(data.history);
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar histórico:", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   const formatCPF = (value: any) => {
     if (!value) return '';
@@ -52,9 +98,13 @@ export default function ConsultaCPFPage() {
 
   const isCpfValid = validateCPF(cpfCliente);
 
-  const handleConsultaCPF = async (e?: React.FormEvent) => {
+  const handleConsultaCPF = async (e?: React.FormEvent, forceRefresh = false, targetCpf?: string, targetType?: 'inss' | 'siape') => {
     if (e) e.preventDefault();
-    if (!isCpfValid) {
+    const queryCpf = targetCpf || cpfCliente;
+    const queryType = targetType || tipoConsulta;
+
+    const cleanCpf = queryCpf.replace(/\D/g, '');
+    if (cleanCpf.length !== 11) {
       showToast("Digite um CPF válido primeiro", "error");
       return;
     }
@@ -66,7 +116,7 @@ export default function ConsultaCPFPage() {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ cpf: cpfCliente, type: tipoConsulta })
+        body: JSON.stringify({ cpf: cleanCpf, type: queryType, forceRefresh })
       });
       
       const data = await response.json();
@@ -77,6 +127,7 @@ export default function ConsultaCPFPage() {
       
       setConsultaData(data);
       setIsConsultaModalOpen(true);
+      fetchHistory();
       
     } catch (error: any) {
       console.error("Consulta CPF Error:", error);
@@ -96,7 +147,9 @@ export default function ConsultaCPFPage() {
     <div className="flex min-h-screen bg-background-light dark:bg-background-dark">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden relative pb-20 md:pb-0">
-        <div className="p-4 md:p-8 max-w-4xl mx-auto w-full">
+        <div className="p-4 md:p-8 max-w-4xl mx-auto w-full space-y-6">
+          
+          {/* Form Card */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -108,7 +161,7 @@ export default function ConsultaCPFPage() {
               </div>
             </div>
 
-            <form onSubmit={handleConsultaCPF} className="space-y-6">
+            <form onSubmit={(e) => handleConsultaCPF(e, false)} className="space-y-6">
               <div className="flex flex-col gap-2 max-w-md">
                 <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">CPF do Cliente</label>
                 <div className="relative">
@@ -166,11 +219,115 @@ export default function ConsultaCPFPage() {
                   {isConsulting ? 'Consultando...' : 'Consultar Base Nacional'}
                 </button>
                 <p className="text-xs text-slate-500 text-center mt-3 flex items-center justify-center gap-1">
-                  <Crown className="w-3 h-3 text-amber-500" /> Consulta Premium Ativa
+                  <Crown className="w-3 h-3 text-amber-500" /> Cache de 30 Dias Ativo (Economia de Créditos)
                 </p>
               </div>
             </form>
           </div>
+
+          {/* Histórico de Consultas */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                    Histórico de CPFs Consultados
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Consultas anteriores salvas por até 30 dias (não consomem novos créditos ao consultar novamente).
+                  </p>
+                </div>
+              </div>
+
+              <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 uppercase flex items-center gap-1">
+                <Database className="w-3 h-3" />
+                {history.length} {history.length === 1 ? 'Salvo' : 'Salvos'}
+              </span>
+            </div>
+
+            {isLoadingHistory ? (
+              <div className="flex py-10 items-center justify-center text-slate-400 gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                <span className="text-xs font-semibold">Carregando histórico...</span>
+              </div>
+            ) : history.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-xs font-medium">
+                Nenhum CPF consultado recentemente no banco.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[500px] overflow-y-auto custom-scrollbar">
+                {history.map(item => (
+                  <div key={item.id} className="py-3.5 px-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-950/40 rounded-xl transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs">
+                        <User className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight">
+                            {item.nome}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
+                            item.type === 'siape' ? 'bg-sky-500/10 text-sky-600 border border-sky-500/20' : 'bg-primary/10 text-primary border border-primary/20'
+                          }`}>
+                            {item.type.toUpperCase()}
+                          </span>
+                          {!item.isExpired ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              Cache {item.cacheDaysLeft}d
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                              Expirado
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] font-mono text-slate-500 mt-0.5">
+                          CPF: <span className="font-bold text-slate-700 dark:text-slate-300">{item.formattedCpf}</span>
+                          {item.beneficio ? ` • Ben: ${item.beneficio}` : ''}
+                          {` • Consultado há ${item.diffDays} dia(s)`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <button
+                        onClick={() => {
+                          setCpfCliente(item.formattedCpf);
+                          setTipoConsulta(item.type);
+                          handleConsultaCPF(undefined, false, item.formattedCpf, item.type);
+                        }}
+                        disabled={isConsulting}
+                        className="px-3 py-1.5 bg-primary text-white hover:bg-primary/90 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                        title="Ver Dados sem gastar créditos"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Ver Dados</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setCpfCliente(item.formattedCpf);
+                          setTipoConsulta(item.type);
+                          handleConsultaCPF(undefined, true, item.formattedCpf, item.type);
+                        }}
+                        disabled={isConsulting}
+                        className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 border border-slate-200 dark:border-slate-700"
+                        title="Forçar Nova Consulta na API"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span className="hidden md:inline">Reconsultar API</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
       <BottomNav />

@@ -100,3 +100,37 @@ export function calculateSaldoDevedor(valorParcela: number, parcelasRestantes: n
   return Math.floor(pv * 100) / 100; // Truncate 2 decimals
 }
 
+export function findBankCode(bankName: string): string {
+  if (!bankName) return '';
+  const match = bankName.match(/^(\d{3})/);
+  if (match) return match[1];
+
+  const norm = bankName.toLowerCase().trim();
+
+  if (norm.includes('digio')) return '335';
+  if (norm.includes('c6')) return '626';
+  if (norm.includes('pan')) return '623';
+  if (norm.includes('daycoval')) return '707';
+  if (norm.includes('bmg')) return '318';
+  if (norm.includes('safra')) return '422';
+  if (norm.includes('santander')) return '033';
+  if (norm.includes('bradesco')) return '237';
+  if (norm.includes('itau') || norm.includes('itaú')) return '341';
+  if (norm.includes('caixa')) return '104';
+  if (norm.includes('brasil')) return '001';
+  if (norm.includes('banrisul')) return '041';
+  if (norm.includes('inter')) return '077';
+  if (norm.includes('facta')) return '935';
+  if (norm.includes('agibank')) return '121';
+  if (norm.includes('inbursa')) return '012';
+  if (norm.includes('crefisa')) return '069';
+
+  for (const [code, name] of Object.entries(BANCOS_BRASIL)) {
+    const nameNorm = name.toLowerCase();
+    if (nameNorm.includes(norm) || norm.includes(nameNorm)) {
+      return code;
+    }
+  }
+  return bankName;
+}
+
