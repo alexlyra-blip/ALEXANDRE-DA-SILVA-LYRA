@@ -20,7 +20,9 @@ import {
   Info,
   Clock,
   ShieldCheck,
-  Zap
+  Zap,
+  Edit3,
+  X
 } from 'lucide-react';
 import Link from 'next/link';
 import { 
@@ -54,6 +56,8 @@ export default function AdminCoeficientesPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth() + 1); // 1-12
 
   const [coefficients, setCoefficients] = useState<Record<string, string>>({});
+  const [savedCoefficients, setSavedCoefficients] = useState<Record<string, string>>({});
+  const [editingDays, setEditingDays] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [savingDay, setSavingDay] = useState<string | null>(null);
@@ -96,6 +100,8 @@ export default function AdminCoeficientesPage() {
         });
 
         setCoefficients(strMap);
+        setSavedCoefficients(strMap);
+        setEditingDays({});
         setActiveCoefInfo(latest);
       } catch (err) {
         console.error("Erro ao carregar coeficientes:", err);
@@ -150,6 +156,10 @@ export default function AdminCoeficientesPage() {
     setSavingDay(dateStr);
     try {
       await saveDailyCoefficient(selectedConvenio, selectedBanco, dateStr, numVal, profile?.uid);
+      const valStr = numVal.toString();
+      setCoefficients(prev => ({ ...prev, [dateStr]: valStr }));
+      setSavedCoefficients(prev => ({ ...prev, [dateStr]: valStr }));
+      setEditingDays(prev => ({ ...prev, [dateStr]: false }));
       showToast(`Coeficiente salvo para ${dateStr}: ${numVal}`, "success");
       
       // Atualizar status ativo
@@ -184,6 +194,8 @@ export default function AdminCoeficientesPage() {
   const handleSaveAllMonth = async () => {
     setIsSaving(true);
     let savedCount = 0;
+    const newSaved = { ...savedCoefficients };
+    const newCoefs = { ...coefficients };
     try {
       for (const d of daysList) {
         if (d.isWeekend) continue;
@@ -192,11 +204,16 @@ export default function AdminCoeficientesPage() {
           const numVal = parseFloat(valStr.replace(',', '.'));
           if (!isNaN(numVal) && numVal > 0) {
             await saveDailyCoefficient(selectedConvenio, selectedBanco, d.dateStr, numVal, profile?.uid);
+            newSaved[d.dateStr] = numVal.toString();
+            newCoefs[d.dateStr] = numVal.toString();
             savedCount++;
           }
         }
       }
 
+      setCoefficients(newCoefs);
+      setSavedCoefficients(newSaved);
+      setEditingDays({});
       showToast(`${savedCount} coeficientes de dias úteis salvos com sucesso!`, "success");
       const latest = await getLatestCoefficient(selectedConvenio, selectedBanco);
       setActiveCoefInfo(latest);
@@ -384,7 +401,10 @@ export default function AdminCoeficientesPage() {
 
           <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[600px] overflow-y-auto custom-scrollbar">
             {daysList.map(item => {
-              const currentVal = coefficients[item.dateStr] || '';
+              const savedVal = savedCoefficients[item.dateStr];
+              const isSaved = Boolean(savedVal);
+              const isEditing = Boolean(editingDays[item.dateStr]);
+              const currentVal = coefficients[item.dateStr] !== undefined ? coefficients[item.dateStr] : (savedVal || '');
               const isToday = item.dateStr === formatDateStr();
               const isSavingThisDay = savingDay === item.dateStr;
 
@@ -415,6 +435,12 @@ export default function AdminCoeficientesPage() {
                             Hoje
                           </span>
                         )}
+                        {isSaved && !isEditing && (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border border-emerald-500/30 uppercase flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Salvo
+                          </span>
+                        )}
                       </div>
                       <p className="text-[10px] text-slate-400 font-medium">
                         {item.isWeekend ? 'Final de Semana / Sem Expediente' : `Data: ${item.dateStr}`}
@@ -427,6 +453,25 @@ export default function AdminCoeficientesPage() {
                       <span className="text-[10px] font-bold px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 uppercase tracking-wider w-full text-center">
                         Sem Coeficiente
                       </span>
+                    ) : isSaved && !isEditing ? (
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl px-4 py-1.5 text-center flex-1 sm:w-44">
+                          <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                            {savedVal}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            handleInputChange(item.dateStr, savedVal);
+                            setEditingDays(prev => ({ ...prev, [item.dateStr]: true }));
+                          }}
+                          className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 border border-slate-200 dark:border-slate-700"
+                          title="Editar Coeficiente"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-primary" />
+                          <span>Editar</span>
+                        </button>
+                      </div>
                     ) : (
                       <>
                         <div className="relative flex-1 sm:w-44">
@@ -444,11 +489,21 @@ export default function AdminCoeficientesPage() {
                         <button
                           onClick={() => handleSaveSingleDay(item.dateStr)}
                           disabled={isSavingThisDay || !currentVal}
-                          className="px-3 py-2 bg-slate-900 text-white dark:bg-slate-800 hover:bg-slate-800 text-xs font-bold rounded-xl transition-all disabled:opacity-40 flex items-center gap-1 shrink-0"
+                          className="px-3 py-2 bg-primary text-white hover:bg-primary/90 text-xs font-bold rounded-xl transition-all disabled:opacity-40 flex items-center gap-1 shrink-0 shadow-sm"
                         >
                           {isSavingThisDay ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                          <span className="hidden sm:inline">Salvar</span>
+                          <span className="hidden sm:inline">{isSaved ? 'Atualizar' : 'Salvar'}</span>
                         </button>
+
+                        {isSaved && isEditing && (
+                          <button
+                            onClick={() => setEditingDays(prev => ({ ...prev, [item.dateStr]: false }))}
+                            className="px-2 py-2 bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 text-xs font-bold rounded-xl transition-all"
+                            title="Cancelar Edição"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
