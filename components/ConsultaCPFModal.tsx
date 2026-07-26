@@ -66,22 +66,24 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
   useEffect(() => {
     if (!isOpen || !data) return;
     const list = parseConsultaResponse(data);
-    const first = list[0] || {};
-    const isSiape = !!first?.Beneficiario?.isSiape;
+    const activeBen = list[activeTab] || list[0] || {};
+    const isSiape = !!activeBen?.Beneficiario?.isSiape;
     const conv = isSiape ? 'SIAPE' : 'INSS';
 
     getAllActiveCoefficients(conv).then(info => {
-      if (info) {
+      if (info && Object.keys(info).length > 0) {
         setActiveCoefs(info);
-        // Tenta pré-selecionar o primeiro banco que tem coeficiente (ou Daycoval '707')
-        if (info['707']) {
-          setBancoPriority('707');
-        } else if (Object.keys(info).length > 0) {
-          setBancoPriority(Object.keys(info)[0]);
-        }
+        setBancoPriority(prev => {
+          if (prev && info[prev]) return prev;
+          if (info['707']) return '707';
+          return Object.keys(info)[0] || '';
+        });
+      } else {
+        setActiveCoefs({});
+        setBancoPriority('');
       }
     });
-  }, [isOpen, data]);
+  }, [isOpen, data, activeTab]);
 
   if (!isOpen || !data) return null;
 
@@ -93,7 +95,16 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
   const personalInfo = firstBenefit.Beneficiario || {};
   const telefones = Array.isArray(firstBenefit.Telefone) ? firstBenefit.Telefone : (firstBenefit.Telefone ? [firstBenefit.Telefone] : []);
 
-  const getMarginCoefficient = () => bancoPriority ? activeCoefs[bancoPriority] || 0.02270 : 0.02270;
+  const getMarginCoefficient = () => {
+    if (bancoPriority && activeCoefs[bancoPriority]) {
+      return activeCoefs[bancoPriority];
+    }
+    const keys = Object.keys(activeCoefs);
+    if (keys.length > 0) {
+      return activeCoefs[keys[0]];
+    }
+    return 0.02270;
+  };
 
   const handleGeneratePDF = () => {
     const doc = new jsPDF();
@@ -213,7 +224,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
           content: `Valor Liberado: ${formatCurrency(valLiberadoVal)}`,
           styles: { fillColor: [220, 252, 231], textColor: [21, 128, 61], fontStyle: 'bold' }
         },
-        `Coeficiente Diário: ${getMarginCoefficient()}`
+        `Coeficiente Diário ${bancoPriority ? `(${BANCOS_BRASIL[bancoPriority] || bancoPriority})` : ''}: ${getMarginCoefficient()}`
       ]
     ];
 
@@ -624,19 +635,27 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         
                         <div className="relative z-10 mt-3 flex flex-col gap-1 items-center w-full">
                           <select 
-                            className="bg-white/10 border border-white/20 rounded-xl text-[10px] text-white px-2 py-1.5 outline-none w-full"
+                            className="bg-white/10 border border-white/20 rounded-xl text-[10px] text-white px-2 py-1.5 outline-none w-full cursor-pointer font-bold"
                             value={bancoPriority}
                             onChange={(e) => setBancoPriority(e.target.value)}
                           >
-                             <option value="" className="text-slate-900">Selecione o Banco</option>
-                             {Object.entries(activeCoefs).map(([code, val]) => (
-                               <option key={code} value={code} className="text-slate-900">{code} - {BANCOS_BRASIL[code] || code}</option>
-                             ))}
+                            {Object.keys(activeCoefs).length === 0 ? (
+                              <option value="" className="text-slate-900 font-semibold">Sem coeficientes para este convênio</option>
+                            ) : (
+                              <>
+                                <option value="" className="text-slate-900 font-semibold">Selecione o Banco Preferencial</option>
+                                {Object.entries(activeCoefs).map(([code, val]) => (
+                                  <option key={code} value={code} className="text-slate-900 font-semibold">
+                                    {code} - {BANCOS_BRASIL[code] || code} (Coef: {val.toString().replace('.', ',')})
+                                  </option>
+                                ))}
+                              </>
+                            )}
                           </select>
                           {bancoPriority && activeCoefs[bancoPriority] ? (
                             <p className="text-[9px] text-white/80 font-semibold mt-1">Coef. Aplicado: {activeCoefs[bancoPriority].toString().replace('.', ',')}</p>
                           ) : (
-                            <p className="text-[9px] text-white/80 font-semibold mt-1 text-amber-200">Sem coeficiente para este banco</p>
+                            <p className="text-[9px] text-amber-200 font-semibold mt-1">Selecione um banco para calcular</p>
                           )}
                         </div>
                       </div>
