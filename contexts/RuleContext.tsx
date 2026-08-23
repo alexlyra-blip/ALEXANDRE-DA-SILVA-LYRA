@@ -88,6 +88,7 @@ interface RuleContextType {
   promotoraInstallments: PromotoraInstallments;
   nonPortableBanks: string[];
   blockedBanks: string[];
+  dailyMarginCoefficient: number;
   isLoaded: boolean;
   addBank: (bank: Omit<BankRule, 'id'>) => Promise<void>;
   updateBank: (id: string, bank: Partial<BankRule>) => Promise<void>;
@@ -99,6 +100,7 @@ interface RuleContextType {
   updatePromotoraInstallment: (bankId: string, installments: number) => Promise<void>;
   updateNonPortableBanks: (banksList: string[]) => Promise<void>;
   updateBlockedBanks: (banksList: string[]) => Promise<void>;
+  updateDailyMarginCoefficient: (coefficient: number) => Promise<void>;
 }
 
 const RuleContext = createContext<RuleContextType | undefined>(undefined);
@@ -110,6 +112,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
   const [promotoraInstallments, setPromotoraInstallments] = useState<PromotoraInstallments>({});
   const [nonPortableBanks, setNonPortableBanks] = useState<string[]>([]);
   const [blockedBanks, setBlockedBanks] = useState<string[]>([]);
+  const [dailyMarginCoefficient, setDailyMarginCoefficient] = useState<number>(0.02270);
   const [isLoaded, setIsLoaded] = useState(false);
   const { user, profile, setQuotaExceeded } = useAuth();
 
@@ -121,6 +124,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
       setPromotoraInstallments({});
       setNonPortableBanks([]);
       setBlockedBanks([]);
+      setDailyMarginCoefficient(0.02270);
       setIsLoaded(false);
     };
 
@@ -211,6 +215,10 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
                 if (data.bankInstallments) setPromotoraInstallments(data.bankInstallments);
                 if (data.nonPortableBanks) setNonPortableBanks(data.nonPortableBanks);
                 if (data.blockedBanks) setBlockedBanks(data.blockedBanks);
+                const storedMarginCoefficient = Number(data.dailyMarginCoefficient ?? data.marginCoefficient ?? data.coeficienteMargem);
+                if (Number.isFinite(storedMarginCoefficient) && storedMarginCoefficient > 0) {
+                  setDailyMarginCoefficient(storedMarginCoefficient);
+                }
               }
             });
           }
@@ -304,6 +312,28 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateDailyMarginCoefficient = async (coefficient: number) => {
+    if (!profile) return;
+    const promotoraId = profile.role === 'admin' ? 'admin' : (profile.role === 'promotora' ? profile.uid : profile.createdBy);
+    if (!promotoraId) return;
+
+    const normalized = Number(coefficient);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      throw new Error('Coeficiente diário inválido');
+    }
+
+    try {
+      await setDoc(doc(db, 'settings', promotoraId), {
+        dailyMarginCoefficient: normalized,
+        dailyMarginCoefficientUpdatedAt: new Date().toISOString(),
+      }, { merge: true });
+      setDailyMarginCoefficient(normalized);
+    } catch (error) {
+      console.error('Error updating dailyMarginCoefficient:', error);
+      throw error;
+    }
+  };
+
   const addBank = async (bank: Omit<BankRule, 'id'>) => {
     try {
       await saveBankRule(bank);
@@ -371,6 +401,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
     promotoraInstallments,
     nonPortableBanks,
     blockedBanks,
+    dailyMarginCoefficient,
     isLoaded,
     addBank, 
     updateBank, 
@@ -381,7 +412,8 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
     updatePromotoraPriority,
     updatePromotoraInstallment,
     updateNonPortableBanks,
-    updateBlockedBanks
+    updateBlockedBanks,
+    updateDailyMarginCoefficient
   }), [
     banks, 
     generalRules, 
@@ -389,6 +421,7 @@ export function RuleProvider({ children }: { children: React.ReactNode }) {
     promotoraInstallments, 
     nonPortableBanks,
     blockedBanks,
+    dailyMarginCoefficient,
     isLoaded
   ]);
 

@@ -36,6 +36,12 @@ service cloud.firestore {
       allow write: if isOwner(userId) || isAdmin();
     }
 
+    // Credenciais bancárias são acessíveis SOMENTE pelo backend Firebase Admin.
+    // Nem o próprio usuário recebe a senha descriptografada no cliente.
+    match /bankCredentials/{credentialId} {
+      allow read, write: if false;
+    }
+
     // Bank Rules
     match /bankRules/{ruleId} {
       allow read: if true;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap, Download } from 'lucide-react';
+import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap, Download, KeyRound } from 'lucide-react';
 import { formatCurrency, formatCPF } from '@/lib/utils';
 import { getEspecieName, getBancoName, calculateSaldoDevedor, BANCOS_BRASIL } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
@@ -33,7 +33,7 @@ const formatBancoComCodigo = (bancoCode: string | number | null | undefined, ban
   const cleanCode = String(bancoCode).trim();
   if (!cleanCode) return strNome || 'N/A';
   const paddedCode = cleanCode.padStart(3, '0');
-  
+
   if (paddedCode === '000') {
     if (strNome && /^\d{3}\s*-/.test(strNome)) {
       return strNome;
@@ -44,7 +44,7 @@ const formatBancoComCodigo = (bancoCode: string | number | null | undefined, ban
   if (strNome && strNome.startsWith(paddedCode)) {
     return strNome;
   }
-  
+
   const nameWithoutCode = strNome.replace(/^\d+\s*-\s*/, '');
   return nameWithoutCode ? `${paddedCode} - ${nameWithoutCode}` : paddedCode;
 };
@@ -53,15 +53,20 @@ interface ConsultaCPFModalProps {
   isOpen: boolean;
   onClose: () => void;
   data: any; // The raw data from MultiCorban API
+  c6RefinData?: any;
   addedContractsIds?: string[];
   onToggleContract?: (contractData: any, action: 'add' | 'remove') => void;
 }
 
-export default function ConsultaCPFModal({ isOpen, onClose, data, addedContractsIds = [], onToggleContract }: ConsultaCPFModalProps) {
+export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, addedContractsIds = [], onToggleContract }: ConsultaCPFModalProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [bancoPriority, setBancoPriority] = useState<string>('');
   const [activeCoefs, setActiveCoefs] = useState<Record<string, number>>({});
   const [coefDate, setCoefDate] = useState<string>('');
+
+  useEffect(() => {
+    if (isOpen) setActiveTab(0);
+  }, [isOpen, data]);
 
   useEffect(() => {
     if (!isOpen || !data) return;
@@ -206,8 +211,17 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
 
     const valBen = parseFloat(resFin.ValorBeneficio || 0);
     const margemCons = valBen * (isSiape ? 0.35 : 0.40);
-    const margemLivreVal = Math.floor((margemCons - totalComp) * 100) / 100;
-    const valLiberadoVal = margemLivreVal > 0 ? Math.floor((margemLivreVal / getMarginCoefficient()) * 100) / 100 : 0;
+    const margemCalculadaPdf = Math.floor((margemCons - totalComp) * 100) / 100;
+    const rawMargemPdf = resFin.MargemDisponivelEmprestimo;
+    const hasMargemPdf = rawMargemPdf !== undefined
+      && rawMargemPdf !== null
+      && String(rawMargemPdf).trim() !== '';
+    const margemLivreVal = hasMargemPdf
+      ? Math.floor(parseFloat(rawMargemPdf || 0) * 100) / 100
+      : margemCalculadaPdf;
+    const valLiberadoVal = margemLivreVal > 0
+      ? Math.floor((margemLivreVal / getMarginCoefficient()) * 100) / 100
+      : 0;
 
     const finRows = [
       [
@@ -328,12 +342,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
           {/* Dados Pessoais */}
           <div className="bg-white dark:bg-slate-950 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
             <div className="absolute -right-6 -top-6 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl"></div>
-            
+
             <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
               <User className="w-4 h-4 text-primary" />
               DADOS DO BENEFICIÁRIO
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="lg:col-span-4 bg-slate-50 dark:bg-slate-900 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nome Completo</p>
@@ -440,16 +454,27 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 const beneficiario = b.Beneficiario || {};
                 const resumo = b.ResumoFinanceiro || {};
                 const dadosBancarios = b.DadosBancarios || {};
-                
+
                 const isSiape = !!b.isSiape || !!beneficiario.isSiape;
                 const valorBeneficio = parseFloat(resumo.ValorBeneficio || 0);
-                
+
                 // Emprestimos e cartões
                 const emprestimos = Array.isArray(b.Emprestimos) ? b.Emprestimos : (b.Emprestimos ? [b.Emprestimos] : []);
                 const rmc = Array.isArray(b.Rmc) ? b.Rmc : (b.Rmc ? [b.Rmc] : []);
                 const rcc = Array.isArray(b.RCC) ? b.RCC : (b.RCC ? [b.RCC] : []);
                 const cartoes = [...rmc, ...rcc];
-                
+                const c6Contracts = emprestimos.filter((emp: any) => {
+                  const code = String(emp?.Banco || emp?.IdBanco || '')
+                    .replace(/\D/g, '')
+                    .padStart(3, '0');
+                  const name = String(
+                    emp?.NomeBanco || emp?.Rubrica || '',
+                  ).toUpperCase();
+                  return code === '626'
+                    || name.includes('C6 CONSIGNADO')
+                    || name.includes('C6 CONSIG');
+                });
+
                 // Somar parcelas de empréstimos e cartões
                 let totalComprometidoEmprestimos = 0;
                 emprestimos.forEach((e: any) => totalComprometidoEmprestimos += parseFloat(e.ValorParcela || 0));
@@ -459,7 +484,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
 
                 const rmcMargem = parseFloat(rmc[0]?.ValorParcela || rmc[0]?.MargemTotal || 0);
                 const rccMargem = parseFloat(rcc[0]?.ValorParcela || rcc[0]?.MargemTotal || 0);
-                
+
                 const getCardLoans = (item: any) => {
                   if (Array.isArray(item.CardLoansList) && item.CardLoansList.length > 0) {
                     return item.CardLoansList;
@@ -496,34 +521,47 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                 const cardLoansSum = cardLoansList.reduce((acc: number, item: any) => acc + parseFloat(item.ValorParcela || 0), 0);
 
                 // No SIAPE: Total Comprometido da margem consignável (35%) = Desconto Total da Folha - (Margem RMC + Margem RCC + Saques de Cartões) = 21.963,37
-                const totalComprometidoSiape = resumo.DescontoTotal > 0 
-                  ? Math.round((resumo.DescontoTotal - (rmcMargem + rccMargem + cardLoansSum)) * 100) / 100 
+                const totalComprometidoSiape = resumo.DescontoTotal > 0
+                  ? Math.round((resumo.DescontoTotal - (rmcMargem + rccMargem + cardLoansSum)) * 100) / 100
                   : 21963.37;
 
-                const totalComprometido = isSiape 
-                  ? (totalComprometidoSiape > 0 ? totalComprometidoSiape : 21963.37) 
+                const totalComprometido = isSiape
+                  ? (totalComprometidoSiape > 0 ? totalComprometidoSiape : 21963.37)
                   : (totalComprometidoEmprestimos + totalComprometidoCartoes);
 
                 // Função para trancar em 2 casas decimais sem arredondar para cima
                 const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
 
                 const base = isSiape ? parseFloat(resumo.ValorBeneficio || valorBeneficio || 0) : valorBeneficio;
-                
+
                 // Exceção LOAS 87 e 88 (35%), demais 40% (ou 35% para SIAPE)
                 const especie = (beneficiario.Especie || '').toString();
                 const isLoas = especie.includes('87') || especie.includes('88');
                 const percentualMargem = isSiape ? 0.35 : (isLoas ? 0.35 : 0.40);
-                
+
                 const margemConsignavel = truncateDecimals(base * percentualMargem);
-                const margemLivre = truncateDecimals(margemConsignavel - totalComprometido);
-                const valorLiberado = margemLivre > 0 ? truncateDecimals(margemLivre / getMarginCoefficient()) : 0;
+                const rawMargemResumo = resumo.MargemDisponivelEmprestimo;
+                const hasMargemResumo = rawMargemResumo !== undefined
+                  && rawMargemResumo !== null
+                  && String(rawMargemResumo).trim() !== '';
+                const margemCalculada = truncateDecimals(
+                  margemConsignavel - totalComprometido,
+                );
+                // A margem devolvida pela MultiCorban é a fonte principal.
+                // O cálculo local permanece como fallback.
+                const margemLivre = hasMargemResumo
+                  ? truncateDecimals(parseFloat(rawMargemResumo || 0))
+                  : margemCalculada;
+                const valorLiberado = margemLivre > 0
+                  ? truncateDecimals(margemLivre / getMarginCoefficient())
+                  : 0;
 
                 const isBlocked = beneficiario.BloqueadoEmprestimo === "1" || beneficiario.BloqueadoEmprestimo === true;
                 const isActive = beneficiario.Situacao === 'Ativo';
 
                 return (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    
+
                     {/* Card Dados do Benefício */}
                     <div className="bg-white dark:bg-slate-950 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
                       <div className="flex items-center justify-between mb-4">
@@ -600,12 +638,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem Consignável</p>
                         <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavel)}</p>
                         <p className="text-[9px] text-slate-400 mt-1">
-                          {isSiape 
-                            ? `(40% da Base ${formatCurrency(base)})` 
+                          {isSiape
+                            ? `(40% da Base ${formatCurrency(base)})`
                             : `(${isLoas ? '35%' : '40%'} do Benefício ${formatCurrency(valorBeneficio)})`}
                         </p>
                       </div>
-                      
+
                       <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 text-center">
                         <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Total Comprometido</p>
                         <p className="text-xl font-black text-sky-600 dark:text-sky-400">{formatCurrency(totalComprometido)}</p>
@@ -618,7 +656,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
 
                       <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-4 shadow-lg text-center relative overflow-hidden text-white border border-white/10 flex flex-col justify-between">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                        
+
                         <div className="flex justify-between items-start w-full relative z-10 mb-2">
                            <p className="text-[10px] uppercase tracking-wider text-white/80 font-bold mb-1">Valor Liberado</p>
                            {bancoPriority && (
@@ -628,13 +666,13 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                              </span>
                            )}
                         </div>
-                        
+
                         <p className="text-2xl font-black relative z-10">
                           {bancoPriority ? formatCurrency(valorLiberado) : 'R$ 0,00'}
                         </p>
-                        
+
                         <div className="relative z-10 mt-3 flex flex-col gap-1 items-center w-full">
-                          <select 
+                          <select
                             className="bg-white/10 border border-white/20 rounded-xl text-[10px] text-white px-2 py-1.5 outline-none w-full cursor-pointer font-bold"
                             value={bancoPriority}
                             onChange={(e) => setBancoPriority(e.target.value)}
@@ -660,6 +698,45 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                         </div>
                       </div>
                     </div>
+
+                    {/* Refinanciamento C6 Consignado automático */}
+                    {!isSiape && c6Contracts.length > 0 && (
+                      <div className="bg-gradient-to-br from-slate-950 to-slate-900 rounded-2xl p-5 border border-slate-700 shadow-lg text-white">
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                          <div>
+                            <h3 className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+                              <KeyRound className="w-4 h-4 text-amber-400" />
+                              Refinanciamento C6 Consignado
+                            </h3>
+                            <p className="text-xs text-slate-300 mt-1">
+                              {c6Contracts.length} contrato(s) C6 identificado(s). O sistema consulta automaticamente o refin em 108x e utiliza a primeira condição retornada pelo C6.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-bold">
+                            {c6RefinData?.loading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                                Consultando refin automaticamente...
+                              </>
+                            ) : c6RefinData?.configured ? (
+                              <span className="text-emerald-300">
+                                ✓ Credencial vinculada ao usuário
+                              </span>
+                            ) : (
+                              <span className="text-amber-300">
+                                Configure a credencial C6 na tela de Consulta CPF
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {c6RefinData?.error && (
+                          <p className="mt-3 text-xs text-rose-300">
+                            {c6RefinData.error}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {/* Tabela de Empréstimos */}
                     {emprestimos.length > 0 && (
@@ -694,15 +771,28 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                 const parcelasRestantes = parseInt(emp.ParcelasRestantes || emp.prazo_restante || 0);
                                 const parcelasPagas = emp.ParcelasPagas !== undefined ? parseInt(emp.ParcelasPagas) : Math.max(0, prazoTotal - parcelasRestantes);
                                 const taxa = emp.Taxa || emp.taxa || 0;
-                                
+
                                 const valorOriginAPI = emp.ValorEmprestado || emp.ValorContrato || emp.ValorFinanciado || emp.ValorLiberado || emp.SaldoDevedor || emp.saldo || 0;
                                 const valorOriginCalc = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), prazoTotal, taxa);
                                 const valorOrigin = parseFloat(valorOriginAPI) > 0 ? parseFloat(valorOriginAPI) : valorOriginCalc;
-                                
+
                                 const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
                                 const bancoNomeSemPrefixo = getBancoName(emp.Banco) !== String(emp.Banco || '') ? getBancoName(emp.Banco) : (emp.NomeBanco || emp.Banco || '');
                                 const bancoExibicao = formatBancoComCodigo(emp.Banco, bancoNomeSemPrefixo);
+                                const bancoCode = String(emp.Banco || emp.IdBanco || '')
+                                  .replace(/\D/g, '')
+                                  .padStart(3, '0');
+                                const isC6Consignado = bancoCode === '626'
+                                  || String(emp.NomeBanco || emp.Rubrica || '')
+                                    .toUpperCase()
+                                    .includes('C6 CONSIG');
+                                const c6Key = `${beneficiario.Beneficio || ''}-${emp.Contrato || ''}`;
+                                const c6AutoResult = Array.isArray(c6RefinData?.results)
+                                  ? c6RefinData.results.find(
+                                      (result: any) => result?.key === c6Key,
+                                    )
+                                  : null;
                                 return (
                                 <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                                   <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap flex items-center gap-2">
@@ -718,18 +808,182 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                                   <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">{valorOrigin > 0 ? formatCurrency(parseFloat(valorOrigin)) : 'N/A'}</td>
                                   <td className="px-4 py-3 font-black text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-900/10 whitespace-nowrap">{formatCurrency(saldoAtual)}</td>
                                   <td className="px-4 py-3 text-right">
-                                    <button
-                                      onClick={() => onToggleContract ? onToggleContract(emp, isAdded ? 'remove' : 'add') : null}
-                                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${isAdded ? 'bg-rose-100 text-rose-600 hover:bg-rose-200 dark:bg-rose-900/30 dark:hover:bg-rose-900/50' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'}`}
-                                    >
-                                      {isAdded ? 'Remover' : 'Adicionar'}
-                                    </button>
+                                    <div className="flex items-center justify-end gap-2">
+                                      {isC6Consignado && !isSiape && (
+                                        <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black whitespace-nowrap flex items-center gap-1.5 ${
+                                          c6RefinData?.loading
+                                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                                            : c6AutoResult?.success && c6AutoResult?.hasAvailableTable
+                                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                        }`}>
+                                          {c6RefinData?.loading
+                                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            : <KeyRound className="w-3.5 h-3.5" />}
+                                          {c6RefinData?.loading
+                                            ? 'Refin consultando'
+                                            : c6AutoResult?.success && c6AutoResult?.hasAvailableTable
+                                              ? 'Refin C6 disponível'
+                                              : c6AutoResult?.success
+                                                ? 'Sem liberação C6'
+                                                : c6RefinData?.configured
+                                                  ? 'Refin indisponível'
+                                                  : 'Credencial C6 necessária'}
+                                        </span>
+                                      )}
+
+                                      <button
+                                        onClick={() => onToggleContract ? onToggleContract(emp, isAdded ? 'remove' : 'add') : null}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${isAdded ? 'bg-rose-100 text-rose-600 hover:bg-rose-200 dark:bg-rose-900/30 dark:hover:bg-rose-900/50' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'}`}
+                                      >
+                                        {isAdded ? 'Remover' : 'Adicionar'}
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               )})}
                             </tbody>
                           </table>
                         </div>
+
+                        {!c6RefinData?.loading
+                          && Array.isArray(c6RefinData?.results)
+                          && c6RefinData.results
+                            .filter(
+                              (result: any) =>
+                                String(result?.beneficio || '')
+                                === String(beneficiario.Beneficio || ''),
+                            )
+                            .map((result: any) => {
+                              const summary = result?.summary;
+                              const available = Boolean(
+                                result?.success
+                                && result?.hasAvailableTable,
+                              );
+
+                              return (
+                                <div
+                                  key={result.key}
+                                  className={`m-4 rounded-xl border p-4 ${
+                                    available
+                                      ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10'
+                                      : 'border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10'
+                                  }`}
+                                >
+                                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                                    <div>
+                                      <p className="text-sm font-black text-slate-800 dark:text-white">
+                                        Refin C6 • Contrato {result.contrato}
+                                      </p>
+                                      <p className="text-[10px] uppercase tracking-wider text-slate-500 mt-1">
+                                        Primeira condição retornada para este contrato
+                                      </p>
+                                    </div>
+                                    <span className={`text-[10px] uppercase font-black ${
+                                      available
+                                        ? 'text-emerald-700 dark:text-emerald-300'
+                                        : 'text-amber-700 dark:text-amber-300'
+                                    }`}>
+                                      {available ? 'Disponível' : 'Sem liberação'}
+                                    </span>
+                                  </div>
+
+                                  {result.error ? (
+                                    <p className="text-xs mt-3 text-amber-700 dark:text-amber-300">
+                                      Refin indisponível para este contrato.
+                                    </p>
+                                  ) : summary ? (
+                                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                                      <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3 col-span-2 md:col-span-1">
+                                        <p className="text-[9px] uppercase text-slate-500 font-bold">
+                                          Condição / Tabela
+                                        </p>
+                                        <p className="text-sm font-black text-slate-800 dark:text-white mt-1">
+                                          {summary.tabela}
+                                          {summary.codigoTabela
+                                            ? ` • ${summary.codigoTabela}`
+                                            : ''}
+                                        </p>
+                                      </div>
+
+                                      {summary.produto ? (
+                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3 col-span-2 md:col-span-1">
+                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
+                                            Produto
+                                          </p>
+                                          <p className="text-sm font-black mt-1">
+                                            {summary.produto}
+                                          </p>
+                                        </div>
+                                      ) : null}
+
+                                      {summary.prazo ? (
+                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3">
+                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
+                                            Prazo
+                                          </p>
+                                          <p className="text-sm font-black mt-1">
+                                            {summary.prazo}x
+                                          </p>
+                                        </div>
+                                      ) : null}
+
+                                      {summary.taxa !== null
+                                        && summary.taxa !== undefined ? (
+                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3">
+                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
+                                            Taxa
+                                          </p>
+                                          <p className="text-sm font-black mt-1">
+                                            {Number(summary.taxa)
+                                              .toFixed(2)
+                                              .replace('.', ',')}%
+                                          </p>
+                                        </div>
+                                      ) : null}
+
+                                      {summary.parcela !== null
+                                        && summary.parcela !== undefined ? (
+                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3">
+                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
+                                            Parcela
+                                          </p>
+                                          <p className="text-sm font-black mt-1">
+                                            {formatCurrency(
+                                              Number(summary.parcela),
+                                            )}
+                                          </p>
+                                        </div>
+                                      ) : null}
+
+                                      {summary.valorLiberado !== null
+                                        && summary.valorLiberado !== undefined ? (
+                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3">
+                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
+                                            Liberado
+                                          </p>
+                                          <p className={`text-sm font-black mt-1 ${
+                                            available
+                                              ? 'text-emerald-700 dark:text-emerald-300'
+                                              : 'text-amber-700 dark:text-amber-300'
+                                          }`}>
+                                            {formatCurrency(
+                                              Number(
+                                                summary.valorLiberado,
+                                              ),
+                                            )}
+                                          </p>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs mt-3 text-slate-600 dark:text-slate-300">
+                                      O C6 não retornou valor liberado para este refinanciamento.
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
                       </div>
                     )}
 
@@ -751,19 +1005,19 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           {rmc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
                             const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || 0);
-                            
+
                             // Calcula utilizado no frontend como fallback absoluto
                             const rmcLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RMC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
                             const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
                             const margemDisponivel = (rmcLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rmcLoansSum) : backendDisponivel;
-                            
+
                             const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
                             const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
 
                             return (
                               <div key={`rmc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-sky-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-sky-950/20 rounded-2xl border border-sky-200/60 dark:border-sky-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-2xl"></div>
-                                
+
                                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
                                   <div className="flex items-center gap-2">
                                     <div className="w-8 h-8 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400 font-black text-xs shrink-0">
@@ -802,19 +1056,19 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                           {rcc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
                             const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || 0);
-                            
+
                             // Calcula utilizado no frontend como fallback absoluto
                             const rccLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RCC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
                             const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
                             const margemDisponivel = (rccLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rccLoansSum) : backendDisponivel;
-                            
+
                             const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
                             const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
 
                             return (
                               <div key={`rcc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-amber-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-amber-950/20 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl"></div>
-                                
+
                                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
                                   <div className="flex items-center gap-2">
                                     <div className="w-8 h-8 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-black text-xs shrink-0">
@@ -865,7 +1119,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, addedContracts
                               {/* DEBUG */}
                               <div className="text-xs text-rose-500 mt-2 font-mono">DEBUG INFO: {cardLoansList.length} linhas</div>
                             </div>
-                            
+
                             <div className="overflow-x-auto">
                               <table className="w-full text-xs text-left">
                                 <thead className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">

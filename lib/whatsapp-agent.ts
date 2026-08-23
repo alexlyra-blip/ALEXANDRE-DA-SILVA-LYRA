@@ -4,11 +4,16 @@ import { getAdminDb } from "@/lib/firebase-admin";
 import { calculateOffers, SimulationParams, calculateRate } from "@/lib/simulation-engine";
 import { normalizePhone, validateWhatsAppUser } from "@/lib/whatsapp-utils";
 import { getAllActiveCoefficients } from "@/lib/coefficients";
-import { parseConsultaResponse } from "@/lib/multicorban";
-import { formatBancoComCodigo, getEspecieName } from "@/lib/mappings";
-import { formatCPF } from "@/lib/utils";
+import { buildInssSimulationContracts, consultarCpfMulticorban, extractCpfFromText, getBenefitArray } from "@/lib/multicorban-service";
+import { consultarRefinC6, getFirstAvailableC6Table, isC6Consignado, summarizeC6RefinTable, type C6RefinCredentials } from "@/lib/c6-refin-service";
+import { getEspecieName } from '@/lib/mappings';
 
 const ai = getAI();
+
+interface WhatsAppRuntimeContext {
+    /** Credencial C6 injetada pelo n8n apenas nesta requisição. Nunca é persistida na sessão. */
+    c6Credentials?: C6RefinCredentials | null;
+}
 
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -181,7 +186,7 @@ function getRuleSummary(ruleIdOrName: string): string {
         if (p > 0) plazosSet.add(p);
     });
     const sortedPlazos = Array.from(plazosSet).sort((x, y) => x - y);
-    
+
     const formatPlazos = (plazos: number[]): string => {
         if (!plazos || plazos.length === 0) return "Não informado";
         const mapped = plazos.map(p => `${p}X`);
@@ -196,7 +201,7 @@ function getRuleSummary(ruleIdOrName: string): string {
     const invalidezMaxAgeYears = b.invalidezMaxAgeYears || 0;
     const minBenefitTimeYears = b.minBenefitTimeYears || 0;
     const minBenefitTimeMonths = b.minBenefitTimeMonths || 0;
-    
+
     let invalidezStr = 'Não';
     if (acceptsInvalidez) {
         if (invalidezAgeYears > 0 || minBenefitTimeYears > 0 || minBenefitTimeMonths > 0) {
@@ -237,7 +242,7 @@ function getRuleSummary(ruleIdOrName: string): string {
     t += `💼 **Convênio:** ${convenioStr}\n`;
     t += `👵 **Idade:** De ${minAge} a ${maxAge} anos\n`;
     t += `📅 **Prazos:** ${prazosStr}\n`;
-    
+
     if (isINSS) {
         t += `♿ **Aceita Invalidez:** ${invalidezStr}\n`;
         if (blockedBenefits.length > 0) {
@@ -264,9 +269,9 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
         b = cachedBankRules.find(r => (r.name || '').toLowerCase().includes(ruleIdOrName.toLowerCase()));
     }
     if (!b) return `⚠️ Banco **"${ruleIdOrName}"** não encontrado.`;
-    
+
     const lastOffers = sessionData.allOffers || sessionData.lastOffers || [];
-    
+
     // Encontrar as ofertas específicas calculadas e válidas para este banco
     const simulatedOffers = lastOffers.filter((o: any) =>
         checkBankMatch(b.name, o.name)
@@ -277,10 +282,10 @@ function getBankTablesSummary(ruleIdOrName: string, sessionData: any = {}): stri
         const valParcelaBase = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
         const parcelaFinal = valParcelaBase;
         const parcelaLabel = margemNeg > 0 ? `Nova Parcela` : `Valor da Parcela`;
-        
+
         let t = `📊 **TABELAS E OFERTAS DISPONÍVEIS: ${b.name.toUpperCase()}** 🏛️\n`;
         t += `🤝 **Convênio:** **${b.convenio || 'INSS'}**${b.subConvenio ? ' - ' + b.subConvenio : ''}\n\n`;
-        
+
         // Ordenar por menor troco (x.valorTroco - y.valorTroco)
         const sortedSimulated = simulatedOffers.sort((x: any, y: any) => x.valorTroco - y.valorTroco);
         sortedSimulated.forEach((o: any, idx: number) => {
@@ -473,7 +478,7 @@ function updateParamsFromMessage(params: any, lastQuestion: string, userMsg: str
             const match = stateNormalized.match(/\b([a-z]{2})\b/);
             if (match) detectedState = match[1].toUpperCase();
         }
-        
+
         if (detectedState) {
             if (!params.estado) params.estado = detectedState;
             if (!params.subConvenio) params.subConvenio = detectedState;
@@ -524,7 +529,7 @@ function formatResult(top: any, banks: string[], grouped: any[], p: SimulationPa
 
     m += `📋 **DETALHES DA OPERAÇÃO:**\n`;
     if (top.tabela) m += `• 🏷️ **Tabela:** **${top.tabela}**\n`;
-    
+
     const margemNegativa = (p as any).negativeCardValue || 0;
     if (margemNegativa > 0) {
         const novaParcela = Math.max(0, (p.valorParcela || 0) - margemNegativa);
@@ -630,7 +635,7 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
             if (o.prazoRefinPort) prazos.add(o.prazoRefinPort);
         });
         const availablePrazos = Array.from(prazos).sort((a, b) => b - a);
-        
+
         let offersWithPrazo = targetOffers;
         let selectedPrazo: number | null = null;
         if (availablePrazos.length > 0) {
@@ -702,7 +707,484 @@ async function doCalculation(params: SimulationParams, userProfile: any, targetB
     }
 }
 
-async function internalProcessWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserIdOrProfile: any = null) {
+
+function getTopOfferForAutomaticCpf(offers: any[], priorities: Record<string, number>) {
+    if (!offers || offers.length === 0) return { top: null, sortedOffers: [] as any[] };
+
+    const prazos = new Set<number>();
+    offers.forEach((o: any) => {
+        if (o.prazoRefinPort) prazos.add(o.prazoRefinPort);
+    });
+    const largestPrazo = Array.from(prazos).sort((a, b) => b - a)[0];
+    const samePrazo = largestPrazo
+        ? offers.filter((o: any) => o.prazoRefinPort === largestPrazo)
+        : offers;
+
+    const sortedOffers = [...samePrazo].sort((a: any, b: any) => {
+        const bankIdA = a.id?.split('-')[0];
+        const bankIdB = b.id?.split('-')[0];
+        const pA = priorities[bankIdA] ?? a.priority ?? 999;
+        const pB = priorities[bankIdB] ?? b.priority ?? 999;
+        const finalPA = pA === 0 ? 999 : pA;
+        const finalPB = pB === 0 ? 999 : pB;
+        if (finalPA !== finalPB) return finalPA - finalPB;
+        return a.valorTroco - b.valorTroco;
+    });
+
+    return { top: sortedOffers[0] || null, sortedOffers };
+}
+
+function parseAutomaticNumber(value: any): number {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    if (value === null || value === undefined) return 0;
+    const raw = String(value).trim();
+    if (!raw) return 0;
+    const normalized = raw.includes(',')
+        ? raw.replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '')
+        : raw.replace(/[^0-9.-]/g, '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function truncateAutomatic(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.floor(value * 100) / 100;
+}
+
+function normalizeBenefitKey(value: any): string {
+    const raw = String(value ?? '').trim();
+    const digits = raw.replace(/\D/g, '');
+    return digits || raw.toUpperCase();
+}
+
+function formatBenefitNumber(value: any): string {
+    const raw = String(value ?? '').trim();
+    let digits = raw.replace(/\D/g, '');
+    if (digits.length === 9) digits = digits.padStart(10, '0');
+    if (digits.length === 10) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d)/, '$1.$2.$3-$4');
+    return raw || 'NÃO INFORMADO';
+}
+
+function maskCpfForWhatsApp(value: any): string {
+    const digits = String(value ?? '').replace(/\D/g, '');
+    if (digits.length !== 11) return String(value || 'NÃO INFORMADO');
+    return `${digits.slice(0, 3)}.XXX.XXX-${digits.slice(-2)}`;
+}
+
+function normalizeAutomaticDate(value: any): string {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+}
+
+function calculateAutomaticAge(value: any): number {
+    const iso = normalizeAutomaticDate(value);
+    if (!iso) return 0;
+    const birth = new Date(`${iso}T12:00:00`);
+    if (Number.isNaN(birth.getTime())) return 0;
+    const now = new Date();
+    let age = now.getFullYear() - birth.getFullYear();
+    const monthDiff = now.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) age--;
+    return Math.max(0, age);
+}
+
+function inferAutomaticIlliterate(rawBenefit: any): boolean {
+    const beneficiary = rawBenefit?.Beneficiario || {};
+    const direct = beneficiary?.Analfabeto ?? beneficiary?.analfabeto ?? rawBenefit?.Analfabeto ?? rawBenefit?.analfabeto;
+    if (typeof direct === 'boolean') return direct;
+    if (direct !== undefined && direct !== null && String(direct).trim() !== '') {
+        const normalized = String(direct).trim().toLowerCase();
+        if (['sim', 's', '1', 'true'].includes(normalized)) return true;
+        if (['nao', 'não', 'n', '0', 'false'].includes(normalized)) return false;
+    }
+    const literate = beneficiary?.Alfabetizado ?? beneficiary?.alfabetizado ?? rawBenefit?.Alfabetizado ?? rawBenefit?.alfabetizado;
+    if (typeof literate === 'boolean') return !literate;
+    if (literate !== undefined && literate !== null && String(literate).trim() !== '') {
+        const normalized = String(literate).trim().toLowerCase();
+        if (['nao', 'não', 'n', '0', 'false'].includes(normalized)) return true;
+        if (['sim', 's', '1', 'true'].includes(normalized)) return false;
+    }
+    // A API atual do Multicorban normalmente não retorna alfabetização; mantém o comportamento histórico.
+    return false;
+}
+
+function getDailyMarginCoefficient(settings: any): number {
+    const candidates = [
+        settings?.dailyMarginCoefficient,
+        settings?.marginCoefficient,
+        settings?.coeficienteMargem,
+        process.env.INSS_MARGIN_DAILY_COEFFICIENT,
+        0.02270,
+    ];
+    for (const candidate of candidates) {
+        const parsed = parseAutomaticNumber(candidate);
+        if (parsed > 0) return parsed;
+    }
+    return 0.02270;
+}
+
+function getBenefitMarginSummary(rawBenefit: any, dailyCoefficient: number) {
+    const beneficiary = rawBenefit?.Beneficiario || {};
+    const summary = rawBenefit?.ResumoFinanceiro || {};
+    const loans = Array.isArray(rawBenefit?.Emprestimos)
+        ? rawBenefit.Emprestimos
+        : (rawBenefit?.Emprestimos ? [rawBenefit.Emprestimos] : []);
+    const rmc = Array.isArray(rawBenefit?.Rmc) ? rawBenefit.Rmc : (rawBenefit?.Rmc ? [rawBenefit.Rmc] : []);
+    const rcc = Array.isArray(rawBenefit?.RCC) ? rawBenefit.RCC : (rawBenefit?.RCC ? [rawBenefit.RCC] : []);
+
+    const benefitValue = parseAutomaticNumber(
+        summary?.ValorBeneficio ?? summary?.BaseCalculo ?? summary?.Bruto ?? summary?.ValorLiquido,
+    );
+    let committed = 0;
+    for (const loan of loans) committed += parseAutomaticNumber(loan?.ValorParcela ?? loan?.Parcela);
+    for (const card of [...rmc, ...rcc]) committed += parseAutomaticNumber(card?.ValorParcela ?? card?.Desconto);
+
+    const rawSpecies = String(beneficiary?.Especie || '').trim();
+    const speciesMatch = rawSpecies.match(/\d{1,2}/);
+    const speciesCode = speciesMatch ? speciesMatch[0].padStart(2, '0') : rawSpecies;
+    const isLoas = speciesCode === '87' || speciesCode === '88';
+    const marginPercentage = isLoas ? 0.35 : 0.40;
+    const consignable = truncateAutomatic(benefitValue * marginPercentage);
+    const calculatedMargin = truncateAutomatic(consignable - committed);
+    const rawApiMargin = summary?.MargemDisponivelEmprestimo;
+    const hasApiMargin = rawApiMargin !== undefined && rawApiMargin !== null && String(rawApiMargin).trim() !== '';
+    // Prioriza a margem explicitamente retornada pelo Multicorban. Se não vier, usa a mesma regra de cálculo da Consulta CPF.
+    const availableMargin = hasApiMargin ? truncateAutomatic(parseAutomaticNumber(rawApiMargin)) : calculatedMargin;
+    const releasedAmount = availableMargin > 0 && dailyCoefficient > 0
+        ? truncateAutomatic(availableMargin / dailyCoefficient)
+        : 0;
+
+    return { benefitValue, availableMargin, releasedAmount, speciesCode };
+}
+
+function getAutomaticSpeciesLabel(rawSpecies: any): string {
+    const raw = String(rawSpecies || '').trim();
+    if (!raw) return 'NÃO INFORMADA';
+    const match = raw.match(/\d{1,2}/);
+    if (!match) return raw.toUpperCase();
+    return getEspecieName(match[0].padStart(2, '0')).toUpperCase();
+}
+
+function cleanAutomaticBankName(value: any): string {
+    let name = String(value || '').trim();
+    name = name.replace(/^\d{1,4}\s*-\s*/, '');
+    name = name.replace(/\s+S\.?A\.?$/i, '');
+    return name.toUpperCase() || 'BANCO NÃO INFORMADO';
+}
+
+function getC6ReleasedAmount(summary: any): number {
+    if (!summary) return 0;
+    const released = parseAutomaticNumber(summary?.valorLiberado);
+    if (released > 0) return released;
+    return Math.max(0, parseAutomaticNumber(summary?.troco));
+}
+
+async function getAutomaticGuttoC6Refin(
+    item: any,
+    credentials?: C6RefinCredentials | null,
+): Promise<{ available: boolean; summary?: any; errorCode?: string }> {
+    if (!isC6Consignado(item?.bancoCodigo || '', item?.bancoNome || '')) return { available: false };
+
+    if (!credentials?.username || !credentials?.password) {
+        console.warn('[Gutto C6] Credencial C6 não foi enviada pelo n8n nesta requisição. Portabilidade seguirá normalmente.');
+        return { available: false, errorCode: 'C6_CREDENTIAL_MISSING' };
+    }
+
+    try {
+        const raw = await consultarRefinC6({
+            cpf: item.cpf,
+            beneficio: item.beneficio,
+            contrato: item.contrato,
+            bancoCodigo: item.bancoCodigo,
+            bancoNome: item.bancoNome,
+            dataNascimento: item.dataNascimento,
+            rendaMensal: item.rendaMensal,
+            valorParcela: item.params?.valorParcela,
+            // O serviço C6 força 108x para todo refin INSS.
+            prazo: 108,
+            credentials,
+        });
+        const firstTable = getFirstAvailableC6Table(raw);
+        const summary = summarizeC6RefinTable(firstTable);
+        const releasedAmount = getC6ReleasedAmount(summary);
+        return { available: !!summary && releasedAmount > 0, summary };
+    } catch (error: any) {
+        console.error(`[Gutto C6] Falha no contrato ${item?.contrato || ''}:`, error?.message || error);
+        // Regra de atendimento: falha/inelegibilidade de refin não polui a resposta; segue portabilidade.
+        return { available: false, errorCode: error?.code || 'C6_REFIN_ERROR' };
+    }
+}
+
+function buildAutomaticContractBlock(
+    item: any,
+    contractIndex: number,
+    offers: any[],
+    top: any,
+    c6Refin: { available: boolean; summary?: any },
+): { text: string; displayedOffer: any | null } {
+    const params: any = item.params || {};
+    const bankNames = Array.from(new Set((offers || []).map((offer: any) => cleanAutomaticBankName(offer?.name))));
+
+    let simulationName = '';
+    let simulationTable = '';
+    let releasedAmount = 0;
+    let displayedOffer: any | null = null;
+
+    if (c6Refin.available && c6Refin.summary) {
+        const summary = c6Refin.summary;
+        releasedAmount = getC6ReleasedAmount(summary);
+        simulationName = 'C6 CONSIGNADO - REFIN 108X';
+        simulationTable = String(summary?.tabela || 'PRIMEIRA CONDIÇÃO DISPONÍVEL').toUpperCase();
+        displayedOffer = {
+            name: 'C6 CONSIGNADO',
+            tabela: simulationTable,
+            valorTroco: releasedAmount,
+            valorContrato: parseAutomaticNumber(summary?.valorContrato),
+            taxaBase: parseAutomaticNumber(summary?.taxa),
+            prazoRefinPort: 108,
+            source: 'c6-refin',
+        };
+    } else if (top) {
+        releasedAmount = Math.max(0, parseAutomaticNumber(top?.valorTroco));
+        simulationName = cleanAutomaticBankName(top?.name);
+        simulationTable = String(top?.tabela || 'TABELA DISPONÍVEL').toUpperCase();
+        displayedOffer = top;
+    }
+
+    const chosenBankName = displayedOffer ? cleanAutomaticBankName(displayedOffer?.name) : '';
+    const others = bankNames.filter((name: string) => name && (!chosenBankName || !checkBankMatch(name, chosenBankName)));
+
+    let block = `📑 CONTRATO ${contractIndex}: *${item?.contrato || 'NÃO INFORMADO'}*\n`;
+    block += `🏦 BANCO: ${cleanAutomaticBankName(item?.bancoNome || params?.bancoAtual)}\n`;
+    block += `🔢 PARCELAS RESTANTES: ${params?.parcelasRestantes || 0}\n`;
+    block += `💵 VALOR DE PARCELA: R$ ${fmt(parseAutomaticNumber(params?.valorParcela))}\n`;
+    block += `💳 SALDO DEVEDOR: R$ ${fmt(parseAutomaticNumber(params?.saldoDevedor))}\n`;
+
+    if (displayedOffer) {
+        block += `\n🏆 SIMULAÇÃO: *${simulationName}*\n`;
+        block += `🏷️ TABELA: ${simulationTable}\n`;
+        block += `💰 VALOR LIBERADO: *R$ ${fmt(releasedAmount)}*`;
+        // Refinanciamento C6 é uma operação interna do próprio banco.
+        // Neste caso não exibimos bancos alternativos; a lista de outros bancos
+        // é exclusiva das simulações de portabilidade.
+        if (!c6Refin.available && others.length > 0) {
+            block += `\n✅ OUTROS BANCOS DISPONÍVEIS: ${others.join('/ ')}`;
+        }
+    } else {
+        block += `\n❌ *SEM SIMULAÇÃO DISPONÍVEL PARA ESTE CONTRATO*`;
+    }
+
+    return { text: block, displayedOffer };
+}
+
+async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any = {}, runtimeContext: WhatsAppRuntimeContext = {}): Promise<string> {
+    try {
+        const multicorbanData = await consultarCpfMulticorban(cpf, 'inss');
+        const benefits = getBenefitArray(multicorbanData);
+        if (benefits.length === 0) {
+            return `🔎 *Consulta INSS concluída*\n\nNão encontrei benefício INSS para o CPF *${maskCpfForWhatsApp(cpf)}*.`;
+        }
+
+        // Processa os contratos de todos os benefícios. O agrupamento na resposta é feito pelo NB.
+        const contracts = buildInssSimulationContracts(multicorbanData, cpf, 50);
+
+        const db = getAdminDb();
+        if (!db) return '⚠️ Erro de conexão com o banco de dados.';
+
+        const promotoraId = userProfile?.role === 'admin'
+            ? 'admin'
+            : (userProfile?.role === 'promotora' ? userProfile?.uid : userProfile?.createdBy || 'admin');
+
+        const [bSnap, rSnap, sSnap] = await Promise.all([
+            db.collection('bankRules').get(),
+            db.collection('generalRules').get(),
+            db.collection('settings').doc(promotoraId).get(),
+        ]);
+        const banks = dedupBanks(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const rules = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const sd = sSnap.exists ? sSnap.data() : {};
+        const pp = sd?.bankPriorities || {};
+        const pi = sd?.bankInstallments || {};
+        const dailyMarginCoefficient = getDailyMarginCoefficient(sd);
+
+        const firstRawBenefit = benefits[0] || {};
+        const firstBeneficiary = firstRawBenefit?.Beneficiario || {};
+        const clientName = String(firstBeneficiary?.Nome || contracts[0]?.nomeCliente || 'NÃO INFORMADO').trim().toUpperCase();
+        const clientAge = parseAutomaticNumber(firstBeneficiary?.Idade) || calculateAutomaticAge(firstBeneficiary?.DataNascimento || contracts[0]?.dataNascimento);
+        const isIlliterate = inferAutomaticIlliterate(firstRawBenefit);
+
+        let response = `✅ *CONSULTA INSS + SIMULAÇÃO AUTOMÁTICA*\n\n`;
+        response += `👤 *DADOS DO CLIENTE*\n`;
+        response += `NOME: *${clientName}*\n`;
+        response += `🪪 CPF: ${maskCpfForWhatsApp(cpf)}\n`;
+        response += `🎂 IDADE: ${clientAge > 0 ? `${Math.trunc(clientAge)} ANOS` : 'NÃO INFORMADA'}\n`;
+        response += `✍️ ANALFABETO: ${isIlliterate ? 'SIM' : 'NÃO'}\n`;
+        response += `======================`;
+
+        let firstSuccessful: any = null;
+        let totalWithOffer = 0;
+
+        // Totais consolidados exibidos ao final da consulta.
+        // Margem livre soma apenas valores efetivamente positivos/liberáveis.
+        let totalMarginReleased = 0;
+        let portabilityCount = 0;
+        let totalPortabilityReleased = 0;
+        let c6RefinCount = 0;
+        let totalC6RefinReleased = 0;
+
+        for (let benefitIndex = 0; benefitIndex < benefits.length; benefitIndex++) {
+            const rawBenefit = benefits[benefitIndex];
+            const beneficiary = rawBenefit?.Beneficiario || {};
+            const benefitNumber = String(beneficiary?.Beneficio || '').trim();
+            const benefitKey = normalizeBenefitKey(benefitNumber);
+            const benefitContracts = contracts.filter(item => normalizeBenefitKey(item?.beneficio) === benefitKey);
+            const margin = getBenefitMarginSummary(rawBenefit, dailyMarginCoefficient);
+            if (margin.releasedAmount > 0) {
+                totalMarginReleased += margin.releasedAmount;
+            }
+
+            response += `\n\n📄 BENEFÍCIO: *${formatBenefitNumber(benefitNumber)}*\n`;
+            response += `📌 ESPÉCIE: ${getAutomaticSpeciesLabel(beneficiary?.Especie)}\n`;
+            response += `💵 VALOR R$: ${fmt(margin.benefitValue)}\n`;
+            response += `📊 MARGEM DISPONÍVEL: R$ ${fmt(margin.availableMargin)} (LIBERA *R$ ${fmt(margin.releasedAmount)}*)`;
+
+            if (benefitContracts.length === 0) {
+                response += `\n\n❌ *SEM CONTRATOS DISPONÍVEIS PARA SIMULAÇÃO*`;
+            } else {
+                for (let contractIndex = 0; contractIndex < benefitContracts.length; contractIndex++) {
+                    const item = benefitContracts[contractIndex];
+                    const params: any = { ...item.params };
+                    params.isAnalfabeto = inferAutomaticIlliterate(rawBenefit);
+
+                    if (!params.taxaJurosMensal && params.saldoDevedor > 0 && params.valorParcela > 0 && params.parcelasRestantes > 0) {
+                        params.taxaJurosMensal = calculateRate(params.saldoDevedor, params.valorParcela, params.parcelasRestantes);
+                    }
+
+                    // C6: tenta o refin 108x primeiro. Sem refin válido, segue portabilidade normalmente.
+                    const c6Refin = await getAutomaticGuttoC6Refin(item, runtimeContext.c6Credentials);
+                    const offers = calculateOffers(
+                        params,
+                        banks,
+                        rules,
+                        pp,
+                        pi,
+                        userProfile,
+                        sd?.nonPortableBanks || [],
+                        sd?.blockedBanks || [],
+                    );
+                    const { top, sortedOffers } = getTopOfferForAutomaticCpf(offers, pp);
+                    const rendered = buildAutomaticContractBlock(item, contractIndex + 1, offers, top, c6Refin);
+                    response += `\n\n${rendered.text}`;
+
+                    if (rendered.displayedOffer) {
+                        const released = Math.max(0, parseAutomaticNumber(rendered.displayedOffer?.valorTroco));
+                        if (released > 0) {
+                            totalWithOffer++;
+                            if (c6Refin.available) {
+                                c6RefinCount++;
+                                totalC6RefinReleased += released;
+                            } else {
+                                // Cada contrato com oferta principal válida conta como uma proposta de Portabilidade.
+                                portabilityCount++;
+                                totalPortabilityReleased += released;
+                            }
+                        }
+                    }
+                    if (!firstSuccessful && top) {
+                        firstSuccessful = { item, params, top, offers, sortedOffers };
+                    }
+
+                    if (rendered.displayedOffer) {
+                        try {
+                            const displayed = rendered.displayedOffer;
+                            await db.collection('simulations').doc(generateUUID()).set({
+                                userId: userProfile.uid || userProfile.id || 'bot',
+                                userName: userProfile.name || 'WhatsApp',
+                                userAvatar: userProfile.logoUrl || userProfile.avatarUrl || userProfile.photoUrl || userProfile.photoURL || '',
+                                nomeCliente: item.nomeCliente,
+                                cpfCliente: item.cpf,
+                                numeroBeneficio: item.beneficio,
+                                numeroContrato: item.contrato,
+                                convenio: 'INSS',
+                                bancoAtual: params.bancoAtual,
+                                valorParcela: params.valorParcela,
+                                saldoDevedor: params.saldoDevedor,
+                                selectedOffer: displayed,
+                                topOffer: displayed?.name || '',
+                                topOfferContrato: displayed?.valorContrato || 0,
+                                topOfferTroco: displayed?.valorTroco || 0,
+                                topOfferTaxa: displayed?.novaTaxaPortabilidade || displayed?.taxaBase || 0,
+                                topOfferTabela: displayed?.tabela || '',
+                                simData: params,
+                                source: c6Refin.available ? 'multicorban-cpf-c6-refin' : 'multicorban-cpf',
+                                c6Refin: c6Refin.summary || null,
+                                c6RefinPrazo: c6Refin.available ? 108 : null,
+                                dailyMarginCoefficient,
+                                createdAt: new Date(),
+                                timestamp: Date.now(),
+                                origin: 'whatsapp',
+                            });
+                        } catch (saveError) {
+                            console.error('[Gutto CPF] Erro ao salvar simulação:', saveError);
+                        }
+                    }
+                }
+            }
+
+            if (benefitIndex < benefits.length - 1) {
+                response += `\n\n--------------------------------------------`;
+            }
+        }
+
+        if (firstSuccessful) {
+            sessionData.lastExtractedParams = JSON.parse(JSON.stringify(firstSuccessful.params));
+            sessionData.extractedParams = {};
+            sessionData.lastOffers = JSON.parse(JSON.stringify(firstSuccessful.sortedOffers));
+            sessionData.allOffers = JSON.parse(JSON.stringify(firstSuccessful.offers));
+            sessionData.lastOfertadoBank = firstSuccessful.top.name;
+        }
+        sessionData.lastCpfConsulted = cpf;
+        sessionData.lastDailyMarginCoefficient = dailyMarginCoefficient;
+        sessionData.status = 'active';
+
+        if (totalWithOffer === 0) {
+            response += `\n\nℹ️ Não foi encontrada oferta elegível para os contratos retornados neste CPF.`;
+        }
+
+        const totalReleased = totalMarginReleased + totalPortabilityReleased + totalC6RefinReleased;
+        response += `\n\n======================`;
+        response += `\n\n📊 *RESUMO DAS LIBERAÇÕES*\n`;
+
+        if (totalMarginReleased > 0) {
+            response += `\n💵 MARGEM LIVRE: R$ ${fmt(totalMarginReleased)}`;
+        }
+        if (portabilityCount > 0) {
+            const label = portabilityCount === 1 ? 'PORTABILIDADE' : 'PORTABILIDADES';
+            response += `\n🔄 ${portabilityCount} ${label}: R$ ${fmt(totalPortabilityReleased)}`;
+        }
+        if (c6RefinCount > 0) {
+            const label = c6RefinCount === 1 ? 'REFIN C6' : 'REFINS C6';
+            response += `\n🏦 ${c6RefinCount} ${label}: R$ ${fmt(totalC6RefinReleased)}`;
+        }
+
+        // Mesmo quando nenhuma categoria libera valor, o total permanece explícito.
+        response += `\n\n💰 *TOTAL LIBERADO: R$ ${fmt(totalReleased)}*`;
+
+        return response;
+    } catch (error: any) {
+        console.error('[Gutto CPF] Falha na consulta/simulação automática:', error);
+        const msg = error?.message || 'Falha ao consultar o CPF';
+        return `⚠️ Não consegui concluir a consulta automática do INSS para esse CPF. Motivo: ${msg}.`;
+    }
+}
+
+async function internalProcessWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserIdOrProfile: any = null, runtimeContext: WhatsAppRuntimeContext = {}) {
     const ai = getAI();
     await loadRules();
 
@@ -735,6 +1217,14 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         }
     }
 
+    // Fluxo rápido INSS: CPF -> Multicorban -> regras -> simulação -> resposta para o n8n/WhatsApp.
+    // Este interceptador roda antes da IA para não pedir novamente dados que já existem na consulta.
+    const cpfFromMessage = extractCpfFromText(message);
+    if (cpfFromMessage) {
+        console.log(`[Gutto CPF] CPF válido detectado: ${cpfFromMessage.slice(0, 3)}***${cpfFromMessage.slice(-2)}`);
+        return await simulateInssByCpf(cpfFromMessage, userProfile, sessionData, runtimeContext);
+    }
+
     // Contexto da última mensagem do bot
     const lastBotMsgContent = history.length > 0 ? history[history.length - 1].content || '' : '';
     const wasLastMsgSimOrTable = lastBotMsgContent.includes('Simulação concluída') ||
@@ -744,7 +1234,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     // Interceptar comando "tabelas" com ou sem prazo (ex: "tabelas 96") ou apenas número isolado (ex: "96")
     const tabelasMatch = lower.match(/^tabelas?(?:\s+(?:dispon[ií]veis|outras))?(?:\s+(?:do\s+refin|da\s+portabilidade))?(?:\s+(\d{2,3})x?)?$/i);
     const justNumberMatch = lower.match(/^(\d{2,3})x?$/i);
-    
+
     if (lower === 'tabelas' || lower === 'tabela' || lower === 'tabelas disponíveis' || lower === 'outras tabelas' || tabelasMatch || (wasLastMsgSimOrTable && justNumberMatch)) {
         let requestedPrazo = null;
         if (tabelasMatch && tabelasMatch[1]) requestedPrazo = parseInt(tabelasMatch[1]);
@@ -752,7 +1242,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
         let lastOffers = sessionData.allOffers || sessionData.lastOffers || [];
         let lastBank = sessionData.lastOfertadoBank || '';
-        
+
         if (lastOffers.length === 0 || !lastBank) {
             // Tentar recuperar do Firestore (coletando a última simulação ativa na web ou whatsapp)
             if (db && userProfile?.uid) {
@@ -764,7 +1254,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                         .get();
                     if (!simSnap.empty) {
                         const simDoc = simSnap.docs[0].data();
-                        
+
                         // Obter as regras e prioridades do Firestore para recalcular com precisão in-memory
                         const promotoraId = userProfile?.role === 'admin' ? 'admin' : (userProfile?.role === 'promotora' ? userProfile?.uid : userProfile?.createdBy || 'admin');
                         const [bSnap, rSnap, sSnap] = await Promise.all([
@@ -774,7 +1264,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
                         const banks = dedupBanks(rawBanks);
                         const rules = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                         const sd = sSnap.exists ? sSnap.data() : {};
-                        
+
                         const cleanParams = (simDoc && simDoc.simData) ? simDoc.simData : {
                             idade: simDoc?.idade,
                             convenio: simDoc?.convenio,
@@ -789,25 +1279,25 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
                         if (cleanParams && cleanParams.convenio) {
                             sessionData.lastExtractedParams = cleanParams;
-                            
+
                             if (!cleanParams.taxaJurosMensal && cleanParams.saldoDevedor > 0 && cleanParams.valorParcela > 0 && cleanParams.parcelasRestantes > 0) {
                                 cleanParams.taxaJurosMensal = calculateRate(cleanParams.saldoDevedor, cleanParams.valorParcela, cleanParams.parcelasRestantes);
                             }
 
                             const recalcOffers = calculateOffers(
-                                cleanParams as SimulationParams, 
-                                banks, 
-                                rules, 
-                                sd?.bankPriorities || {}, 
-                                sd?.bankInstallments || {}, 
-                                userProfile, 
+                                cleanParams as SimulationParams,
+                                banks,
+                                rules,
+                                sd?.bankPriorities || {},
+                                sd?.bankInstallments || {},
+                                userProfile,
                                 sd?.nonPortableBanks || [],
                                 sd?.blockedBanks || []
                             );
                             if (recalcOffers.length > 0) {
                                 sessionData.allOffers = JSON.parse(JSON.stringify(recalcOffers));
                                 lastOffers = recalcOffers;
-                                
+
                                 if (simDoc.topOffer) {
                                     sessionData.lastOfertadoBank = simDoc.topOffer;
                                     lastBank = simDoc.topOffer;
@@ -838,24 +1328,24 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         if (lastOffers.length === 0 || !lastBank) {
             return `⚠️ *Ops!* Você ainda não possui uma simulação ativa nesta sessão.\n\nPor favor, inicie informando o seu **convênio** para que eu possa simular as melhores ofertas para você! 👇\n\n👉 **INSS**\n👉 **SIAPE**\n👉 **GOVERNO**\n👉 **FORÇAS ARMADAS**\n👉 **CLT PRIVADO**`;
         }
-        
+
         // Filter offers for the exact last bank that was simulated/offered
         const bankOffers = lastOffers.filter((o: any) => o.name === lastBank);
-        
+
         if (bankOffers.length === 0) {
             return `⚠️ *Atenção:* Não foram encontradas outras tabelas disponíveis para o banco **${lastBank.toUpperCase()}** na simulação recente.`;
         }
-        
+
         const prazosDisponiveis = new Set<number>();
         bankOffers.forEach((o: any) => { if (o.prazoRefinPort) prazosDisponiveis.add(o.prazoRefinPort); });
         const availablePrazos = Array.from(prazosDisponiveis).sort((a, b) => b - a);
-        
+
         let prazoAtual = requestedPrazo;
         if (!prazoAtual && availablePrazos.length > 0) {
             // Se o usuário não pediu um prazo específico, exibe o maior (que foi o ofertado)
             prazoAtual = availablePrazos[0];
         }
-        
+
         let filteredOffers = bankOffers;
         if (prazoAtual) {
             filteredOffers = bankOffers.filter((o: any) => o.prazoRefinPort === prazoAtual);
@@ -866,12 +1356,12 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
         // Sort by troco ascending (menor troco primeiro)
         const sortedOffers = filteredOffers.sort((a: any, b: any) => a.valorTroco - b.valorTroco);
-        
+
         const margemNeg = sessionData.lastExtractedParams?.negativeCardValue || sessionData.extractedParams?.negativeCardValue || 0;
         const valParcelaBase = sessionData.lastExtractedParams?.valorParcela || sessionData.extractedParams?.valorParcela || 0;
         const parcelaFinal = valParcelaBase;
         const parcelaLabel = margemNeg > 0 ? `Nova Parcela` : `Valor da Parcela`;
-        
+
         let m = `📊 *TABELAS E OFERTAS DISPONÍVEIS: ${lastBank.toUpperCase()}* 🏛️\n\n`;
         sortedOffers.forEach((o: any, idx: number) => {
             m += `${idx === 0 ? '⭐ ' : '👉 '}*Tabela:* **${o.tabela}**\n`;
@@ -882,7 +1372,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             m += `• 📈 *Taxa do Refin:* **${o.taxaBase.toFixed(2)}% a.m.**\n`;
             m += `• 💰 *Troco Liberado:* **R$ ${fmt(o.valorTroco)}** 🤑\n\n`;
         });
-        
+
         const otherPrazos = availablePrazos.filter(p => p !== prazoAtual);
         if (otherPrazos.length > 0) {
             m += `💡 _Temos tabelas disponíveis também em outros prazos: ${otherPrazos.map(p => `*${p}X*`).join(', ')}. Para visualizá-las, digite por exemplo:_ *tabelas ${otherPrazos[0]}*`;
@@ -902,7 +1392,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     const isThanks = thanksKeywords.some(kw => lower.includes(kw));
 
     if (isThanks && wasLastMsgSimulation) {
-        sessionData.extractedParams = {}; 
+        sessionData.extractedParams = {};
         sessionData.lastExtractedParams = null;
         return `Por nada! 😊 Fico extremamente feliz em ajudar na sua busca pelas melhores taxas.\n\nEstou à sua total disposição sempre que precisar de uma nova simulação ou tirar dúvidas sobre portabilidade. Tenha um excelente dia e ótimos negócios! 🚀💼\n[END_SESSION]`;
     }
@@ -1058,12 +1548,12 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     // Resetar parâmetros se palavras‑chave de reinício forem encontradas
     // ou se o usuário indicar um novo convênio após terminar a simulação.
     const cleanMsg = lower.replace(/[^\w\s]/g, '').trim();
-    
+
     // Apenas reiniciar se for explicitamente solicitado, ou se for uma saudação isolada no meio da conversa
     const explicitRestart = ['reiniciar', 'resetar', 'cancelar simulação', 'cancelar simulacao', 'recomeçar', 'recomecar'];
     const exactGreetings = ['ola', 'oi', 'hello', 'bom dia', 'boa tarde', 'boa noite'];
     const convenioKeywords = ['inss', 'siape', 'governo', 'forças armadas', 'forcas armadas', 'clt'];
-    
+
     const isRestart = explicitRestart.some(kw => lower.includes(kw)) ||
         exactGreetings.includes(cleanMsg) ||
         (sessionData.status === 'finished' && convenioKeywords.some(kw => lower.includes(kw)));
@@ -1072,7 +1562,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
     if (isRestart) {
         extracted = {};
-        
+
         // Gerar novo protocolo imediatamente
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
@@ -1083,7 +1573,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         sessionData.extractedParams = {};
         sessionData.lastExtractedParams = null;
         sessionData.allOffers = [];
-        
+
         console.log(`[Gutto] Resetting session parameters and generating new protocol: ${sessionData.protocolNumber}`);
         const userName = sessionData.pushName || userProfile.name || '';
         const greetingName = userName ? `Olá ${userName}, ` : 'Olá, ';
@@ -1094,7 +1584,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             const endWords = ['obrigado', 'obrigada', 'valeu', 'obg', 'tchau', 'agradeço', 'perfeito', 'ok', 'certo', 'joia', 'entendi', 'ótimo', 'otimo', 'bom', 'show', 'top', 'legal'];
             const words = cleanMsg.split(/\s+/);
             const isEnd = words.every(w => endWords.includes(w) || w.length <= 3) && words.some(w => endWords.includes(w) && w.length >= 2);
-            
+
             if (isEnd) {
                 sessionData.status = 'finished';
                 const protocol = sessionData.protocolNumber || 'N/A';
@@ -1115,12 +1605,12 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             const offersToUse = (sessionData.allOffers && sessionData.allOffers.length > 0) ? sessionData.allOffers : (sessionData.lastOffers || []);
             const banksInOffers = Array.from(new Set(offersToUse.map((o: any) => o.name))) as string[];
             const matchedBankInOffers = banksInOffers.find(bName => checkBankMatch(bName, cleanMsg));
-            
+
             if (matchedBankInOffers) {
                 console.log(`[Gutto] User selected bank ${matchedBankInOffers} from active calculation offers.`);
                 return await doCalculation(paramsToUse as SimulationParams, userProfile, matchedBankInOffers, sessionData);
             }
-            
+
             // Fallback to rules if not in specific offers list
             const matchedCachedBank = cachedBankRules.find(b => checkBankMatch(b.name, cleanMsg));
             if (matchedCachedBank) {
@@ -1192,7 +1682,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
         const nonAccepted = b.nonAcceptedBanks ?? b.non_accepted_banks ?? [];
         const specificRules = b.specificInstallmentRules !== undefined ? b.specificInstallmentRules : (b.specific_installment_rules !== undefined ? b.specific_installment_rules : []);
         const specificRulesStr = specificRules.length > 0 ? specificRules.map((r: any) => `${r.bank} (${r.installments} parcelas)`).join(', ') : 'Nenhum';
-        
+
         const tablesArray = b.tabelas || b.tables || [];
         const plazosSet = new Set<number>();
         tablesArray.forEach((t: any) => {
@@ -1268,7 +1758,7 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
   * Bancos com Regras específicas: ${specificRulesStr}`;
 
         bankRulesContext += bankRuleText;
-        
+
         if (tablesArray.length > 0) {
             bankRulesContext += `\n  * Tabelas de Refin da Portabilidade Cadastradas:`;
             tablesArray.forEach((t: any) => {
@@ -1284,12 +1774,14 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     const activeCoefsINSS = await getAllActiveCoefficients('INSS');
     const activeCoefsSIAPE = await getAllActiveCoefficients('SIAPE');
     let coefsContext = '\nCOEFICIENTES DIÁRIOS (TAXA LIVRE):\n';
+
     if (Object.keys(activeCoefsINSS).length > 0) {
         coefsContext += '- INSS:\n';
         for (const [code, val] of Object.entries(activeCoefsINSS)) {
             coefsContext += `  * Banco ${code}: ${val}\n`;
         }
     }
+
     if (Object.keys(activeCoefsSIAPE).length > 0) {
         coefsContext += '- SIAPE:\n';
         for (const [code, val] of Object.entries(activeCoefsSIAPE)) {
@@ -1304,7 +1796,6 @@ Use APENAS as regras abaixo para responder perguntas individuais sobre roteiro, 
 ${bankRulesContext}
 ${coefsContext}
 
-
 SOBRE PROTOCOLO DE ATENDIMENTO E ENCERRAMENTO:
 - O número de protocolo deste atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}.
 - INÍCIO E APRESENTAÇÃO: O sistema já envia automaticamente a apresentação ("👋 Olá! Eu sou o Gutto... O seu protocolo é: GUTTO-XXX.") na primeira mensagem da conversa. Você NUNCA deve repetir essa apresentação inicial ou o número do protocolo na sua mensagem de saudação, apenas prossiga com as perguntas ou respostas de forma contínua.
@@ -1317,7 +1808,7 @@ SOBRE PROTOCOLO DE ATENDIMENTO E ENCERRAMENTO:
 - ENCERRAMENTO: Se o cliente agradecer de forma final (ex: "Obrigado", "Valeu", "Não quero simular", "Tchau"), você DEVE se despedir de forma educada, agradecer o contato, REPETIR o número do protocolo e, obrigatoriamente, incluir a tag exata [END_SESSION] no final absoluto da sua mensagem. Isso avisará o sistema para encerrar a sessão.
 
 SOBRE SIMULAR EM OUTRO BANCO APÓS A PRIMEIRA SIMULAÇÃO (REGRA DE OURO MÁXIMA):
-- Se o usuário JÁ realizou uma simulação com sucesso e, na sequência, apenas digitar o nome de um banco (ex: "Havecred", "Pan", "Itaú") ou pedir para ver a oferta dele, isso significa que ele quer RECÁLCULO. Você DEVE IMEDIATAMENTE E OBRIGATORIAMENTE chamar a ferramenta \`calculate_client_loan_offers\` informando este nome no campo "targetBankName". 
+- Se o usuário JÁ realizou uma simulação com sucesso e, na sequência, apenas digitar o nome de um banco (ex: "Havecred", "Pan", "Itaú") ou pedir para ver a oferta dele, isso significa que ele quer RECÁLCULO. Você DEVE IMEDIATAMENTE E OBRIGATORIAMENTE chamar a ferramenta \`calculate_client_loan_offers\` informando este nome no campo "targetBankName".
 - É ESTRITAMENTE PROIBIDO fazer qualquer pergunta adicional (nem mesmo o Saldo Devedor) se o usuário apenas pedir para simular em outro banco. Chame a ferramenta imediatamente!
 - NUNCA, SOB HIPÓTESE ALGUMA, responda com o roteiro de regras se o cliente está claramente em um fluxo de simulação ou pedindo "e no banco X". O resumo só serve se o cliente explicitamente pedir: "Quais as regras do banco X?" ou "Me passe o roteiro do banco Y". Se ele só digitar o nome, CHAME A FERRAMENTA!
 
@@ -1390,105 +1881,17 @@ ${stepConcessaoText}
 11. Saldo devedor aproximado do contrato (R$).
 12. Se o cliente souber/desejar informar: Taxa de juros atual do contrato (Relação opcional, ex: "taxa de 1,59%").
 
-CONFIRME de forma extremamente amigável, acolhedora e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista. 
+CONFIRME de forma extremamente amigável, acolhedora e breve o dado que o usuário acabou de fornecer e pergunte em seguida APENAS O PRÓXIMO dado que falta na lista.
 IMPORTANTE: Você DEVE usar EMOJIS (😊, 🚀, ✨, 💬, etc) em TODAS as suas mensagens para deixá-las sempre muito animadas, agradáveis e com um tom amigável e profissional.
 Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas respostas do usuário (incluindo o saldo devedor real), chame a ferramenta apropriada imediatamente para exibir os resultados das ofertas.`;
 
     try {
         const words = cleanMsg.split(/\s+/);
-        
-        // INTERCEPTAÇÃO AUTOMÁTICA DE CPF
-        const cpfRaw = cleanMsg.replace(/\D/g, '');
-        if (cpfRaw.length === 11 && sessionData.status !== 'finished') {
-            console.log(`[Gutto] CPF detectado: ${cpfRaw}. Rodando simulação automática.`);
-            try {
-                const MULTICORBAN_API_TOKEN = '1a2286296a40abf27929209193a85155';
-                let res = await fetch('https://api.bancodatahub.com/cpf', {
-                    method: 'POST', headers: { 'Authorization': MULTICORBAN_API_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ cpf: cpfRaw })
-                });
-                let rawData = await res.json();
-                
-                let isSiape = false;
-                let list = parseConsultaResponse(rawData, false);
-                
-                if (!list || list.length === 0 || rawData.error || rawData.message) {
-                     res = await fetch('https://api.bancodatahub.com/siape', {
-                        method: 'POST', headers: { 'Authorization': MULTICORBAN_API_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ cpf: cpfRaw })
-                    });
-                    rawData = await res.json();
-                    list = parseConsultaResponse(rawData, true);
-                    isSiape = true;
-                }
-                
-                if (!list || list.length === 0) {
-                     return { message: `😕 Consultei o CPF ${formatCPF(cpfRaw)}, mas não encontrei nenhum benefício ativo no momento. Quer tentar outro ou tem alguma dúvida sobre as regras?`, state: sessionData };
-                }
-                
-                const b = list[0];
-                const nome = b.Beneficiario?.Nome || 'Cliente';
-                const idade = b.Beneficiario?.DataNascimento ? Math.floor((new Date().getTime() - new Date(b.Beneficiario.DataNascimento).getTime()) / 31557600000) : 50;
-                const convenio = isSiape ? 'SIAPE' : 'INSS';
-                const beneficio = b.Beneficiario?.Beneficio || 'N/A';
-                const especie = getEspecieName(b.Beneficiario?.Especie) || b.Beneficiario?.Especie || 'N/A';
-                const emprestimos = Array.isArray(b.Emprestimos) ? b.Emprestimos : (b.Emprestimos ? [b.Emprestimos] : []);
-                
-                let msg = `🎉 *Boas notícias, ${nome}!* Consultei o seu CPF e localizei o seu benefício.\n\n`;
-                msg += `📋 *Resumo do Benefício:*\n- *Convênio:* ${convenio}\n- *Idade:* ${idade} anos\n- *Benefício/Matrícula:* ${beneficio}\n- *Espécie:* ${especie}\n\n`;
-                
-                sessionData.extractedParams = { convenio, idade, isAnalfabeto: false };
-                
-                if (emprestimos.length > 0) {
-                     msg += `Encontrei ${emprestimos.length} empréstimos ativos! Já rodei o nosso motor de portabilidade. Veja as melhores ofertas elegíveis:\n\n`;
-                     
-                     let hasOffers = false;
-                     for (let i = 0; i < emprestimos.length; i++) {
-                         const emp = emprestimos[i];
-                         const prazoTotal = parseInt(emp.Prazo || emp.parcelas || 0);
-                         const parcelasRestantes = parseInt(emp.ParcelasRestantes || emp.prazo_restante || 0);
-                         const valorParcela = parseFloat(emp.ValorParcela || emp.parcela || 0);
-                         const saldoDevedor = parseFloat(emp.Quitacao || emp.SaldoDevedor || emp.saldo || emp.ValorEmprestado || 0);
-                         const bancoName = formatBancoComCodigo(emp.Banco, emp.NomeBanco);
-                         
-                         if (prazoTotal <= 0 || valorParcela <= 0 || saldoDevedor <= 0) continue;
-                         
-                         const simParams = {
-                             idade, convenio, bancoAtual: emp.NomeBanco || emp.Banco,
-                             valorParcela, saldoDevedor, prazoTotal, parcelasRestantes,
-                             isAnalfabeto: false, isCliente60Mais: idade >= 60
-                         };
-                         
-                         const coefs = isSiape ? activeCoefsSIAPE : activeCoefsINSS;
-                         const offers = calculateOffers(simParams, cachedBankRules, coefs);
-                         
-                         if (offers.length > 0) {
-                             hasOffers = true;
-                             offers.sort((a, b) => b.troco - a.troco);
-                             const topOffer = offers[0];
-                             msg += `✅ *Contrato ${emp.Contrato || 'N/A'} - ${bancoName}* (Parcela: R$ ${valorParcela.toFixed(2)})\n`;
-                             msg += `   👉 Melhor Oferta: *${topOffer.banco.name}* (Troco: R$ ${topOffer.troco.toFixed(2)})\n\n`;
-                         }
-                     }
-                     
-                     if (!hasOffers) {
-                         msg += `Infelizmente, neste exato momento, nenhum dos seus contratos apresentou troco positivo para portabilidade considerando as regras e taxas atuais dos bancos.\n`;
-                     } else {
-                         msg += `Qual dessas oportunidades chama mais a sua atenção para prosseguirmos? 🚀`;
-                     }
-                } else {
-                     msg += `Não encontrei empréstimos ativos para portabilidade (apenas margem livre ou cartões). Posso te ajudar com mais alguma dúvida?`;
-                }
-                return { message: msg, state: sessionData };
-            } catch(err) {
-                console.error("[Gutto] Error during auto CPF simulation:", err);
-                return { message: `😕 Houve um erro ao consultar o seu CPF no sistema. Pode tentar novamente mais tarde?`, state: sessionData };
-            }
-        }
-
         if (words.length <= 3 && sessionData.status !== 'finished') {
             const matchedBank = cachedBankRules.find(b => checkBankMatch(b.name, cleanMsg));
             if (matchedBank) {
                 console.log(`[Gutto] CATCH-ALL: User typed bank name '${matchedBank.name}'. Forcing bypass.`);
-                
+
                 // Tenta usar parâmetros de lastExtracted, extractedParams ou extrair do histórico de ofertas
                 let p = Object.keys(lastExtracted || {}).length > 0 ? lastExtracted : (sessionData.extractedParams || {});
                 if (Object.keys(p).length === 0 && sessionData.lastOffers && sessionData.lastOffers.length > 0) {
@@ -1496,7 +1899,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
                     // Fallback to allow doCalculation to fetch the correct offers anyway
                     p = { convenio: 'INSS', idade: 50, valorParcela: 100, saldoDevedor: 1000, prazoTotal: 84, parcelasRestantes: 50 };
                 }
-                
+
                 if (Object.keys(p).length > 0) {
                     const merged = { ...p };
                     return await doCalculation(merged as SimulationParams, userProfile, matchedBank.name, sessionData);
@@ -1523,7 +1926,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         if (fc?.functionCall?.name === "calculate_client_loan_offers") {
             const params = fc.functionCall.args as any;
             console.log("[Gutto] AI calling calculation:", params);
-            
+
             // Mescla com lastExtractedParams garantindo que null/undefined/'' da IA não sobrescreva os dados reais já coletados
             const mergedParams = { ...(sessionData.lastExtractedParams || {}) };
             for (const key of Object.keys(params)) {
@@ -1531,7 +1934,7 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
                     mergedParams[key] = params[key];
                 }
             }
-            
+
             sessionData.lastExtractedParams = JSON.parse(JSON.stringify(mergedParams));
             sessionData.extractedParams = {};
             return await doCalculation(mergedParams, userProfile, params.targetBankName, sessionData);
@@ -1539,10 +1942,10 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
 
         const text = parts.find((p: any) => p.text)?.text || (result as any).text;
         let finalReply = text || "Como posso ajudar na sua simulação hoje?";
-        
+
         // Strip the hallucinated "model" string from the end of Gemini's response
         finalReply = finalReply.replace(/\s+model$/i, '').trim();
-        
+
         if (isFirstMessage) {
             const userName = sessionData.pushName || userProfile.name || '';
             const greetingName = userName ? `Olá ${userName}, ` : 'Olá, ';
@@ -1564,22 +1967,24 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
 
 function formatForWhatsApp(text: string): string {
     if (!text) return text;
-    
+
     let formatted = text;
-    
-    // 1. Convert standard markdown bold-italic (***text*** or _**text**_ or **_text_**) to WhatsApp bold-italic (_*text*_)
+
+    // WhatsApp usa *texto* para NEGRITO. Portanto, qualquer *texto* que ja
+    // venha pronto do Gutto deve ser preservado exatamente como esta.
+    // Apenas normalizamos o Markdown padrao da IA (**texto**) para a sintaxe
+    // nativa do WhatsApp (*texto*).
+
+    // Bold + italic do Markdown -> bold + italic do WhatsApp.
     formatted = formatted.replace(/\*\*\*([^\*]+?)\*\*\*/g, '_*$1*_');
     formatted = formatted.replace(/\*\*\_([^\*\_]+?)\_\*\*/g, '_*$1*_');
     formatted = formatted.replace(/\_\*\*([^\*\_]+?)\*\*\_/g, '_*$1*_');
-    
-    // 2. Convert single asterisks (*text*) used as standard markdown italic to WhatsApp italic (_text_)
-    // We only convert single asterisks that are not part of double asterisks
-    formatted = formatted.replace(/(?<!\*)\*([^\*]+?)\*(?!\*)/g, '_$1_');
-    
-    // 3. Convert standard markdown bold (**text**) to WhatsApp bold (*text*)
-    formatted = formatted.replace(/\*\*\*([^\*]+?)\*\*\*/g, '*$1*');
+
+    // Bold Markdown -> bold WhatsApp.
     formatted = formatted.replace(/\*\*([^\*]+?)\*\*/g, '*$1*');
-    
+
+    // IMPORTANTE: nao converter *texto* para _texto_. No WhatsApp, *texto*
+    // e justamente a marcacao de negrito que queremos enviar ao usuario.
     return formatted;
 }
 
@@ -1599,7 +2004,7 @@ function dedupBanks(rawBanks: any[]): any[] {
         const existing = seenKeys.get(key);
         const tBank = getUpdatedTime(bank);
         const tExisting = getUpdatedTime(existing);
-        
+
         if (!existing || tBank > tExisting || (tBank === tExisting && bank.id.localeCompare(existing.id) > 0)) {
             seenKeys.set(key, bank);
         }
@@ -1607,7 +2012,7 @@ function dedupBanks(rawBanks: any[]): any[] {
     return Array.from(seenKeys.values());
 }
 
-export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserIdOrProfile: any = null): Promise<string> {
-    const rawResult = await internalProcessWhatsAppMessage(message, history, currentPhone, sessionData, webUserIdOrProfile);
+export async function processWhatsAppMessage(message: string, history: any[] = [], currentPhone: string = '', sessionData: any = {}, webUserIdOrProfile: any = null, runtimeContext: WhatsAppRuntimeContext = {}): Promise<string> {
+    const rawResult = await internalProcessWhatsAppMessage(message, history, currentPhone, sessionData, webUserIdOrProfile, runtimeContext);
     return formatForWhatsApp(rawResult);
 }

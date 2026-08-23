@@ -4,23 +4,29 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Search, 
-  Loader2, 
-  CreditCard, 
-  Check, 
-  AlertCircle, 
-  Crown, 
-  Clock, 
-  Eye, 
-  RefreshCw, 
-  User, 
-  Database 
+import {
+  Search,
+  Loader2,
+  CreditCard,
+  Check,
+  AlertCircle,
+  Crown,
+  Clock,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  User,
+  Database,
+  KeyRound,
+  Save,
+  ShieldCheck,
+  Trash2,
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { useToast } from '@/contexts/ToastContext';
 import ConsultaCPFModal from '@/components/ConsultaCPFModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CpfHistoryItem {
   id: string;
@@ -38,14 +44,220 @@ interface CpfHistoryItem {
 export default function ConsultaCPFPage() {
   const router = useRouter();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [cpfCliente, setCpfCliente] = useState('');
   const [tipoConsulta, setTipoConsulta] = useState<'inss' | 'siape'>('inss');
   const [isConsulting, setIsConsulting] = useState(false);
   const [consultaData, setConsultaData] = useState<any>(null);
   const [isConsultaModalOpen, setIsConsultaModalOpen] = useState(false);
-  
+
+  const [c6AutoRefin, setC6AutoRefin] = useState<any>({
+    loading: false,
+    configured: false,
+    results: [],
+  });
+  const [c6CredentialStatus, setC6CredentialStatus] = useState<any>({
+    loading: true,
+    configured: false,
+  });
+  const [c6Username, setC6Username] = useState('');
+  const [c6Password, setC6Password] = useState('');
+  const [showC6Password, setShowC6Password] = useState(false);
+  const [savingC6Credential, setSavingC6Credential] = useState(false);
+  const [testingC6Credential, setTestingC6Credential] = useState(false);
+
   const [history, setHistory] = useState<CpfHistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
+  const getAuthHeaders = async () => {
+    if (!user) throw new Error('Usuário não autenticado');
+    const token = await user.getIdToken();
+    return { Authorization: `Bearer ${token}` };
+  };
+
+  const loadC6CredentialStatus = async () => {
+    if (!user) {
+      setC6CredentialStatus({
+        loading: false,
+        configured: false,
+      });
+      return;
+    }
+
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(
+        '/api/c6/credentials',
+        { headers: authHeaders },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          payload?.error
+          || 'Falha ao consultar credencial C6',
+        );
+      }
+      setC6CredentialStatus({
+        loading: false,
+        ...payload,
+      });
+    } catch (error: any) {
+      console.error('C6 credential status:', error);
+      setC6CredentialStatus({
+        loading: false,
+        configured: false,
+        error: error?.message,
+      });
+    }
+  };
+
+  const saveC6Credential = async () => {
+    if (!c6Username.trim() || !c6Password) {
+      showToast('Informe usuário e senha do C6', 'error');
+      return;
+    }
+
+    setSavingC6Credential(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch('/api/c6/credentials', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({
+          username: c6Username.trim(),
+          password: c6Password,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw Object.assign(
+          new Error(
+            payload?.error
+            || 'Falha ao salvar credencial C6',
+          ),
+          { code: payload?.code },
+        );
+      }
+
+      setC6CredentialStatus({
+        loading: false,
+        ...payload,
+      });
+      setC6Password('');
+      setShowC6Password(false);
+      showToast(
+        'Credencial C6 validada e salva com segurança',
+        'success',
+      );
+    } catch (error: any) {
+      if (error?.code === 'C6_CREDENTIAL_INVALID') {
+        setC6CredentialStatus((prev: any) => ({
+          ...prev,
+          loading: false,
+          validationStatus: 'invalid',
+          needsUpdate: true,
+        }));
+      }
+      showToast(
+        error?.message || 'Erro ao salvar credencial C6',
+        'error',
+      );
+    } finally {
+      setSavingC6Credential(false);
+    }
+  };
+
+  const testC6Credential = async () => {
+    if (!c6CredentialStatus.configured) {
+      showToast(
+        'Configure a credencial C6 primeiro',
+        'error',
+      );
+      return;
+    }
+
+    setTestingC6Credential(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(
+        '/api/c6/credentials',
+        {
+          method: 'POST',
+          headers: authHeaders,
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw Object.assign(
+          new Error(
+            payload?.error
+            || 'Falha ao testar credencial C6',
+          ),
+          { code: payload?.code },
+        );
+      }
+
+      setC6CredentialStatus({
+        loading: false,
+        ...payload,
+      });
+      showToast(
+        'Credencial C6 validada com sucesso no banco',
+        'success',
+      );
+    } catch (error: any) {
+      if (error?.code === 'C6_CREDENTIAL_INVALID') {
+        setC6CredentialStatus((prev: any) => ({
+          ...prev,
+          loading: false,
+          validationStatus: 'invalid',
+          needsUpdate: true,
+        }));
+      }
+      showToast(
+        error?.message || 'Erro ao testar credencial C6',
+        'error',
+      );
+    } finally {
+      setTestingC6Credential(false);
+    }
+  };
+
+  const deleteC6Credential = async () => {
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(
+        '/api/c6/credentials',
+        {
+          method: 'DELETE',
+          headers: authHeaders,
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          payload?.error
+          || 'Falha ao remover credencial C6',
+        );
+      }
+
+      setC6CredentialStatus({
+        loading: false,
+        configured: false,
+      });
+      setC6Username('');
+      setC6Password('');
+      showToast('Credencial C6 removida', 'success');
+    } catch (error: any) {
+      showToast(
+        error?.message || 'Erro ao remover credencial C6',
+        'error',
+      );
+    }
+  };
 
   const fetchHistory = async () => {
     try {
@@ -65,6 +277,10 @@ export default function ConsultaCPFPage() {
     fetchHistory();
   }, []);
 
+  useEffect(() => {
+    loadC6CredentialStatus();
+  }, [user?.uid]);
+
   const formatCPF = (value: any) => {
     if (!value) return '';
     return String(value)
@@ -80,19 +296,19 @@ export default function ConsultaCPFPage() {
     const cleanCpf = String(cpf).replace(/\D/g, '');
     if (cleanCpf.length !== 11) return false;
     if (/^(\d)\1{10}$/.test(cleanCpf)) return false;
-    
+
     let sum = 0;
     for (let i = 0; i < 9; i++) sum += parseInt(cleanCpf.charAt(i)) * (10 - i);
     let rev = 11 - (sum % 11);
     if (rev === 10 || rev === 11) rev = 0;
     if (rev !== parseInt(cleanCpf.charAt(9))) return false;
-    
+
     sum = 0;
     for (let i = 0; i < 10; i++) sum += parseInt(cleanCpf.charAt(i)) * (11 - i);
     rev = 11 - (sum % 11);
     if (rev === 10 || rev === 11) rev = 0;
     if (rev !== parseInt(cleanCpf.charAt(10))) return false;
-    
+
     return true;
   };
 
@@ -108,7 +324,7 @@ export default function ConsultaCPFPage() {
       showToast("Digite um CPF válido primeiro", "error");
       return;
     }
-    
+
     setIsConsulting(true);
     try {
       const response = await fetch('/api/multicorban/consulta-cpf', {
@@ -118,17 +334,89 @@ export default function ConsultaCPFPage() {
         },
         body: JSON.stringify({ cpf: cleanCpf, type: queryType, forceRefresh })
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Falha na consulta');
       }
-      
+
       setConsultaData(data);
       setIsConsultaModalOpen(true);
       fetchHistory();
-      
+
+      // INSS: consulta automaticamente o Refin C6 nos contratos 626.
+      // Se a credencial não estiver configurada ou o C6 não liberar valor,
+      // a consulta normal permanece disponível sem bloquear a tela.
+      if (queryType === 'inss') {
+        setC6AutoRefin({
+          loading: true,
+          configured: c6CredentialStatus.configured,
+          results: [],
+        });
+
+        try {
+          const authHeaders = await getAuthHeaders();
+          const refinResponse = await fetch(
+            '/api/c6/refin/automatico',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...authHeaders,
+              },
+              body: JSON.stringify({
+                cpf: cleanCpf,
+              }),
+            },
+          );
+          const refinPayload = await refinResponse
+            .json()
+            .catch(() => ({}));
+
+          if (!refinResponse.ok) {
+            throw new Error(
+              refinPayload?.error
+              || 'Falha na consulta automática do refin C6',
+            );
+          }
+
+          setC6AutoRefin({
+            loading: false,
+            ...refinPayload,
+          });
+
+          if (refinPayload?.credentialNeedsUpdate) {
+            setC6CredentialStatus((prev: any) => ({
+              ...prev,
+              validationStatus: 'invalid',
+              needsUpdate: true,
+            }));
+            showToast(
+              'O C6 recusou a credencial salva. Atualização necessária.',
+              'error',
+            );
+          }
+        } catch (refinError: any) {
+          console.error(
+            'Refin C6 automático:',
+            refinError,
+          );
+          setC6AutoRefin({
+            loading: false,
+            configured: c6CredentialStatus.configured,
+            results: [],
+            error: refinError?.message,
+          });
+        }
+      } else {
+        setC6AutoRefin({
+          loading: false,
+          configured: false,
+          results: [],
+        });
+      }
+
     } catch (error: any) {
       console.error("Consulta CPF Error:", error);
       showToast(error.message || "Erro ao consultar CPF. Verifique sua conexão.", "error");
@@ -148,7 +436,7 @@ export default function ConsultaCPFPage() {
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden relative pb-20 md:pb-0">
         <div className="p-4 md:p-8 max-w-4xl mx-auto w-full space-y-6">
-          
+
           {/* Form Card */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-3 mb-6">
@@ -161,17 +449,128 @@ export default function ConsultaCPFPage() {
               </div>
             </div>
 
+            <div className="mb-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950/40 p-4">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-amber-500" />
+                    Credencial C6 Consignado
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    A credencial é individual por usuário. Ela é validada no C6 antes de ser salva e usada automaticamente nos contratos C6 da consulta INSS.
+                  </p>
+                </div>
+                <div className={`text-[10px] uppercase tracking-wider font-black px-3 py-1.5 rounded-full w-fit ${
+                  c6CredentialStatus.needsUpdate
+                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                    : c6CredentialStatus.configured
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                }`}>
+                  {c6CredentialStatus.loading
+                    ? 'Verificando...'
+                    : c6CredentialStatus.needsUpdate
+                      ? 'Atualização necessária'
+                      : c6CredentialStatus.configured
+                        ? `Configurada ${c6CredentialStatus.usernameHint ? `• ${c6CredentialStatus.usernameHint}` : ''}`
+                        : 'Não configurada'}
+                </div>
+              </div>
+
+              {c6CredentialStatus.needsUpdate && (
+                <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                  O C6 recusou a credencial cadastrada. Informe a nova senha/usuário abaixo. A credencial anterior só é substituída depois de uma autenticação válida.
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  value={c6Username}
+                  onChange={(e) => setC6Username(e.target.value)}
+                  autoComplete="off"
+                  className="h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder={c6CredentialStatus.configured ? 'Novo usuário C6 para substituir' : 'Usuário C6'}
+                />
+
+                <div className="relative">
+                  <input
+                    type={showC6Password ? 'text' : 'password'}
+                    value={c6Password}
+                    onChange={(e) => setC6Password(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder={c6CredentialStatus.configured ? 'Nova senha para substituir' : 'Senha C6'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowC6Password(value => !value)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  >
+                    {showC6Password
+                      ? <EyeOff className="w-4 h-4" />
+                      : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={saveC6Credential}
+                  disabled={savingC6Credential}
+                  className="h-10 px-4 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-black flex items-center gap-2 disabled:opacity-50"
+                >
+                  {savingC6Credential
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Save className="w-4 h-4" />}
+                  {c6CredentialStatus.configured
+                    ? 'Atualizar credencial'
+                    : 'Salvar credencial'}
+                </button>
+
+                {c6CredentialStatus.configured && (
+                  <button
+                    type="button"
+                    onClick={testC6Credential}
+                    disabled={testingC6Credential}
+                    className="h-10 px-4 rounded-xl border border-emerald-200 text-emerald-700 dark:text-emerald-300 text-xs font-black flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {testingC6Credential
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <ShieldCheck className="w-4 h-4" />}
+                    Testar credencial
+                  </button>
+                )}
+
+                {c6CredentialStatus.configured && (
+                  <button
+                    type="button"
+                    onClick={deleteC6Credential}
+                    className="h-10 px-4 rounded-xl border border-rose-200 text-rose-600 text-xs font-black flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Remover
+                  </button>
+                )}
+
+                <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  Senha criptografada com AES-256-GCM e vinculada ao seu usuário.
+                </span>
+              </div>
+            </div>
+
             <form onSubmit={(e) => handleConsultaCPF(e, false)} className="space-y-6">
               <div className="flex flex-col gap-2 max-w-md">
                 <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">CPF do Cliente</label>
                 <div className="relative">
                   <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
-                  <input 
-                    className={`w-full rounded-xl border ${cpfCliente && !isCpfValid ? 'border-rose-300 bg-rose-50/10' : 'border-primary/20'} bg-white dark:bg-slate-950 h-14 pl-12 pr-12 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm`} 
-                    type="text" 
-                    value={cpfCliente} 
-                    onChange={(e) => setCpfCliente(formatCPF(e.target.value))} 
-                    placeholder="000.000.000-00" 
+                  <input
+                    className={`w-full rounded-xl border ${cpfCliente && !isCpfValid ? 'border-rose-300 bg-rose-50/10' : 'border-primary/20'} bg-white dark:bg-slate-950 h-14 pl-12 pr-12 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm`}
+                    type="text"
+                    value={cpfCliente}
+                    onChange={(e) => setCpfCliente(formatCPF(e.target.value))}
+                    placeholder="000.000.000-00"
                   />
                   {cpfCliente && (
                     <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -331,11 +730,12 @@ export default function ConsultaCPFPage() {
         </div>
       </div>
       <BottomNav />
-      
+
       <ConsultaCPFModal
         isOpen={isConsultaModalOpen}
         onClose={() => setIsConsultaModalOpen(false)}
         data={consultaData}
+        c6RefinData={c6AutoRefin}
         onToggleContract={handleToggleContract}
       />
     </div>

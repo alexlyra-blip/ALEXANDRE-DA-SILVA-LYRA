@@ -1,16 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { normalizePhone, validateWhatsAppUser, logWhatsAppAttempt } from '@/lib/whatsapp-utils';
+import crypto from 'crypto';
+
+const GUTTO_BUILD_VERSION = '2026.08.23-final';
+
+function readC6RuntimeCredentials(req: NextRequest): { username: string; password: string } | null {
+  // Preferência: n8n envia a credencial Basic Auth em X-C6-Authorization.
+  // Authorization: Basic também é aceito para uso direto com Credentials -> Basic Auth do n8n.
+  const basicHeader = req.headers.get('x-c6-authorization') || req.headers.get('authorization') || '';
+  const basicMatch = basicHeader.match(/^Basic\s+(.+)$/i);
+  if (basicMatch) {
+    try {
+      const decoded = Buffer.from(basicMatch[1], 'base64').toString('utf8');
+      const separator = decoded.indexOf(':');
+      if (separator > 0) {
+        const username = decoded.slice(0, separator).trim();
+        const password = decoded.slice(separator + 1);
+        if (username && password) return { username, password };
+      }
+    } catch {
+      // Header inválido: segue para o formato em dois headers.
+    }
+  }
+
+  const username = String(req.headers.get('x-c6-username') || '').trim();
+  const password = String(req.headers.get('x-c6-password') || '');
+  return username && password ? { username, password } : null;
+}
 
 // Handler para POST (Recebe mensagens do n8n)
 export async function POST(req: NextRequest) {
+  let stage = 'init';
   try {
+    stage = 'firebase';
     const adminDb = getAdminDb();
 
     if (!adminDb) {
       return NextResponse.json({ error: 'Internal database error' }, { status: 500 });
     }
 
+    stage = 'parse-body';
     const body = await req.json();
     
     const senderNumber = body.senderNumber;
@@ -22,6 +52,7 @@ export async function POST(req: NextRequest) {
     }
 
     // --- CAMADA DE AUTORIZAÇÃO ---
+    stage = 'authorize';
     const normalizedPhone = normalizePhone(senderNumber);
     const auth = await validateWhatsAppUser(normalizedPhone);
 
@@ -51,6 +82,7 @@ export async function POST(req: NextRequest) {
     console.log(`[n8n] WhatsApp message from ${senderNumber} (Authorized as ${auth.user?.name || 'User'}): ${messageText}`);
     // --- FIM DA CAMADA DE AUTORIZAÇÃO ---
 
+    stage = 'session-read';
     const sessionId = senderNumber.replace(/[^a-zA-Z0-9]/g, '_');
     const sessionRef = adminDb.collection('whatsappSessions').doc(sessionId);
     let sessionSnap = await sessionRef.get();
@@ -90,9 +122,20 @@ export async function POST(req: NextRequest) {
       sessionData.pushName = pushName;
     }
 
-    // 1. Usar o Agente de IA consolidado
+    // 1. Usar o Agente de IA consolidado.
+    // A credencial C6 vem do cofre de Credentials do n8n apenas para ESTA requisição.
+    // Ela nunca é anexada ao sessionData e, portanto, nunca é salva no Firestore.
+    stage = 'agent';
+    const c6Credentials = readC6RuntimeCredentials(req);
     const { processWhatsAppMessage } = await import('@/lib/whatsapp-agent');
-    let responseText = await processWhatsAppMessage(messageText, sessionData.history || [], senderNumber, sessionData, auth.user);
+    let responseText = await processWhatsAppMessage(
+      messageText,
+      sessionData.history || [],
+      senderNumber,
+      sessionData,
+      auth.user,
+      { c6Credentials },
+    );
 
     // 2. Atualizar histórico
     const updatedHistory = [
@@ -101,6 +144,7 @@ export async function POST(req: NextRequest) {
       { role: 'model', content: responseText }
     ];
 
+    stage = 'session-save';
     try {
         // Remove extremely large data arrays to prevent Firestore 1MB limit crashes
         delete sessionData.allOffers;
@@ -140,11 +184,13 @@ export async function POST(req: NextRequest) {
     // O n8n ficará responsável por conectar na Evolution API e despachar a mensagem.
     return NextResponse.json({ 
       status: 'success',
-      responseText: responseText
+      responseText: responseText,
+      version: GUTTO_BUILD_VERSION
     });
 
   } catch (error) {
-    console.error("Erro no Webhook do n8n:", error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    const errorId = crypto.randomUUID();
+    console.error(`[n8n][${errorId}][${stage}]`, error);
+    return NextResponse.json({ error: 'Internal Server Error', errorId, stage, version: GUTTO_BUILD_VERSION }, { status: 500 });
   }
 }

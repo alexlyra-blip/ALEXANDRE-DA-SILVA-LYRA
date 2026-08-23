@@ -5,3 +5,24 @@ build:
     NODE_VERSION: "20"
 run:
   command: npm run start
+
+env:
+  # Secrets do backend Firebase/Google Cloud Secret Manager
+  - variable: MULTICORBAN_API_TOKEN
+    secret: MULTICORBAN_API_TOKEN
+    availability:
+      - RUNTIME
+  - variable: C6_CREDENTIALS_ENCRYPTION_KEY
+    secret: C6_CREDENTIALS_ENCRYPTION_KEY
+    availability:
+      - RUNTIME
+
+  # Parâmetros operacionais C6 (não são credenciais)
+  - variable: C6_REFIN_FORMALIZATION_SUBTYPE
+    value: DIGITAL_WEB
+    availability:
+      - RUNTIME
+  - variable: C6_INSS_PUBLIC_AGENCY
+    value: "000001"
+    availability:
+      - RUNTIME

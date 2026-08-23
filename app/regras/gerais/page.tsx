@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRules } from '@/contexts/RuleContext';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Plus, X, ListOrdered, Settings2, Landmark, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, Plus, X, ListOrdered, Settings2, Landmark, ArrowLeft, Calculator } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -18,10 +18,12 @@ export default function RegrasGeraisPage() {
     promotoraInstallments, 
     nonPortableBanks,
     blockedBanks,
+    dailyMarginCoefficient,
     updatePromotoraPriority, 
     updatePromotoraInstallment,
     updateNonPortableBanks,
-    updateBlockedBanks
+    updateBlockedBanks,
+    updateDailyMarginCoefficient
   } = useRules();
 
   const allOriginBanks = Array.from(new Set([
@@ -62,6 +64,13 @@ export default function RegrasGeraisPage() {
   const [installmentsValue, setInstallmentsValue] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
+  const [marginCoefficientValue, setMarginCoefficientValue] = useState('');
+
+  useEffect(() => {
+    if (dailyMarginCoefficient > 0) {
+      setMarginCoefficientValue(String(dailyMarginCoefficient).replace('.', ','));
+    }
+  }, [dailyMarginCoefficient]);
 
   const handleSavePriority = async () => {
     if (!priorityBankSelection || !priorityValue) return;
@@ -127,6 +136,54 @@ export default function RegrasGeraisPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Configure as regras de prioridade de exibição e parcelas pagas.
           </p>
+        </div>
+      </div>
+
+      {/* COEFICIENTE DIÁRIO DA MARGEM INSS */}
+      <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+          <h2 className="font-bold flex items-center gap-2">
+            <Calculator className="w-5 h-5 text-amber-500" />
+            Coeficiente Diário - Margem Livre INSS
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Usado pelo Gutto e pela Consulta CPF para calcular o valor estimado liberado da margem disponível. Atualize sempre que o coeficiente diário mudar.
+          </p>
+        </div>
+        <div className="p-4 flex flex-col sm:flex-row gap-3 sm:items-end">
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">Coeficiente atual</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="Ex: 0,02260"
+              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+              value={marginCoefficientValue}
+              onChange={e => setMarginCoefficientValue(e.target.value)}
+            />
+          </div>
+          <button
+            type="button"
+            disabled={isSaving || !marginCoefficientValue.trim()}
+            onClick={async () => {
+              const normalized = Number(marginCoefficientValue.replace(',', '.'));
+              if (!Number.isFinite(normalized) || normalized <= 0) return;
+              setIsSaving(true);
+              try {
+                await updateDailyMarginCoefficient(normalized);
+              } catch (e) {
+                console.error(e);
+              } finally {
+                setIsSaving(false);
+              }
+            }}
+            className="bg-primary hover:bg-primary/90 disabled:opacity-50 text-white px-5 py-2 rounded-xl transition-all text-sm font-bold"
+          >
+            Salvar coeficiente
+          </button>
+          <div className="text-xs text-slate-500 sm:min-w-40">
+            Atual: <span className="font-black text-slate-800 dark:text-slate-100">{dailyMarginCoefficient.toFixed(5).replace('.', ',')}</span>
+          </div>
         </div>
       </div>
 
