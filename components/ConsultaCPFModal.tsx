@@ -60,7 +60,34 @@ const formatContractDate = (value: any) => {
   const brMatch = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
   if (brMatch) return `${brMatch[1]}/${brMatch[2]}/${brMatch[3]}`;
 
+  const monthMatch = raw.match(/^(\d{4})-(\d{2})$/);
+  if (monthMatch) return `01/${monthMatch[2]}/${monthMatch[1]}`;
+
   return raw;
+};
+
+const formatContractMonth = (value: any) => {
+  if (!value) return 'N/A';
+  const raw = String(value).trim();
+  if (!raw) return 'N/A';
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if (isoMatch) return `${isoMatch[2]}/${isoMatch[1]}`;
+
+  const brMatch = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
+  if (brMatch) return `${brMatch[2]}/${brMatch[3]}`;
+
+  const brMonthMatch = raw.match(/^(\d{2})[\/-](\d{4})$/);
+  if (brMonthMatch) return `${brMonthMatch[1]}/${brMonthMatch[2]}`;
+
+  return raw;
+};
+
+const normalizeConsultaDataForModal = (source: any) => {
+  if (Array.isArray(source) && source.some((item: any) => item?.Beneficiario)) {
+    return source;
+  }
+  return parseConsultaResponse(source);
 };
 
 interface ConsultaCPFModalProps {
@@ -78,17 +105,19 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
   const [activeCoefs, setActiveCoefs] = useState<Record<string, number>>({});
   const [coefDate, setCoefDate] = useState<string>('');
   const [expandedC6Refins, setExpandedC6Refins] = useState<Record<string, boolean>>({});
+  const [selectedC6Tables, setSelectedC6Tables] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (isOpen) {
       setActiveTab(0);
       setExpandedC6Refins({});
+      setSelectedC6Tables({});
     }
   }, [isOpen, data]);
 
   useEffect(() => {
     if (!isOpen || !data) return;
-    const list = parseConsultaResponse(data);
+    const list = normalizeConsultaDataForModal(data);
     const activeBen = list[activeTab] || list[0] || {};
     const isSiape = !!activeBen?.Beneficiario?.isSiape;
     const conv = isSiape ? 'SIAPE' : 'INSS';
@@ -111,7 +140,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
   if (!isOpen || !data) return null;
 
   // Normalize data safely using parseConsultaResponse
-  const beneficios = parseConsultaResponse(data);
+  const beneficios = normalizeConsultaDataForModal(data);
 
   // Extract personal data from the first benefit (assuming it's the same person)
   const firstBenefit = beneficios[0] || {};
@@ -747,14 +776,21 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                 const c6AutoResult = Array.isArray(c6RefinData?.results)
                                   ? c6RefinData.results.find((result: any) => result?.key === c6Key)
                                   : null;
-                                const hasRefinDetails = Boolean(c6AutoResult && (c6AutoResult.summary || c6AutoResult.error));
+                                const c6Tables = Array.isArray(c6AutoResult?.tables) && c6AutoResult.tables.length > 0
+                                  ? c6AutoResult.tables
+                                  : (c6AutoResult?.summary ? [c6AutoResult.summary] : []);
+                                const selectedTableIndex = Math.min(
+                                  Math.max(0, selectedC6Tables[c6Key] || 0),
+                                  Math.max(0, c6Tables.length - 1),
+                                );
+                                const selectedC6Summary = c6Tables[selectedTableIndex] || c6AutoResult?.summary || null;
+                                const hasRefinDetails = Boolean(c6AutoResult && (c6Tables.length > 0 || c6AutoResult.error));
                                 const refinExpanded = Boolean(expandedC6Refins[c6Key]);
-                                const inicioContrato = formatContractDate(
-                                  emp.InicioDesconto || emp.DataInicio || emp.DataInicioContrato || emp.DataAverbacao,
-                                );
-                                const finalContrato = formatContractDate(
-                                  emp.FinalDesconto || emp.DataFinal || emp.DataFim || emp.DataFinalContrato,
-                                );
+                                const inicioIsCalculated = Boolean(emp.InicioDescontoCalculado);
+                                const finalIsCalculated = Boolean(emp.FinalDescontoCalculado);
+                                const dataAverbacao = formatContractDate(emp.DataAverbacao);
+                                const inicioContrato = formatContractMonth(emp.InicioDesconto);
+                                const finalContrato = formatContractMonth(emp.FinalDesconto);
 
                                 return (
                                   <Fragment key={`${emp.Banco}-${emp.Contrato}-${idx}`}>
@@ -765,11 +801,20 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                           <div>
                                             <p className="font-bold text-slate-800 dark:text-slate-200">{bancoExibicao}</p>
                                             <p className="mt-0.5 text-[9px] font-semibold text-slate-400">Contrato: {emp.Contrato || 'N/A'}</p>
+                                            {dataAverbacao !== 'N/A' && (
+                                              <p className="mt-0.5 text-[9px] font-semibold text-slate-400">Averb.: {dataAverbacao}</p>
+                                            )}
                                           </div>
                                         </div>
                                       </td>
-                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">{inicioContrato}</td>
-                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">{finalContrato}</td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">
+                                        <span>{inicioContrato}</span>
+                                        {inicioIsCalculated && <span className="ml-1 text-[8px] font-bold uppercase text-amber-500">calc.</span>}
+                                      </td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">
+                                        <span>{finalContrato}</span>
+                                        {finalIsCalculated && <span className="ml-1 text-[8px] font-bold uppercase text-amber-500">calc.</span>}
+                                      </td>
                                       <td className="px-3 py-2.5 whitespace-nowrap font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
                                       <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">
                                         {prazoTotal > 0 ? `${parcelasPagas}/${prazoTotal}` : `${parcelasRestantes} rest.`}
@@ -829,15 +874,31 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                                               Refin C6 indisponível para este contrato.
                                             </div>
-                                          ) : c6AutoResult?.summary ? (
+                                          ) : selectedC6Summary ? (
                                             <div className="rounded-xl border border-emerald-200 bg-white p-3 dark:border-emerald-500/25 dark:bg-slate-950">
-                                              <div className="mb-2 flex items-center justify-between gap-3">
+                                              <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                                                 <div>
                                                   <p className="text-xs font-black text-slate-800 dark:text-white">Refin C6 • Contrato {c6AutoResult.contrato}</p>
-                                                  <p className="text-[9px] uppercase tracking-wider text-slate-400">Primeira condição retornada pelo C6</p>
+                                                  <p className="text-[9px] uppercase tracking-wider text-slate-400">{c6Tables.length} {c6Tables.length === 1 ? 'condição retornada' : 'condições retornadas'} pelo C6 • primeira tabela permanece a oferta principal</p>
                                                 </div>
-                                                <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${c6AutoResult?.hasAvailableTable ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'}`}>
-                                                  {c6AutoResult?.hasAvailableTable ? 'Disponível' : 'Sem liberação'}
+                                                {c6Tables.length > 1 && (
+                                                  <div className="min-w-0 lg:w-[360px]">
+                                                    <label className="mb-1 block text-[8px] font-black uppercase tracking-wider text-slate-500">Escolher tabela para visualizar</label>
+                                                    <select
+                                                      value={selectedTableIndex}
+                                                      onChange={(event) => setSelectedC6Tables(prev => ({ ...prev, [c6Key]: Number(event.target.value) }))}
+                                                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] font-bold text-slate-700 outline-none focus:border-emerald-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                                    >
+                                                      {c6Tables.map((table: any, tableIndex: number) => (
+                                                        <option key={`${c6Key}-table-${tableIndex}`} value={tableIndex}>
+                                                          {tableIndex + 1}. {table?.tabela || 'Tabela C6'} — {formatCurrency(Number(table?.valorLiberado || 0))}
+                                                        </option>
+                                                      ))}
+                                                    </select>
+                                                  </div>
+                                                )}
+                                                <span className={`w-fit rounded-full px-2 py-1 text-[9px] font-black uppercase ${Number(selectedC6Summary?.valorLiberado || 0) > 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'}`}>
+                                                  {Number(selectedC6Summary?.valorLiberado || 0) > 0 ? 'Liberação disponível' : 'Sem liberação'}
                                                 </span>
                                               </div>
 
@@ -845,24 +906,24 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                                 <div className="col-span-2 rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900 md:col-span-1">
                                                   <p className="text-[8px] font-bold uppercase text-slate-500">Condição / Tabela</p>
                                                   <p className="mt-0.5 text-[11px] font-black text-slate-800 dark:text-white">
-                                                    {c6AutoResult.summary.tabela}{c6AutoResult.summary.codigoTabela ? ` • ${c6AutoResult.summary.codigoTabela}` : ''}
+                                                    {selectedC6Summary.tabela}{selectedC6Summary.codigoTabela ? ` • ${selectedC6Summary.codigoTabela}` : ''}
                                                   </p>
                                                 </div>
                                                 <div className="rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900">
                                                   <p className="text-[8px] font-bold uppercase text-slate-500">Prazo</p>
-                                                  <p className="mt-0.5 text-[11px] font-black">{c6AutoResult.summary.prazo ? `${c6AutoResult.summary.prazo}x` : '108x'}</p>
+                                                  <p className="mt-0.5 text-[11px] font-black">{selectedC6Summary.prazo ? `${selectedC6Summary.prazo}x` : '108x'}</p>
                                                 </div>
                                                 <div className="rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900">
                                                   <p className="text-[8px] font-bold uppercase text-slate-500">Taxa</p>
-                                                  <p className="mt-0.5 text-[11px] font-black">{c6AutoResult.summary.taxa !== null && c6AutoResult.summary.taxa !== undefined ? `${Number(c6AutoResult.summary.taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</p>
+                                                  <p className="mt-0.5 text-[11px] font-black">{selectedC6Summary.taxa !== null && selectedC6Summary.taxa !== undefined ? `${Number(selectedC6Summary.taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</p>
                                                 </div>
                                                 <div className="rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900">
                                                   <p className="text-[8px] font-bold uppercase text-slate-500">Parcela</p>
-                                                  <p className="mt-0.5 text-[11px] font-black">{c6AutoResult.summary.parcela !== null && c6AutoResult.summary.parcela !== undefined ? formatCurrency(Number(c6AutoResult.summary.parcela)) : 'N/A'}</p>
+                                                  <p className="mt-0.5 text-[11px] font-black">{selectedC6Summary.parcela !== null && selectedC6Summary.parcela !== undefined ? formatCurrency(Number(selectedC6Summary.parcela)) : 'N/A'}</p>
                                                 </div>
                                                 <div className="rounded-lg bg-emerald-50 px-2.5 py-2 dark:bg-emerald-500/10">
                                                   <p className="text-[8px] font-bold uppercase text-emerald-700/70 dark:text-emerald-300/70">Liberado</p>
-                                                  <p className="mt-0.5 text-[11px] font-black text-emerald-700 dark:text-emerald-300">{c6AutoResult.summary.valorLiberado !== null && c6AutoResult.summary.valorLiberado !== undefined ? formatCurrency(Number(c6AutoResult.summary.valorLiberado)) : 'R$ 0,00'}</p>
+                                                  <p className="mt-0.5 text-[11px] font-black text-emerald-700 dark:text-emerald-300">{selectedC6Summary.valorLiberado !== null && selectedC6Summary.valorLiberado !== undefined ? formatCurrency(Number(selectedC6Summary.valorLiberado)) : 'R$ 0,00'}</p>
                                                 </div>
                                               </div>
                                             </div>

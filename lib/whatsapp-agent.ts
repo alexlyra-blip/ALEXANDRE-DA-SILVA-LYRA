@@ -1170,23 +1170,27 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
 
 
         const totalReleased = totalMarginReleased + totalPortabilityReleased + totalC6RefinReleased;
-        response += `\n\n======================`;
-        response += `\n\n📊 *RESUMO DAS LIBERAÇÕES*\n`;
 
-        if (totalMarginReleased > 0) {
-            response += `\n💵 MARGEM LIVRE: R$ ${fmt(totalMarginReleased)}`;
-        }
-        if (portabilityCount > 0) {
-            const label = portabilityCount === 1 ? 'PORTABILIDADE' : 'PORTABILIDADES';
-            response += `\n🔄 ${portabilityCount} ${label}: R$ ${fmt(totalPortabilityReleased)}`;
-        }
-        if (c6RefinCount > 0) {
-            const label = c6RefinCount === 1 ? 'REFIN C6' : 'REFINS C6';
-            response += `\n🏦 ${c6RefinCount} ${label}: R$ ${fmt(totalC6RefinReleased)}`;
-        }
+        // Sem margem livre e sem nenhuma proposta com liberação positiva não há
+        // resumo financeiro para exibir. Mantém somente a mensagem do benefício.
+        if (totalReleased > 0) {
+            response += `\n\n======================`;
+            response += `\n\n📊 *RESUMO DAS LIBERAÇÕES*\n`;
 
-        // Mesmo quando nenhuma categoria libera valor, o total permanece explícito.
-        response += `\n\n💰 *TOTAL LIBERADO: R$ ${fmt(totalReleased)}*`;
+            if (totalMarginReleased > 0) {
+                response += `\n💵 MARGEM LIVRE: R$ ${fmt(totalMarginReleased)}`;
+            }
+            if (portabilityCount > 0) {
+                const label = portabilityCount === 1 ? 'PORTABILIDADE' : 'PORTABILIDADES';
+                response += `\n🔄 ${portabilityCount} ${label}: R$ ${fmt(totalPortabilityReleased)}`;
+            }
+            if (c6RefinCount > 0) {
+                const label = c6RefinCount === 1 ? 'REFIN C6' : 'REFINS C6';
+                response += `\n🏦 ${c6RefinCount} ${label}: R$ ${fmt(totalC6RefinReleased)}`;
+            }
+
+            response += `\n\n💰 *TOTAL LIBERADO: R$ ${fmt(totalReleased)}*`;
+        }
 
         // Mantém o mesmo pós-simulação do fluxo tradicional do Gutto:
         // o usuário pode navegar por outros bancos, tabelas e prazos sem reiniciar a consulta.

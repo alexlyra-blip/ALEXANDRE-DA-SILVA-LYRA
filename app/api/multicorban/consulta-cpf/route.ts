@@ -24,6 +24,61 @@ function getRawBenefitArray(rawData: any): any[] {
   return rawData ? [rawData] : [];
 }
 
+
+function toPositiveInt(value: any): number {
+  const parsed = Number.parseInt(String(value ?? '').replace(/\D/g, ''), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function formatIsoDate(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseApiDate(value: any): Date | null {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  let match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  }
+
+  match = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
+  if (match) {
+    return new Date(Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])));
+  }
+
+  match = raw.match(/^(\d{4})-(\d{2})$/);
+  if (match) {
+    return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1));
+  }
+
+  match = raw.match(/^(\d{2})[\/-](\d{4})$/);
+  if (match) {
+    return new Date(Date.UTC(Number(match[2]), Number(match[1]) - 1, 1));
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function addUtcMonths(base: Date, months: number): Date {
+  return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + months, 1));
+}
+
+function getFirstValue(...values: any[]): any {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return value;
+  }
+  return '';
+}
+
 function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): any[] {
   const rawBenefits = getRawBenefitArray(rawData);
 
@@ -47,31 +102,83 @@ function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): 
 
       if (!rawLoan) return loan;
 
+      const dataAverbacao = getFirstValue(
+        loan?.DataAverbacao,
+        rawLoan?.DataAverbacao,
+        rawLoan?.data_averbacao,
+        rawLoan?.DtAverbacao,
+        rawLoan?.DataAverbacaoContrato,
+        rawLoan?.DataAverbacaoEmprestimo,
+      );
+
+      const inicioApi = getFirstValue(
+        loan?.InicioDesconto,
+        rawLoan?.InicioDesconto,
+        rawLoan?.inicio_desconto,
+        rawLoan?.DataInicioDesconto,
+        rawLoan?.data_inicio_desconto,
+        rawLoan?.DataPrimeiroDesconto,
+        rawLoan?.PrimeiroDesconto,
+      );
+
+      const finalApi = getFirstValue(
+        loan?.FinalDesconto,
+        rawLoan?.FinalDesconto,
+        rawLoan?.FimDesconto,
+        rawLoan?.final_desconto,
+        rawLoan?.DataFinalDesconto,
+        rawLoan?.DataFimDesconto,
+        rawLoan?.data_fim_desconto,
+        rawLoan?.DataUltimoDesconto,
+        rawLoan?.UltimoDesconto,
+      );
+
+      const prazoTotal = toPositiveInt(
+        loan?.Prazo || loan?.PrazoTotal || rawLoan?.Prazo || rawLoan?.PrazoTotal,
+      );
+
+      let inicioDesconto = String(inicioApi || '').trim();
+      let finalDesconto = String(finalApi || '').trim();
+      let inicioCalculado = false;
+      let finalCalculado = false;
+
+      // A MultiCorban normalmente devolve InicioDesconto e FinalDesconto.
+      // Se algum contrato vier sem esses campos, mas houver DataAverbacao,
+      // a primeira parcela é considerada no mês seguinte à averbação.
+      if (!inicioDesconto && dataAverbacao) {
+        const averbacao = parseApiDate(dataAverbacao);
+        if (averbacao) {
+          inicioDesconto = formatIsoDate(addUtcMonths(averbacao, 1));
+          inicioCalculado = true;
+        }
+      }
+
+      // A última parcela corresponde ao mês inicial + (prazo total - 1) meses.
+      // Ex.: averbação 18/11/2022, prazo 84 -> início 12/2022 e fim 11/2029.
+      if (!finalDesconto && inicioDesconto && prazoTotal > 0) {
+        const inicio = parseApiDate(inicioDesconto);
+        if (inicio) {
+          finalDesconto = formatIsoDate(addUtcMonths(inicio, prazoTotal - 1));
+          finalCalculado = true;
+        }
+      }
+
+      // Caso raro: API traz apenas FinalDesconto. Recupera o início pelo prazo.
+      if (!inicioDesconto && finalDesconto && prazoTotal > 0) {
+        const final = parseApiDate(finalDesconto);
+        if (final) {
+          inicioDesconto = formatIsoDate(addUtcMonths(final, -(prazoTotal - 1)));
+          inicioCalculado = true;
+        }
+      }
+
       return {
         ...loan,
-        // A API /cpf da MultiCorban entrega essas datas no contrato bruto.
-        // O parser visual antigo não as preservava, por isso as colunas ficavam vazias.
-        InicioDesconto:
-          loan?.InicioDesconto
-          || rawLoan?.InicioDesconto
-          || rawLoan?.inicio_desconto
-          || rawLoan?.DataInicio
-          || rawLoan?.DataInicioContrato
-          || rawLoan?.DataAverbacao
-          || '',
-        FinalDesconto:
-          loan?.FinalDesconto
-          || rawLoan?.FinalDesconto
-          || rawLoan?.final_desconto
-          || rawLoan?.DataFinal
-          || rawLoan?.DataFim
-          || rawLoan?.DataFinalContrato
-          || '',
-        DataAverbacao:
-          loan?.DataAverbacao
-          || rawLoan?.DataAverbacao
-          || rawLoan?.data_averbacao
-          || '',
+        DataAverbacao: dataAverbacao || '',
+        InicioDesconto: inicioDesconto,
+        FinalDesconto: finalDesconto,
+        InicioDescontoCalculado: inicioCalculado,
+        FinalDescontoCalculado: finalCalculado,
       };
     });
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { consultarRefinC6, getFirstAvailableC6Table, isC6Consignado, summarizeC6RefinTable } from '@/lib/c6-refin-service';
+import { consultarRefinC6, extractC6RefinTables, getFirstAvailableC6Table, isC6Consignado, summarizeC6RefinTable } from '@/lib/c6-refin-service';
 import { getUserC6Credentials, markUserC6CredentialValidation } from '@/lib/c6-credentials';
 import { requireFirebaseUser } from '@/lib/server-auth';
 
@@ -37,6 +37,9 @@ export async function POST(request: Request) {
         credentials,
       });
       await markUserC6CredentialValidation(user.uid, 'valid');
+      const allTables = extractC6RefinTables(data)
+        .map(table => summarizeC6RefinTable(table))
+        .filter(Boolean);
       const firstTable = getFirstAvailableC6Table(data);
       const summary = summarizeC6RefinTable(firstTable);
       const releasedAmount = Number(summary?.valorLiberado || summary?.troco || 0);
@@ -45,6 +48,7 @@ export async function POST(request: Request) {
         hasAvailableTable: !!summary && releasedAmount > 0,
         releasedAmount: releasedAmount > 0 ? releasedAmount : 0,
         summary,
+        tables: allTables,
       });
     } catch (error: any) {
       if (error?.code === 'C6_CREDENTIAL_INVALID') {

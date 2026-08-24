@@ -4,6 +4,7 @@ import { getUserC6Credentials, markUserC6CredentialValidation } from '@/lib/c6-c
 import { buildInssSimulationContracts, cleanCpf, consultarCpfMulticorban, isValidCpf } from '@/lib/multicorban-service';
 import {
   consultarRefinC6,
+  extractC6RefinTables,
   getFirstAvailableC6Table,
   isC6Consignado,
   summarizeC6RefinTable,
@@ -53,6 +54,9 @@ export async function POST(request: Request) {
           credentials,
         });
         c6AuthenticationSucceeded = true;
+        const allTables = extractC6RefinTables(raw)
+          .map(table => summarizeC6RefinTable(table))
+          .filter(Boolean);
         const firstTable = getFirstAvailableC6Table(raw);
         const summary = summarizeC6RefinTable(firstTable);
         const releasedAmount = Number(summary?.valorLiberado || summary?.troco || 0);
@@ -67,6 +71,7 @@ export async function POST(request: Request) {
           hasAvailableTable: !!summary && releasedAmount > 0,
           releasedAmount: releasedAmount > 0 ? releasedAmount : 0,
           summary,
+          tables: allTables,
         });
       } catch (error: any) {
         console.error(`[C6 Refin Auto] ${key}:`, error?.message || error);
