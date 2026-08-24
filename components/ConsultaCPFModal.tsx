@@ -9,6 +9,23 @@ import { parseConsultaResponse } from '@/lib/multicorban';
 import { getLatestCoefficient, getCachedCoefficientSync, getAllActiveCoefficients } from '@/lib/coefficients';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useBranding } from '@/components/Providers';
+
+
+const hexToRgbTuple = (hex: string): [number, number, number] => {
+  const fallback: [number, number, number] = [17, 82, 212];
+  if (!hex) return fallback;
+  const clean = hex.replace('#', '').trim();
+  const normalized = clean.length === 3
+    ? clean.split('').map(char => `${char}${char}`).join('')
+    : clean;
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return fallback;
+  return [
+    parseInt(normalized.slice(0, 2), 16),
+    parseInt(normalized.slice(2, 4), 16),
+    parseInt(normalized.slice(4, 6), 16),
+  ];
+};
 
 const formatCEP = (val: any) => {
   if (!val) return '';
@@ -100,6 +117,7 @@ interface ConsultaCPFModalProps {
 }
 
 export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, addedContractsIds = [], onToggleContract }: ConsultaCPFModalProps) {
+  const { primaryColor } = useBranding();
   const [activeTab, setActiveTab] = useState(0);
   const [bancoPriority, setBancoPriority] = useState<string>('');
   const [activeCoefs, setActiveCoefs] = useState<Record<string, number>>({});
@@ -161,10 +179,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
   const handleGeneratePDF = () => {
     const doc = new jsPDF();
     const isSiape = !!personalInfo.isSiape;
+    const primaryRgb = hexToRgbTuple(primaryColor);
+    const pageWidth = doc.internal.pageSize.getWidth();
 
-    // Header Banner
-    doc.setFillColor(17, 82, 212);
-    doc.rect(0, 0, 210, 24, 'F');
+    // Header Banner - segue a identidade visual ativa do usuário
+    doc.setFillColor(...primaryRgb);
+    doc.rect(0, 0, pageWidth, 24, 'F');
 
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(13);
@@ -270,16 +290,23 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
       ? Math.floor((margemLivreVal / getMarginCoefficient()) * 100) / 100
       : 0;
 
+    const margemLivrePdfStyles = margemLivreVal < 0
+      ? { fillColor: [254, 242, 242] as [number, number, number], textColor: [153, 27, 27] as [number, number, number], fontStyle: 'bold' as const }
+      : { fillColor: [220, 252, 231] as [number, number, number], textColor: [21, 128, 61] as [number, number, number], fontStyle: 'bold' as const };
+
     const finRows = [
       [
         `Valor Benefício/Bruto: ${formatCurrency(valBen)}`,
         `Margem Consignável: ${formatCurrency(margemCons)}`,
-        `Total Comprometido: ${formatCurrency(totalComp)}`
+        {
+          content: `Total Comprometido: ${formatCurrency(totalComp)}`,
+          styles: { textColor: [220, 38, 38], fontStyle: 'bold' }
+        }
       ],
       [
         {
           content: `Margem Livre: ${formatCurrency(margemLivreVal)}`,
-          styles: { fillColor: [220, 252, 231], textColor: [21, 128, 61], fontStyle: 'bold' }
+          styles: margemLivrePdfStyles
         },
         {
           content: `Valor Liberado: ${formatCurrency(valLiberadoVal)}`,
@@ -333,23 +360,105 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
       doc.text(`5. Empréstimos Ativos - Total (${empList.length} Contratos)`, 14, y);
       y += 4;
 
-      const loansRows = empList.map((e: any) => [
-        formatBancoComCodigo(e.Banco, e.NomeBanco || getBancoName(e.Banco)),
-        e.Contrato || 'N/A',
-        formatCurrency(e.ValorParcela || 0),
-        formatCurrency(e.SaldoDevedor || 0),
-        `${e.ParcelasRestantes || 0}/${e.Prazo || 0}x`,
-        `${e.Taxa || '1.60'}%`
-      ]);
+      const loansRows = empList.map((e: any) => {
+        const prazoTotal = parseInt(e.Prazo || e.parcelas || 0);
+        const parcelasRestantes = parseInt(e.ParcelasRestantes || e.prazo_restante || 0);
+        const parcelasPagas = e.ParcelasPagas !== undefined
+          ? parseInt(e.ParcelasPagas)
+          : Math.max(0, prazoTotal - parcelasRestantes);
+        const taxa = e.Taxa || e.taxa || 0;
+        const valorOriginAPI = e.ValorEmprestado || e.ValorContrato || e.ValorFinanciado || e.ValorLiberado || e.SaldoDevedor || e.saldo || 0;
+        const valorOriginCalc = calculateSaldoDevedor(parseFloat(e.ValorParcela || 0), prazoTotal, taxa);
+        const valorOriginal = parseFloat(valorOriginAPI) > 0 ? parseFloat(valorOriginAPI) : valorOriginCalc;
+        const saldoAtual = calculateSaldoDevedor(parseFloat(e.ValorParcela || 0), parcelasRestantes, taxa);
+        const banco = formatBancoComCodigo(e.Banco, e.NomeBanco || getBancoName(e.Banco));
+        const averbacao = formatContractDate(e.DataAverbacao);
+        const inicio = formatContractMonth(e.InicioDesconto);
+        const final = formatContractMonth(e.FinalDesconto);
+        const inicioLabel = e.InicioDescontoCalculado && inicio !== 'N/A' ? `${inicio} calc.` : inicio;
+        const finalLabel = e.FinalDescontoCalculado && final !== 'N/A' ? `${final} calc.` : final;
+
+        return [
+          `${banco}
+Contrato: ${e.Contrato || 'N/A'}`,
+          averbacao,
+          `${inicioLabel} / ${finalLabel}`,
+          formatCurrency(e.ValorParcela || 0),
+          prazoTotal > 0 ? `${parcelasPagas}/${prazoTotal}` : `${parcelasRestantes} rest.`,
+          taxa ? `${parseFloat(taxa).toFixed(2).replace('.', ',')}%` : 'N/A',
+          valorOriginal > 0 ? formatCurrency(valorOriginal) : 'N/A',
+          formatCurrency(saldoAtual),
+        ];
+      });
 
       autoTable(doc, {
         startY: y,
-        head: [['Banco / Rubrica', 'Contrato', 'Parcela', 'Saldo Devedor', 'Prazo/Rest.', 'Taxa']],
+        head: [['Banco / Contrato', 'Averbação', 'Início / Final', 'Parcela', 'Prazo', 'Taxa', 'Valor Original', 'Saldo Atual']],
         body: loansRows,
         theme: 'striped',
-        headStyles: { fillColor: [17, 82, 212] },
-        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: primaryRgb },
+        styles: { fontSize: 6.5, cellPadding: 1.4, valign: 'middle' },
+        columnStyles: {
+          0: { cellWidth: 38 },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 28 },
+          3: { cellWidth: 21 },
+          4: { cellWidth: 15 },
+          5: { cellWidth: 15 },
+          6: { cellWidth: 23 },
+          7: { cellWidth: 22 },
+        },
       });
+
+      y = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    // 6. Refin C6 - inclui todas as condições positivas retornadas pela API
+    if (!isSiape && Array.isArray(c6RefinData?.results)) {
+      const refinRows = c6RefinData.results.flatMap((result: any) => {
+        const tables = Array.isArray(result?.tables) && result.tables.length > 0
+          ? result.tables
+          : (result?.summary ? [result.summary] : []);
+        return tables
+          .filter((table: any) => Number(table?.valorLiberado || 0) > 0)
+          .map((table: any) => [
+            result?.contrato || result?.summary?.contrato || 'N/A',
+            table?.tabela || 'Tabela C6',
+            `${table?.prazo || 108}x`,
+            table?.taxa ? `${Number(table.taxa).toFixed(2).replace('.', ',')}%` : 'N/A',
+            formatCurrency(Number(table?.parcela || 0)),
+            formatCurrency(Number(table?.valorLiberado || 0)),
+          ]);
+      });
+
+      if (refinRows.length > 0) {
+        if (y > 255) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`6. Refin C6 - Tabelas com Liberação (${refinRows.length})`, 14, y);
+        y += 4;
+
+        autoTable(doc, {
+          startY: y,
+          head: [['Contrato', 'Condição / Tabela', 'Prazo', 'Taxa', 'Parcela', 'Valor Liberado']],
+          body: refinRows,
+          theme: 'striped',
+          headStyles: { fillColor: primaryRgb },
+          styles: { fontSize: 7, cellPadding: 1.8 },
+          columnStyles: {
+            0: { cellWidth: 27 },
+            1: { cellWidth: 64 },
+            2: { cellWidth: 15 },
+            3: { cellWidth: 18 },
+            4: { cellWidth: 25 },
+            5: { cellWidth: 30 },
+          },
+        });
+      }
     }
 
     doc.save(`Consulta_CPF_${personalInfo.CPF}_${isSiape ? 'SIAPE' : 'INSS'}.pdf`);
@@ -681,12 +790,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
 
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
                         <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Total Comprometido</p>
-                        <p className="mt-0.5 text-lg font-black text-sky-600 dark:text-sky-400">{formatCurrency(totalComprometido)}</p>
+                        <p className="mt-0.5 text-lg font-black text-rose-600 dark:text-rose-400">{formatCurrency(totalComprometido)}</p>
                       </div>
 
                       <div className={`${margemLivre < 0 ? 'border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10' : 'border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'} rounded-xl border px-3 py-2.5`}>
-                        <p className={`text-[9px] font-bold uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-600/80' : 'text-emerald-600/80'}`}>Margem Livre</p>
-                        <p className={`mt-0.5 text-lg font-black ${margemLivre < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
+                        <p className={`text-[9px] font-bold uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600/80'}`}>Margem Livre</p>
+                        <p className={`mt-0.5 text-lg font-black ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
                       </div>
 
                       <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-primary to-primary-dark px-3 py-2.5 text-white shadow-md">

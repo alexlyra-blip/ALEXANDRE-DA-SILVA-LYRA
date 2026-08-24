@@ -117,11 +117,11 @@ export async function POST(req: Request) {
     let finalReply = reply;
     let pdfSimId = null;
 
-    // Intercept END_SESSION tag
-    if (finalReply.includes('[END_SESSION]')) {
-      finalReply = finalReply.replace(/\[END_SESSION\]/g, '').trim();
+    // Intercepta encerramento legado ou texto visível do atendimento
+    if (finalReply.includes('[END_SESSION]') || finalReply.includes('(Atendimento Finalizado)')) {
+      finalReply = finalReply.replace(/\[END_SESSION\]/g, '(Atendimento Finalizado)').trim();
       updatedHistory = []; // Wipe history on the server
-      console.log(`[${timestamp}] [END_SESSION] trigger detected. History wiped.`);
+      console.log(`[${timestamp}] Atendimento finalizado. History wiped.`);
     }
 
     // Intercept PDF tag

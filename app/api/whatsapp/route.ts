@@ -170,9 +170,9 @@ export async function POST(req: NextRequest) {
     ];
 
     try {
-      if (responseText.includes('[END_SESSION]')) {
+      if (responseText.includes('[END_SESSION]') || responseText.includes('(Atendimento Finalizado)')) {
         await sessionRef.set({ ...sessionData, history: [], lastUpdate: now, status: 'finished' });
-        responseText = responseText.replace('[END_SESSION]', '').trim();
+        responseText = responseText.replace(/\[END_SESSION\]/g, '(Atendimento Finalizado)').trim();
       } else {
         await sessionRef.set({ ...sessionData, history: updatedHistory, lastUpdate: now });
       }

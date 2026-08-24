@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       ];
 
       try {
-        if (replyText.includes('[END_SESSION]')) {
+        if (replyText.includes('[END_SESSION]') || replyText.includes('(Atendimento Finalizado)')) {
           await adminDb.collection('whatsappHistory').add({
             phone: senderNumber,
             userId: auth.user?.id || null,
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
             status: 'finished'
           });
           await sessionRef.set({ ...sessionData, history: [], lastUpdate: now, status: 'finished' });
-          replyText = replyText.replace('[END_SESSION]', '').trim();
+          replyText = replyText.replace(/\[END_SESSION\]/g, '(Atendimento Finalizado)').trim();
         } else {
           await sessionRef.set({ ...sessionData, history: updatedHistory, lastUpdate: now });
         }

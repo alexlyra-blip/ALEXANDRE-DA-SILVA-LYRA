@@ -1272,6 +1272,26 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
 
     const lower = message.toLowerCase().trim();
 
+    // Garante um protocolo real antes de qualquer fluxo rápido (inclusive CPF).
+    // Isso evita encerramentos com GUTTO-0000/N/A quando a primeira mensagem
+    // do cliente já é o CPF e o agente retorna antes do fluxo de saudação.
+    const ensureSessionProtocol = () => {
+        const current = String(sessionData.protocolNumber || '').trim();
+        const invalidProtocol = !current || current === 'GUTTO-0000' || current === 'N/A';
+        if (invalidProtocol || sessionData.status === 'finished') {
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
+            const randomHex = Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase();
+            sessionData.protocolNumber = `GUTTO-${dateStr}-${randomHex}`;
+            sessionData.status = 'active';
+            sessionData.createdAt = sessionData.createdAt || now;
+            console.log(`[Gutto] Protocolo garantido para a sessão: ${sessionData.protocolNumber}`);
+        }
+        return sessionData.protocolNumber as string;
+    };
+
+    const activeProtocol = ensureSessionProtocol();
+
     // Validar telefone/UID e carregar estado da sessão
     let userProfile = { role: 'admin' } as any;
     const db = getAdminDb();
@@ -1479,7 +1499,9 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     if (isThanks && wasLastMsgSimulation) {
         sessionData.extractedParams = {};
         sessionData.lastExtractedParams = null;
-        return `Por nada! 😊 Fico extremamente feliz em ajudar na sua busca pelas melhores taxas.\n\nEstou à sua total disposição sempre que precisar de uma nova simulação ou tirar dúvidas sobre portabilidade. Tenha um excelente dia e ótimos negócios! 🚀💼\n[END_SESSION]`;
+        const protocol = ensureSessionProtocol();
+        sessionData.status = 'finished';
+        return `De nada! Fico feliz em ajudar! 😊\n\nSe precisar de mais alguma coisa ou quiser fazer uma nova simulação, é só chamar.\n\nO seu protocolo de atendimento é: *${protocol}*.\n\nAté mais! 👋\n\n(Atendimento Finalizado)`;
     }
 
     // Interceptar consulta específica de tabelas de um determinado banco (ex: "tabelas do C6", "tabelas Daycoval")
@@ -1671,10 +1693,10 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
             const isEnd = words.every(w => endWords.includes(w) || w.length <= 3) && words.some(w => endWords.includes(w) && w.length >= 2);
 
             if (isEnd) {
+                const protocol = ensureSessionProtocol();
                 sessionData.status = 'finished';
-                const protocol = sessionData.protocolNumber || 'N/A';
                 console.log(`[Gutto] User thanked/ended session. Protocol: ${protocol}`);
-                return `Eu que agradeço! Fico muito feliz em ajudar.\n\nO seu número de protocolo de atendimento foi: *${protocol}*.\n\nEste atendimento foi encerrado. Se precisar de uma nova simulação no futuro, é só me mandar um 'Olá'. Um abraço e um excelente dia! ✨\n[END_SESSION]`;
+                return `De nada! Fico feliz em ajudar! 😊\n\nSe precisar de mais alguma coisa ou quiser fazer uma nova simulação, é só chamar.\n\nO seu protocolo de atendimento é: *${protocol}*.\n\nAté mais! 👋\n\n(Atendimento Finalizado)`;
             }
         }
 
@@ -1882,7 +1904,7 @@ ${bankRulesContext}
 ${coefsContext}
 
 SOBRE PROTOCOLO DE ATENDIMENTO E ENCERRAMENTO:
-- O número de protocolo deste atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}.
+- O número de protocolo deste atendimento é: ${activeProtocol}.
 - INÍCIO E APRESENTAÇÃO: O sistema já envia automaticamente a apresentação ("👋 Olá! Eu sou o Gutto... O seu protocolo é: GUTTO-XXX.") na primeira mensagem da conversa. Você NUNCA deve repetir essa apresentação inicial ou o número do protocolo na sua mensagem de saudação, apenas prossiga com as perguntas ou respostas de forma contínua.
 
 - APÓS A APRESENTAÇÃO INICIAL: Você deve perguntar se o cliente quer fazer uma simulação ou se quer consultar as regras, exatamente com este sentido:
@@ -1890,7 +1912,7 @@ SOBRE PROTOCOLO DE ATENDIMENTO E ENCERRAMENTO:
 
 - ATENÇÃO: NÃO peça o convênio na primeira mensagem. Espere o cliente responder o que ele deseja fazer.
 
-- ENCERRAMENTO: Se o cliente agradecer de forma final (ex: "Obrigado", "Valeu", "Não quero simular", "Tchau"), você DEVE se despedir de forma educada, agradecer o contato, REPETIR o número do protocolo e, obrigatoriamente, incluir a tag exata [END_SESSION] no final absoluto da sua mensagem. Isso avisará o sistema para encerrar a sessão.
+- ENCERRAMENTO: Se o cliente agradecer de forma final (ex: "Obrigado", "Valeu", "Não quero simular", "Tchau"), você DEVE se despedir de forma educada, agradecer o contato, REPETIR exatamente o número do protocolo informado acima e terminar com a frase exata *(Atendimento Finalizado)*. Nunca escreva [END_SESSION], GUTTO-0000 ou N/A como protocolo.
 
 SOBRE SIMULAR EM OUTRO BANCO APÓS A PRIMEIRA SIMULAÇÃO (REGRA DE OURO MÁXIMA):
 - Se o usuário JÁ realizou uma simulação com sucesso e, na sequência, apenas digitar o nome de um banco (ex: "Havecred", "Pan", "Itaú") ou pedir para ver a oferta dele, isso significa que ele quer RECÁLCULO. Você DEVE IMEDIATAMENTE E OBRIGATORIAMENTE chamar a ferramenta \`calculate_client_loan_offers\` informando este nome no campo "targetBankName".
@@ -2034,8 +2056,28 @@ Quando tiver TODOS os dados obrigatórios listados e coletados de fato pelas res
         if (isFirstMessage) {
             const userName = sessionData.pushName || userProfile.name || '';
             const greetingName = userName ? `Olá ${userName}, ` : 'Olá, ';
-            finalReply = `${greetingName}👋 Eu sou o Gutto, especialista em portabilidade de crédito consignado. 🤖✨\n\nO seu protocolo de atendimento é: ${sessionData.protocolNumber || 'GUTTO-0000'}.\n\nPodemos seguir para uma nova simulação de portabilidade? Ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: "Regras do C6" ou "Tabelas do Daycoval"!, Ou se quiser tirar apenas uma dúvida é so falar 🤝💼`;
+            finalReply = `${greetingName}👋 Eu sou o Gutto, especialista em portabilidade de crédito consignado. 🤖✨\n\nO seu protocolo de atendimento é: *${activeProtocol}*.\n\nPodemos seguir para uma nova simulação de portabilidade? Ou você também pode me perguntar as regras de portabilidade de qualquer banco, por exemplo: "Regras do C6" ou "Tabelas do Daycoval"!, Ou se quiser tirar apenas uma dúvida é so falar 🤝💼`;
         }
+
+        // Compatibilidade: se a IA ainda devolver a antiga tag, converte para o
+        // texto visível solicitado. Também garante que o protocolo real esteja
+        // presente em qualquer encerramento gerado pela IA.
+        const isFinalReply = finalReply.includes('[END_SESSION]') || finalReply.includes('(Atendimento Finalizado)');
+        if (isFinalReply) {
+            const protocol = ensureSessionProtocol();
+            sessionData.status = 'finished';
+            finalReply = finalReply
+                .replace(/\[END_SESSION\]/g, '(Atendimento Finalizado)')
+                .replace(/GUTTO-0000/g, protocol);
+
+            if (!finalReply.includes(protocol)) {
+                finalReply = finalReply.replace(
+                    /\(Atendimento Finalizado\)/g,
+                    `O seu protocolo de atendimento é: *${protocol}*.\n\n(Atendimento Finalizado)`
+                );
+            }
+        }
+
         return finalReply;
 
     } catch (error: any) {
