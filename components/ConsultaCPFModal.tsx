@@ -776,14 +776,15 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                 const c6AutoResult = Array.isArray(c6RefinData?.results)
                                   ? c6RefinData.results.find((result: any) => result?.key === c6Key)
                                   : null;
-                                const c6Tables = Array.isArray(c6AutoResult?.tables) && c6AutoResult.tables.length > 0
+                                const c6ReturnedTables = Array.isArray(c6AutoResult?.tables) && c6AutoResult.tables.length > 0
                                   ? c6AutoResult.tables
                                   : (c6AutoResult?.summary ? [c6AutoResult.summary] : []);
+                                const c6Tables = c6ReturnedTables.filter((table: any) => Number(table?.valorLiberado || 0) > 0);
                                 const selectedTableIndex = Math.min(
                                   Math.max(0, selectedC6Tables[c6Key] || 0),
                                   Math.max(0, c6Tables.length - 1),
                                 );
-                                const selectedC6Summary = c6Tables[selectedTableIndex] || c6AutoResult?.summary || null;
+                                const selectedC6Summary = c6Tables[selectedTableIndex] || null;
                                 const hasRefinDetails = Boolean(c6AutoResult && (c6Tables.length > 0 || c6AutoResult.error));
                                 const refinExpanded = Boolean(expandedC6Refins[c6Key]);
                                 const inicioIsCalculated = Boolean(emp.InicioDescontoCalculado);
@@ -851,6 +852,11 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                                   : 'Refin indisponível'}
                                               <ChevronDown className={`h-3 w-3 transition-transform ${refinExpanded ? 'rotate-180' : ''}`} />
                                             </button>
+                                          ) : c6AutoResult?.success ? (
+                                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[9px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                              <KeyRound className="h-3 w-3" />
+                                              Sem liberação C6
+                                            </span>
                                           ) : (
                                             <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[9px] font-black text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
                                               {c6RefinData?.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
@@ -879,15 +885,15 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                               <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                                                 <div>
                                                   <p className="text-xs font-black text-slate-800 dark:text-white">Refin C6 • Contrato {c6AutoResult.contrato}</p>
-                                                  <p className="text-[9px] uppercase tracking-wider text-slate-400">{c6Tables.length} {c6Tables.length === 1 ? 'condição retornada' : 'condições retornadas'} pelo C6 • primeira tabela permanece a oferta principal</p>
+                                                  <p className="text-[9px] uppercase tracking-wider text-slate-400">{c6Tables.length} {c6Tables.length === 1 ? 'tabela com liberação' : 'tabelas com liberação'} • somente condições com troco positivo</p>
                                                 </div>
                                                 {c6Tables.length > 1 && (
-                                                  <div className="min-w-0 lg:w-[360px]">
-                                                    <label className="mb-1 block text-[8px] font-black uppercase tracking-wider text-slate-500">Escolher tabela para visualizar</label>
+                                                  <div className="min-w-0 rounded-xl border-2 border-emerald-400 bg-emerald-50/70 p-2 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/10 lg:w-[460px]">
+                                                    <label className="mb-1 block text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Selecione a tabela com liberação</label>
                                                     <select
                                                       value={selectedTableIndex}
                                                       onChange={(event) => setSelectedC6Tables(prev => ({ ...prev, [c6Key]: Number(event.target.value) }))}
-                                                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] font-bold text-slate-700 outline-none focus:border-emerald-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                                      className="w-full rounded-lg border-2 border-emerald-500 bg-white px-3 py-2.5 text-[11px] font-black text-slate-800 shadow-sm outline-none ring-2 ring-emerald-100 transition focus:border-emerald-600 focus:ring-emerald-200 dark:border-emerald-500 dark:bg-slate-900 dark:text-white dark:ring-emerald-500/20"
                                                     >
                                                       {c6Tables.map((table: any, tableIndex: number) => (
                                                         <option key={`${c6Key}-table-${tableIndex}`} value={tableIndex}>
@@ -902,10 +908,10 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                                 </span>
                                               </div>
 
-                                              <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-                                                <div className="col-span-2 rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900 md:col-span-1">
+                                              <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(340px,2.4fr)_minmax(80px,0.65fr)_minmax(90px,0.75fr)_minmax(110px,0.9fr)_minmax(120px,1fr)]">
+                                                <div className="col-span-2 min-w-0 rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900 md:col-span-1">
                                                   <p className="text-[8px] font-bold uppercase text-slate-500">Condição / Tabela</p>
-                                                  <p className="mt-0.5 text-[11px] font-black text-slate-800 dark:text-white">
+                                                  <p className="mt-0.5 whitespace-nowrap text-[11px] font-black text-slate-800 dark:text-white">
                                                     {selectedC6Summary.tabela}{selectedC6Summary.codigoTabela ? ` • ${selectedC6Summary.codigoTabela}` : ''}
                                                   </p>
                                                 </div>

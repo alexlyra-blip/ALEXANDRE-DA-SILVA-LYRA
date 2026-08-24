@@ -1106,7 +1106,15 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
                     }
 
                     if (!firstSuccessful && top && rendered.displayedOffer) {
-                        firstSuccessful = { item, params, top, offers, sortedOffers };
+                        firstSuccessful = {
+                            item,
+                            params,
+                            top,
+                            offers,
+                            sortedOffers,
+                            displayedOffer: rendered.displayedOffer,
+                            c6RefinAvailable: Boolean(c6Refin.available),
+                        };
                     }
 
                     if (rendered.displayedOffer) {
@@ -1192,24 +1200,60 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
             response += `\n\n💰 *TOTAL LIBERADO: R$ ${fmt(totalReleased)}*`;
         }
 
-        // Mantém o mesmo pós-simulação do fluxo tradicional do Gutto:
-        // o usuário pode navegar por outros bancos, tabelas e prazos sem reiniciar a consulta.
+        // Pós-simulação inteligente: só oferece uma ação quando existe uma alternativa real
+        // para o mesmo contrato usado como referência. Evita instruções sem utilidade.
         if (firstSuccessful) {
-            const firstBank = String(firstSuccessful?.top?.name || '').trim().toUpperCase();
+            const positiveOffers = (firstSuccessful?.offers || []).filter(
+                (offer: any) => Math.max(0, parseAutomaticNumber(offer?.valorTroco)) > 0,
+            );
+            const firstBank = cleanAutomaticBankName(firstSuccessful?.top?.name || '');
+            const positiveBankNames = Array.from(new Set(
+                positiveOffers
+                    .map((offer: any) => cleanAutomaticBankName(offer?.name))
+                    .filter((name: string) => name && name !== 'BANCO NÃO INFORMADO'),
+            ));
+            const firstBankOffers = positiveOffers.filter(
+                (offer: any) => checkBankMatch(cleanAutomaticBankName(offer?.name), firstBank),
+            );
+            const tableNames = Array.from(new Set(
+                firstBankOffers
+                    .map((offer: any) => String(offer?.tabela || '').trim().toUpperCase())
+                    .filter((table: string) => table.length > 0),
+            ));
             const availableTerms = Array.from(new Set(
-                (firstSuccessful?.offers || [])
+                firstBankOffers
                     .map((offer: any) => Number(offer?.prazoRefinPort || 0))
                     .filter((term: number) => term > 0),
             )).sort((a: number, b: number) => b - a);
+            const currentTerm = Number(firstSuccessful?.top?.prazoRefinPort || 0);
+            const alternateTerms = availableTerms.filter((term: number) => term !== currentTerm);
+            const displayedBank = cleanAutomaticBankName(firstSuccessful?.displayedOffer?.name || firstBank);
+            const otherBanks = positiveBankNames.filter((name: string) => !checkBankMatch(name, displayedBank));
 
-            response += `\n\n━━━━━━━━━━━━━━━━━━━━`;
-            response += `\n💬 *OPÇÕES DA SIMULAÇÃO*`;
-            response += `\n🏛️ Para ver a simulação em outro banco elegível, envie o *nome do banco* mostrado acima.`;
-            response += `\n📊 Para ver todas as tabelas${firstBank ? ` do *${firstBank}*` : ''}, digite *TABELAS*.`;
-            if (availableTerms.length > 0) {
-                response += `\n📅 Para consultar um prazo específico, digite por exemplo *TABELAS ${availableTerms[0]}*.`;
+            const hasOtherBank = otherBanks.length > 0;
+            const hasMoreTables = tableNames.length > 1;
+            const hasOtherTerms = availableTerms.length > 1;
+            const hasNavigationOptions = hasOtherBank || hasMoreTables || hasOtherTerms;
+
+            if (hasNavigationOptions) {
+                response += `\n\n━━━━━━━━━━━━━━━━━━━━`;
+                response += `\n💬 *OPÇÕES DA SIMULAÇÃO*`;
+
+                if (hasOtherBank) {
+                    response += `\n🏛️ Outros bancos com oferta para este contrato: *${otherBanks.join(', ')}*.`;
+                    response += `\n➡️ Envie o *nome do banco* para ver a outra simulação.`;
+                }
+
+                if (hasMoreTables || hasOtherTerms) {
+                    response += `\n📊 Existem outras ${hasMoreTables ? 'tabelas' : 'condições'}${firstBank ? ` no *${firstBank}*` : ''}. Digite *TABELAS* para visualizar.`;
+                }
+
+                if (hasOtherTerms && alternateTerms.length > 0) {
+                    response += `\n📅 Também há outro prazo disponível. Exemplo: *TABELAS ${alternateTerms[0]}*.`;
+                }
+
+                response += `\n✅ Você pode continuar por aqui sem iniciar uma nova simulação.`;
             }
-            response += `\n✅ Você pode continuar por aqui sem iniciar uma nova simulação.`;
         }
 
         return response;
