@@ -952,32 +952,33 @@ function buildAutomaticContractBlock(
         };
     } else if (top) {
         releasedAmount = Math.max(0, parseAutomaticNumber(top?.valorTroco));
-        simulationName = cleanAutomaticBankName(top?.name);
-        simulationTable = String(top?.tabela || 'TABELA DISPONÍVEL').toUpperCase();
-        displayedOffer = top;
+        if (releasedAmount > 0) {
+            simulationName = cleanAutomaticBankName(top?.name);
+            simulationTable = String(top?.tabela || 'TABELA DISPONÍVEL').toUpperCase();
+            displayedOffer = top;
+        }
     }
 
     const chosenBankName = displayedOffer ? cleanAutomaticBankName(displayedOffer?.name) : '';
     const others = bankNames.filter((name: string) => name && (!chosenBankName || !checkBankMatch(name, chosenBankName)));
 
-    let block = `📑 CONTRATO ${contractIndex}: *${item?.contrato || 'NÃO INFORMADO'}*\n`;
+    if (!displayedOffer) {
+        return { text: '', displayedOffer: null };
+    }
+
+    let block = `📌 *CONTRATO ${contractIndex}:* ${item?.contrato || 'NÃO INFORMADO'}\n`;
     block += `🏦 BANCO: ${cleanAutomaticBankName(item?.bancoNome || params?.bancoAtual)}\n`;
     block += `🔢 PARCELAS RESTANTES: ${params?.parcelasRestantes || 0}\n`;
     block += `💵 VALOR DE PARCELA: R$ ${fmt(parseAutomaticNumber(params?.valorParcela))}\n`;
     block += `💳 SALDO DEVEDOR: R$ ${fmt(parseAutomaticNumber(params?.saldoDevedor))}\n`;
+    block += `\n🏆 SIMULAÇÃO: *${simulationName}*\n`;
+    block += `🏷️ TABELA: ${simulationTable}\n`;
+    block += `💰 VALOR LIBERADO: *R$ ${fmt(releasedAmount)}*`;
 
-    if (displayedOffer) {
-        block += `\n🏆 SIMULAÇÃO: *${simulationName}*\n`;
-        block += `🏷️ TABELA: ${simulationTable}\n`;
-        block += `💰 VALOR LIBERADO: *R$ ${fmt(releasedAmount)}*`;
-        // Refinanciamento C6 é uma operação interna do próprio banco.
-        // Neste caso não exibimos bancos alternativos; a lista de outros bancos
-        // é exclusiva das simulações de portabilidade.
-        if (!c6Refin.available && others.length > 0) {
-            block += `\n✅ OUTROS BANCOS DISPONÍVEIS: ${others.join('/ ')}`;
-        }
-    } else {
-        block += `\n❌ *SEM SIMULAÇÃO DISPONÍVEL PARA ESTE CONTRATO*`;
+    // Refinanciamento C6 é uma operação interna do próprio banco.
+    // Bancos alternativos aparecem somente na Portabilidade.
+    if (!c6Refin.available && others.length > 0) {
+        block += `\n✅ OUTROS BANCOS DISPONÍVEIS: ${others.join('/ ')}`;
     }
 
     return { text: block, displayedOffer };
@@ -1028,7 +1029,6 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
         response += `======================`;
 
         let firstSuccessful: any = null;
-        let totalWithOffer = 0;
 
         // Totais consolidados exibidos ao final da consulta.
         // Margem livre soma apenas valores efetivamente positivos/liberáveis.
@@ -1054,9 +1054,10 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
             response += `💵 VALOR R$: ${fmt(margin.benefitValue)}\n`;
             response += `📊 MARGEM DISPONÍVEL: R$ ${fmt(margin.availableMargin)} (LIBERA *R$ ${fmt(margin.releasedAmount)}*)`;
 
-            if (benefitContracts.length === 0) {
-                response += `\n\n❌ *SEM CONTRATOS DISPONÍVEIS PARA SIMULAÇÃO*`;
-            } else {
+            const benefitSimulationBlocks: string[] = [];
+            let displayedContractNumber = 0;
+
+            if (benefitContracts.length > 0) {
                 for (let contractIndex = 0; contractIndex < benefitContracts.length; contractIndex++) {
                     const item = benefitContracts[contractIndex];
                     const params: any = { ...item.params };
@@ -1079,24 +1080,32 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
                         sd?.blockedBanks || [],
                     );
                     const { top, sortedOffers } = getTopOfferForAutomaticCpf(offers, pp);
-                    const rendered = buildAutomaticContractBlock(item, contractIndex + 1, offers, top, c6Refin);
-                    response += `\n\n${rendered.text}`;
+                    const rendered = buildAutomaticContractBlock(
+                        item,
+                        displayedContractNumber + 1,
+                        offers,
+                        top,
+                        c6Refin,
+                    );
 
-                    if (rendered.displayedOffer) {
+                    // O Gutto mostra somente contratos com uma simulação realmente disponível.
+                    if (rendered.displayedOffer && rendered.text) {
+                        displayedContractNumber++;
+                        benefitSimulationBlocks.push(rendered.text);
+
                         const released = Math.max(0, parseAutomaticNumber(rendered.displayedOffer?.valorTroco));
                         if (released > 0) {
-                            totalWithOffer++;
                             if (c6Refin.available) {
                                 c6RefinCount++;
                                 totalC6RefinReleased += released;
                             } else {
-                                // Cada contrato com oferta principal válida conta como uma proposta de Portabilidade.
                                 portabilityCount++;
                                 totalPortabilityReleased += released;
                             }
                         }
                     }
-                    if (!firstSuccessful && top) {
+
+                    if (!firstSuccessful && top && rendered.displayedOffer) {
                         firstSuccessful = { item, params, top, offers, sortedOffers };
                     }
 
@@ -1137,6 +1146,12 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
                 }
             }
 
+            if (benefitSimulationBlocks.length > 0) {
+                response += `\n\n${benefitSimulationBlocks.join('\n\n--------------------------------------------\n\n')}`;
+            } else {
+                response += `\n\n❌ *NENHUM CONTRATO ELEGÍVEL PARA PORTABILIDADE PARA ESTE BENEFÍCIO*`;
+            }
+
             if (benefitIndex < benefits.length - 1) {
                 response += `\n\n--------------------------------------------`;
             }
@@ -1153,9 +1168,6 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
         sessionData.lastDailyMarginCoefficient = dailyMarginCoefficient;
         sessionData.status = 'active';
 
-        if (totalWithOffer === 0) {
-            response += `\n\nℹ️ Não foi encontrada oferta elegível para os contratos retornados neste CPF.`;
-        }
 
         const totalReleased = totalMarginReleased + totalPortabilityReleased + totalC6RefinReleased;
         response += `\n\n======================`;

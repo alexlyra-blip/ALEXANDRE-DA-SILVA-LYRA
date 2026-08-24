@@ -21,6 +21,7 @@ import {
   Save,
   ShieldCheck,
   Trash2,
+  ChevronDown,
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
@@ -65,6 +66,7 @@ export default function ConsultaCPFPage() {
   const [showC6Password, setShowC6Password] = useState(false);
   const [savingC6Credential, setSavingC6Credential] = useState(false);
   const [testingC6Credential, setTestingC6Credential] = useState(false);
+  const [isBankCredentialsOpen, setIsBankCredentialsOpen] = useState(false);
 
   const [history, setHistory] = useState<CpfHistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -148,6 +150,7 @@ export default function ConsultaCPFPage() {
       });
       setC6Password('');
       setShowC6Password(false);
+      setIsBankCredentialsOpen(false);
       showToast(
         'Credencial C6 validada e salva com segurança',
         'success',
@@ -250,6 +253,7 @@ export default function ConsultaCPFPage() {
       });
       setC6Username('');
       setC6Password('');
+      setIsBankCredentialsOpen(true);
       showToast('Credencial C6 removida', 'success');
     } catch (error: any) {
       showToast(
@@ -280,6 +284,12 @@ export default function ConsultaCPFPage() {
   useEffect(() => {
     loadC6CredentialStatus();
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (c6CredentialStatus.needsUpdate) {
+      setIsBankCredentialsOpen(true);
+    }
+  }, [c6CredentialStatus.needsUpdate]);
 
   const formatCPF = (value: any) => {
     if (!value) return '';
@@ -449,115 +459,141 @@ export default function ConsultaCPFPage() {
               </div>
             </div>
 
-            <div className="mb-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950/40 p-4">
-              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
-                <div>
-                  <h2 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-2">
-                    <KeyRound className="w-4 h-4 text-amber-500" />
-                    Credencial C6 Consignado
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    A credencial é individual por usuário. Ela é validada no C6 antes de ser salva e usada automaticamente nos contratos C6 da consulta INSS.
-                  </p>
+            <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950/40">
+              <button
+                type="button"
+                onClick={() => setIsBankCredentialsOpen(value => !value)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/60"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-slate-950 text-[11px] font-black tracking-tight text-white shadow-sm dark:bg-white dark:text-slate-950">
+                    C6
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-slate-800 dark:text-white">
+                      Credenciais bancárias
+                    </p>
+                    <p className={`mt-0.5 text-[11px] font-semibold ${
+                      c6CredentialStatus.needsUpdate
+                        ? 'text-rose-600 dark:text-rose-300'
+                        : c6CredentialStatus.configured
+                          ? 'text-emerald-600 dark:text-emerald-300'
+                          : 'text-slate-500'
+                    }`}>
+                      {c6CredentialStatus.loading
+                        ? 'Verificando credencial C6...'
+                        : c6CredentialStatus.needsUpdate
+                          ? 'C6 Consignado • atualização necessária'
+                          : c6CredentialStatus.configured
+                            ? 'C6 Consignado • credencial salva'
+                            : 'C6 Consignado • adicionar credencial'}
+                    </p>
+                  </div>
                 </div>
-                <div className={`text-[10px] uppercase tracking-wider font-black px-3 py-1.5 rounded-full w-fit ${
-                  c6CredentialStatus.needsUpdate
-                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
-                    : c6CredentialStatus.configured
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                      : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
-                }`}>
-                  {c6CredentialStatus.loading
-                    ? 'Verificando...'
-                    : c6CredentialStatus.needsUpdate
-                      ? 'Atualização necessária'
-                      : c6CredentialStatus.configured
-                        ? `Configurada ${c6CredentialStatus.usernameHint ? `• ${c6CredentialStatus.usernameHint}` : ''}`
-                        : 'Não configurada'}
-                </div>
-              </div>
 
-              {c6CredentialStatus.needsUpdate && (
-                <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
-                  O C6 recusou a credencial cadastrada. Informe a nova senha/usuário abaixo. A credencial anterior só é substituída depois de uma autenticação válida.
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  {c6CredentialStatus.configured && !c6CredentialStatus.needsUpdate && (
+                    <span className="hidden rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 sm:inline-flex dark:bg-emerald-500/10 dark:text-emerald-300">
+                      Credencial salva
+                    </span>
+                  )}
+                  <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isBankCredentialsOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </button>
+
+              {isBankCredentialsOpen && (
+                <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-4 dark:border-slate-800 dark:bg-slate-950/70">
+                  <div className="mb-3 flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4 text-amber-500" />
+                      <p className="text-xs font-black text-slate-800 dark:text-white">C6 Consignado</p>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      A credencial é individual, validada no C6 antes de ser salva e usada automaticamente no refinanciamento INSS.
+                    </p>
+                  </div>
+
+                  {c6CredentialStatus.needsUpdate && (
+                    <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                      O C6 recusou a credencial cadastrada. Informe usuário e senha atualizados. A credencial anterior só será substituída depois de uma autenticação válida.
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                    <input
+                      value={c6Username}
+                      onChange={(e) => setC6Username(e.target.value)}
+                      autoComplete="off"
+                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900"
+                      placeholder={c6CredentialStatus.configured ? 'Novo usuário C6 para substituir' : 'Usuário C6'}
+                    />
+
+                    <div className="relative">
+                      <input
+                        type={showC6Password ? 'text' : 'password'}
+                        value={c6Password}
+                        onChange={(e) => setC6Password(e.target.value)}
+                        autoComplete="new-password"
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900"
+                        placeholder={c6CredentialStatus.configured ? 'Nova senha para substituir' : 'Senha C6'}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowC6Password(value => !value)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                      >
+                        {showC6Password
+                          ? <EyeOff className="h-4 w-4" />
+                          : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={saveC6Credential}
+                      disabled={savingC6Credential}
+                      className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-black text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                    >
+                      {savingC6Credential
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <Save className="h-4 w-4" />}
+                      {c6CredentialStatus.configured ? 'Atualizar credencial' : 'Salvar credencial'}
+                    </button>
+
+                    {c6CredentialStatus.configured && (
+                      <button
+                        type="button"
+                        onClick={testC6Credential}
+                        disabled={testingC6Credential}
+                        className="flex h-9 items-center gap-2 rounded-xl border border-emerald-200 px-3.5 text-xs font-black text-emerald-700 disabled:opacity-50 dark:text-emerald-300"
+                      >
+                        {testingC6Credential
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <ShieldCheck className="h-4 w-4" />}
+                        Testar
+                      </button>
+                    )}
+
+                    {c6CredentialStatus.configured && (
+                      <button
+                        type="button"
+                        onClick={deleteC6Credential}
+                        className="flex h-9 items-center gap-2 rounded-xl border border-rose-200 px-3.5 text-xs font-black text-rose-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Remover
+                      </button>
+                    )}
+
+                    <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                      Senha protegida com AES-256-GCM.
+                    </span>
+                  </div>
                 </div>
               )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <input
-                  value={c6Username}
-                  onChange={(e) => setC6Username(e.target.value)}
-                  autoComplete="off"
-                  className="h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder={c6CredentialStatus.configured ? 'Novo usuário C6 para substituir' : 'Usuário C6'}
-                />
-
-                <div className="relative">
-                  <input
-                    type={showC6Password ? 'text' : 'password'}
-                    value={c6Password}
-                    onChange={(e) => setC6Password(e.target.value)}
-                    autoComplete="new-password"
-                    className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder={c6CredentialStatus.configured ? 'Nova senha para substituir' : 'Senha C6'}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowC6Password(value => !value)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  >
-                    {showC6Password
-                      ? <EyeOff className="w-4 h-4" />
-                      : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={saveC6Credential}
-                  disabled={savingC6Credential}
-                  className="h-10 px-4 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-black flex items-center gap-2 disabled:opacity-50"
-                >
-                  {savingC6Credential
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <Save className="w-4 h-4" />}
-                  {c6CredentialStatus.configured
-                    ? 'Atualizar credencial'
-                    : 'Salvar credencial'}
-                </button>
-
-                {c6CredentialStatus.configured && (
-                  <button
-                    type="button"
-                    onClick={testC6Credential}
-                    disabled={testingC6Credential}
-                    className="h-10 px-4 rounded-xl border border-emerald-200 text-emerald-700 dark:text-emerald-300 text-xs font-black flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {testingC6Credential
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <ShieldCheck className="w-4 h-4" />}
-                    Testar credencial
-                  </button>
-                )}
-
-                {c6CredentialStatus.configured && (
-                  <button
-                    type="button"
-                    onClick={deleteC6Credential}
-                    className="h-10 px-4 rounded-xl border border-rose-200 text-rose-600 text-xs font-black flex items-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Remover
-                  </button>
-                )}
-
-                <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                  Senha criptografada com AES-256-GCM e vinculada ao seu usuário.
-                </span>
-              </div>
             </div>
 
             <form onSubmit={(e) => handleConsultaCPF(e, false)} className="space-y-6">

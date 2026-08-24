@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap, Download, KeyRound } from 'lucide-react';
+import { Fragment, useState, useEffect } from 'react';
+import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap, Download, KeyRound, ChevronDown } from 'lucide-react';
 import { formatCurrency, formatCPF } from '@/lib/utils';
 import { getEspecieName, getBancoName, calculateSaldoDevedor, BANCOS_BRASIL } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
@@ -49,6 +49,20 @@ const formatBancoComCodigo = (bancoCode: string | number | null | undefined, ban
   return nameWithoutCode ? `${paddedCode} - ${nameWithoutCode}` : paddedCode;
 };
 
+const formatContractDate = (value: any) => {
+  if (!value) return 'N/A';
+  const raw = String(value).trim();
+  if (!raw) return 'N/A';
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+
+  const brMatch = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
+  if (brMatch) return `${brMatch[1]}/${brMatch[2]}/${brMatch[3]}`;
+
+  return raw;
+};
+
 interface ConsultaCPFModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -63,9 +77,13 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
   const [bancoPriority, setBancoPriority] = useState<string>('');
   const [activeCoefs, setActiveCoefs] = useState<Record<string, number>>({});
   const [coefDate, setCoefDate] = useState<string>('');
+  const [expandedC6Refins, setExpandedC6Refins] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (isOpen) setActiveTab(0);
+    if (isOpen) {
+      setActiveTab(0);
+      setExpandedC6Refins({});
+    }
   }, [isOpen, data]);
 
   useEffect(() => {
@@ -463,18 +481,6 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                 const rmc = Array.isArray(b.Rmc) ? b.Rmc : (b.Rmc ? [b.Rmc] : []);
                 const rcc = Array.isArray(b.RCC) ? b.RCC : (b.RCC ? [b.RCC] : []);
                 const cartoes = [...rmc, ...rcc];
-                const c6Contracts = emprestimos.filter((emp: any) => {
-                  const code = String(emp?.Banco || emp?.IdBanco || '')
-                    .replace(/\D/g, '')
-                    .padStart(3, '0');
-                  const name = String(
-                    emp?.NomeBanco || emp?.Rubrica || '',
-                  ).toUpperCase();
-                  return code === '626'
-                    || name.includes('C6 CONSIGNADO')
-                    || name.includes('C6 CONSIG');
-                });
-
                 // Somar parcelas de empréstimos e cartões
                 let totalComprometidoEmprestimos = 0;
                 emprestimos.forEach((e: any) => totalComprometidoEmprestimos += parseFloat(e.ValorParcela || 0));
@@ -632,358 +638,242 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                       </div>
                     </div>
 
-                    {/* Margens */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 text-center">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Margem Consignável</p>
-                        <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavel)}</p>
-                        <p className="text-[9px] text-slate-400 mt-1">
+                    {/* Margens - resumo compacto */}
+                    <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Margem Consignável</p>
+                        <p className="mt-0.5 text-lg font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavel)}</p>
+                        <p className="mt-0.5 truncate text-[8px] text-slate-400">
                           {isSiape
-                            ? `(40% da Base ${formatCurrency(base)})`
-                            : `(${isLoas ? '35%' : '40%'} do Benefício ${formatCurrency(valorBeneficio)})`}
+                            ? `40% da Base ${formatCurrency(base)}`
+                            : `${isLoas ? '35%' : '40%'} do Benefício ${formatCurrency(valorBeneficio)}`}
                         </p>
                       </div>
 
-                      <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 text-center">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Total Comprometido</p>
-                        <p className="text-xl font-black text-sky-600 dark:text-sky-400">{formatCurrency(totalComprometido)}</p>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Total Comprometido</p>
+                        <p className="mt-0.5 text-lg font-black text-sky-600 dark:text-sky-400">{formatCurrency(totalComprometido)}</p>
                       </div>
 
-                      <div className={`${margemLivre < 0 ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20' : 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20'} rounded-2xl p-4 border text-center`}>
-                        <p className={`text-[10px] uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-600/80' : 'text-emerald-600/80'} font-bold mb-1`}>Margem Livre</p>
-                        <p className={`text-xl font-black ${margemLivre < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
+                      <div className={`${margemLivre < 0 ? 'border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10' : 'border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'} rounded-xl border px-3 py-2.5`}>
+                        <p className={`text-[9px] font-bold uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-600/80' : 'text-emerald-600/80'}`}>Margem Livre</p>
+                        <p className={`mt-0.5 text-lg font-black ${margemLivre < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
                       </div>
 
-                      <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl p-4 shadow-lg text-center relative overflow-hidden text-white border border-white/10 flex flex-col justify-between">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-
-                        <div className="flex justify-between items-start w-full relative z-10 mb-2">
-                           <p className="text-[10px] uppercase tracking-wider text-white/80 font-bold mb-1">Valor Liberado</p>
-                           {bancoPriority && (
-                             <span className="text-[9px] uppercase tracking-wider bg-white/20 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
-                               <Landmark className="w-3 h-3" />
-                               {BANCOS_BRASIL[bancoPriority] || bancoPriority}
-                             </span>
-                           )}
-                        </div>
-
-                        <p className="text-2xl font-black relative z-10">
-                          {bancoPriority ? formatCurrency(valorLiberado) : 'R$ 0,00'}
-                        </p>
-
-                        <div className="relative z-10 mt-3 flex flex-col gap-1 items-center w-full">
-                          <select
-                            className="bg-white/10 border border-white/20 rounded-xl text-[10px] text-white px-2 py-1.5 outline-none w-full cursor-pointer font-bold"
-                            value={bancoPriority}
-                            onChange={(e) => setBancoPriority(e.target.value)}
-                          >
-                            {Object.keys(activeCoefs).length === 0 ? (
-                              <option value="" className="text-slate-900 font-semibold">Sem coeficientes para este convênio</option>
-                            ) : (
-                              <>
-                                <option value="" className="text-slate-900 font-semibold">Selecione o Banco Preferencial</option>
-                                {Object.entries(activeCoefs).map(([code, val]) => (
-                                  <option key={code} value={code} className="text-slate-900 font-semibold">
-                                    {code} - {BANCOS_BRASIL[code] || code} (Coef: {val.toString().replace('.', ',')})
-                                  </option>
-                                ))}
-                              </>
-                            )}
-                          </select>
-                          {bancoPriority && activeCoefs[bancoPriority] ? (
-                            <p className="text-[9px] text-white/80 font-semibold mt-1">Coef. Aplicado: {activeCoefs[bancoPriority].toString().replace('.', ',')}</p>
-                          ) : (
-                            <p className="text-[9px] text-amber-200 font-semibold mt-1">Selecione um banco para calcular</p>
+                      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-primary to-primary-dark px-3 py-2.5 text-white shadow-md">
+                        <div className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-white/10 blur-xl"></div>
+                        <div className="relative z-10 flex items-center justify-between gap-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-white/80">Valor Liberado</p>
+                          {bancoPriority && (
+                            <span className="max-w-[92px] truncate rounded-full bg-white/15 px-2 py-0.5 text-[8px] font-bold">
+                              {BANCOS_BRASIL[bancoPriority] || bancoPriority}
+                            </span>
                           )}
                         </div>
+                        <p className="relative z-10 mt-0.5 text-xl font-black">
+                          {bancoPriority ? formatCurrency(valorLiberado) : 'R$ 0,00'}
+                        </p>
+                        <select
+                          className="relative z-10 mt-1.5 h-7 w-full cursor-pointer rounded-lg border border-white/20 bg-white/10 px-2 text-[9px] font-bold text-white outline-none"
+                          value={bancoPriority}
+                          onChange={(e) => setBancoPriority(e.target.value)}
+                        >
+                          {Object.keys(activeCoefs).length === 0 ? (
+                            <option value="" className="font-semibold text-slate-900">Sem coeficientes</option>
+                          ) : (
+                            <>
+                              <option value="" className="font-semibold text-slate-900">Banco preferencial</option>
+                              {Object.entries(activeCoefs).map(([code, val]) => (
+                                <option key={code} value={code} className="font-semibold text-slate-900">
+                                  {code} - {BANCOS_BRASIL[code] || code} ({val.toString().replace('.', ',')})
+                                </option>
+                              ))}
+                            </>
+                          )}
+                        </select>
                       </div>
                     </div>
 
-                    {/* Refinanciamento C6 Consignado automático */}
-                    {!isSiape && c6Contracts.length > 0 && (
-                      <div className="bg-gradient-to-br from-slate-950 to-slate-900 rounded-2xl p-5 border border-slate-700 shadow-lg text-white">
-                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                          <div>
-                            <h3 className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-                              <KeyRound className="w-4 h-4 text-amber-400" />
-                              Refinanciamento C6 Consignado
-                            </h3>
-                            <p className="text-xs text-slate-300 mt-1">
-                              {c6Contracts.length} contrato(s) C6 identificado(s). O sistema consulta automaticamente o refin em 108x e utiliza a primeira condição retornada pelo C6.
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs font-bold">
-                            {c6RefinData?.loading ? (
-                              <>
-                                <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-                                Consultando refin automaticamente...
-                              </>
-                            ) : c6RefinData?.configured ? (
-                              <span className="text-emerald-300">
-                                ✓ Credencial vinculada ao usuário
-                              </span>
-                            ) : (
-                              <span className="text-amber-300">
-                                Configure a credencial C6 na tela de Consulta CPF
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {c6RefinData?.error && (
-                          <p className="mt-3 text-xs text-rose-300">
-                            {c6RefinData.error}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Tabela de Empréstimos */}
+                    {/* Empréstimos ativos - visual compacto */}
                     {emprestimos.length > 0 && (
-                      <div className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
-                          <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                            <Landmark className="w-4 h-4 text-primary" />
+                      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/50">
+                          <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">
+                            <Landmark className="h-4 w-4 text-primary" />
                             Empréstimos Ativos
                           </h3>
-                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-primary" />
-                            {emprestimos.length} {emprestimos.length === 1 ? 'Contrato Ativo' : 'Contratos Ativos'}
+                          <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary">
+                            {emprestimos.length} {emprestimos.length === 1 ? 'ativo' : 'ativos'}
                           </span>
                         </div>
+
                         <div className="overflow-x-auto">
-                          <table className="w-full text-sm text-left">
-                            <thead className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                          <table className="w-full min-w-[980px] text-left text-xs">
+                            <thead className="border-b border-slate-200 bg-slate-50 text-[9px] uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900">
                               <tr>
-                                <th className="px-4 py-3 font-bold">Banco</th>
-                                <th className="px-4 py-3 font-bold">Contrato</th>
-                                <th className="px-4 py-3 font-bold">Parcela</th>
-                                <th className="px-4 py-3 font-bold">Prazo</th>
-                                <th className="px-4 py-3 font-bold">Taxa</th>
-                                <th className="px-4 py-3 font-bold">Valor Origin</th>
-                                <th className="px-4 py-3 font-bold">Saldo Atual</th>
-                                <th className="px-4 py-3 font-bold text-right">Ação</th>
+                                <th className="px-3 py-2.5 font-bold">Banco / Contrato</th>
+                                <th className="px-3 py-2.5 font-bold">Início</th>
+                                <th className="px-3 py-2.5 font-bold">Final</th>
+                                <th className="px-3 py-2.5 font-bold">Parcela</th>
+                                <th className="px-3 py-2.5 font-bold">Prazo</th>
+                                <th className="px-3 py-2.5 font-bold">Taxa</th>
+                                <th className="px-3 py-2.5 font-bold">Valor Original</th>
+                                <th className="px-3 py-2.5 font-bold">Saldo Atual</th>
+                                <th className="px-3 py-2.5 text-right font-bold">Ação</th>
                               </tr>
                             </thead>
                             <tbody>
                               {emprestimos.map((emp: any, idx: number) => {
                                 const prazoTotal = parseInt(emp.Prazo || emp.parcelas || 0);
                                 const parcelasRestantes = parseInt(emp.ParcelasRestantes || emp.prazo_restante || 0);
-                                const parcelasPagas = emp.ParcelasPagas !== undefined ? parseInt(emp.ParcelasPagas) : Math.max(0, prazoTotal - parcelasRestantes);
+                                const parcelasPagas = emp.ParcelasPagas !== undefined
+                                  ? parseInt(emp.ParcelasPagas)
+                                  : Math.max(0, prazoTotal - parcelasRestantes);
                                 const taxa = emp.Taxa || emp.taxa || 0;
-
                                 const valorOriginAPI = emp.ValorEmprestado || emp.ValorContrato || emp.ValorFinanciado || emp.ValorLiberado || emp.SaldoDevedor || emp.saldo || 0;
                                 const valorOriginCalc = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), prazoTotal, taxa);
                                 const valorOrigin = parseFloat(valorOriginAPI) > 0 ? parseFloat(valorOriginAPI) : valorOriginCalc;
-
                                 const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
-                                const bancoNomeSemPrefixo = getBancoName(emp.Banco) !== String(emp.Banco || '') ? getBancoName(emp.Banco) : (emp.NomeBanco || emp.Banco || '');
+                                const bancoNomeSemPrefixo = getBancoName(emp.Banco) !== String(emp.Banco || '')
+                                  ? getBancoName(emp.Banco)
+                                  : (emp.NomeBanco || emp.Banco || '');
                                 const bancoExibicao = formatBancoComCodigo(emp.Banco, bancoNomeSemPrefixo);
-                                const bancoCode = String(emp.Banco || emp.IdBanco || '')
-                                  .replace(/\D/g, '')
-                                  .padStart(3, '0');
+                                const bancoCode = String(emp.Banco || emp.IdBanco || '').replace(/\D/g, '').padStart(3, '0');
                                 const isC6Consignado = bancoCode === '626'
-                                  || String(emp.NomeBanco || emp.Rubrica || '')
-                                    .toUpperCase()
-                                    .includes('C6 CONSIG');
+                                  || String(emp.NomeBanco || emp.Rubrica || '').toUpperCase().includes('C6 CONSIG');
                                 const c6Key = `${beneficiario.Beneficio || ''}-${emp.Contrato || ''}`;
                                 const c6AutoResult = Array.isArray(c6RefinData?.results)
-                                  ? c6RefinData.results.find(
-                                      (result: any) => result?.key === c6Key,
-                                    )
+                                  ? c6RefinData.results.find((result: any) => result?.key === c6Key)
                                   : null;
-                                return (
-                                <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                  <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap flex items-center gap-2">
-                                    <Landmark className="w-4 h-4 text-primary flex-shrink-0" />
-                                    <span>{bancoExibicao}</span>
-                                  </td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{emp.Contrato || 'N/A'}</td>
-                                  <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                                    {prazoTotal > 0 ? `${parcelasPagas}/${prazoTotal}` : `${parcelasRestantes} rest.`}
-                                  </td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{taxa ? `${parseFloat(taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</td>
-                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">{valorOrigin > 0 ? formatCurrency(parseFloat(valorOrigin)) : 'N/A'}</td>
-                                  <td className="px-4 py-3 font-black text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-900/10 whitespace-nowrap">{formatCurrency(saldoAtual)}</td>
-                                  <td className="px-4 py-3 text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                      {isC6Consignado && !isSiape && (
-                                        <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black whitespace-nowrap flex items-center gap-1.5 ${
-                                          c6RefinData?.loading
-                                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
-                                            : c6AutoResult?.success && c6AutoResult?.hasAvailableTable
-                                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                                        }`}>
-                                          {c6RefinData?.loading
-                                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                            : <KeyRound className="w-3.5 h-3.5" />}
-                                          {c6RefinData?.loading
-                                            ? 'Refin consultando'
-                                            : c6AutoResult?.success && c6AutoResult?.hasAvailableTable
-                                              ? 'Refin C6 disponível'
-                                              : c6AutoResult?.success
-                                                ? 'Sem liberação C6'
-                                                : c6RefinData?.configured
-                                                  ? 'Refin indisponível'
-                                                  : 'Credencial C6 necessária'}
-                                        </span>
-                                      )}
+                                const hasRefinDetails = Boolean(c6AutoResult && (c6AutoResult.summary || c6AutoResult.error));
+                                const refinExpanded = Boolean(expandedC6Refins[c6Key]);
+                                const inicioContrato = formatContractDate(
+                                  emp.InicioDesconto || emp.DataInicio || emp.DataInicioContrato || emp.DataAverbacao,
+                                );
+                                const finalContrato = formatContractDate(
+                                  emp.FinalDesconto || emp.DataFinal || emp.DataFim || emp.DataFinalContrato,
+                                );
 
-                                      <button
-                                        onClick={() => onToggleContract ? onToggleContract(emp, isAdded ? 'remove' : 'add') : null}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${isAdded ? 'bg-rose-100 text-rose-600 hover:bg-rose-200 dark:bg-rose-900/30 dark:hover:bg-rose-900/50' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'}`}
-                                      >
-                                        {isAdded ? 'Remover' : 'Adicionar'}
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )})}
+                                return (
+                                  <Fragment key={`${emp.Banco}-${emp.Contrato}-${idx}`}>
+                                    <tr className="border-b border-slate-100 transition-colors hover:bg-slate-50/70 dark:border-slate-800/60 dark:hover:bg-slate-900/50">
+                                      <td className="px-3 py-2.5 whitespace-nowrap">
+                                        <div className="flex items-start gap-2">
+                                          <Landmark className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary" />
+                                          <div>
+                                            <p className="font-bold text-slate-800 dark:text-slate-200">{bancoExibicao}</p>
+                                            <p className="mt-0.5 text-[9px] font-semibold text-slate-400">Contrato: {emp.Contrato || 'N/A'}</p>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">{inicioContrato}</td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">{finalContrato}</td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">
+                                        {prazoTotal > 0 ? `${parcelasPagas}/${prazoTotal}` : `${parcelasRestantes} rest.`}
+                                      </td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">{taxa ? `${parseFloat(taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap font-bold text-slate-800 dark:text-slate-200">{valorOrigin > 0 ? formatCurrency(parseFloat(valorOrigin)) : 'N/A'}</td>
+                                      <td className="whitespace-nowrap bg-amber-50/30 px-3 py-2.5 font-black text-amber-600 dark:bg-amber-900/10 dark:text-amber-400">{formatCurrency(saldoAtual)}</td>
+                                      <td className="px-3 py-2.5 text-right">
+                                        <div className="flex items-center justify-end gap-1.5">
+                                          {isC6Consignado && !isSiape && (
+                                            hasRefinDetails ? (
+                                              <button
+                                                type="button"
+                                                onClick={() => setExpandedC6Refins(prev => ({ ...prev, [c6Key]: !prev[c6Key] }))}
+                                                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[9px] font-black whitespace-nowrap transition-colors ${
+                                                  c6AutoResult?.success && c6AutoResult?.hasAvailableTable
+                                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300'
+                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                                                }`}
+                                                aria-expanded={refinExpanded}
+                                              >
+                                                <KeyRound className="h-3 w-3" />
+                                                {c6AutoResult?.success && c6AutoResult?.hasAvailableTable
+                                                  ? 'Refin C6 disponível'
+                                                  : c6AutoResult?.success
+                                                    ? 'Sem liberação C6'
+                                                    : 'Refin indisponível'}
+                                                <ChevronDown className={`h-3 w-3 transition-transform ${refinExpanded ? 'rotate-180' : ''}`} />
+                                              </button>
+                                            ) : (
+                                              <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[9px] font-black text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                                                {c6RefinData?.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+                                                {c6RefinData?.loading
+                                                  ? 'Consultando C6'
+                                                  : c6RefinData?.configured
+                                                    ? 'Refin pendente'
+                                                    : 'Credencial C6 necessária'}
+                                              </span>
+                                            )
+                                          )}
+
+                                          <button
+                                            onClick={() => onToggleContract ? onToggleContract(emp, isAdded ? 'remove' : 'add') : null}
+                                            className={`rounded-lg px-2.5 py-1.5 text-[10px] font-bold transition-all whitespace-nowrap ${isAdded ? 'bg-rose-100 text-rose-600 hover:bg-rose-200 dark:bg-rose-900/30' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'}`}
+                                          >
+                                            {isAdded ? 'Remover' : 'Adicionar'}
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+
+                                    {hasRefinDetails && refinExpanded && (
+                                      <tr className="border-b border-slate-100 dark:border-slate-800/60">
+                                        <td colSpan={9} className="bg-slate-50/80 px-4 py-3 dark:bg-slate-900/40">
+                                          {c6AutoResult?.error ? (
+                                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                                              Refin C6 indisponível para este contrato.
+                                            </div>
+                                          ) : c6AutoResult?.summary ? (
+                                            <div className="rounded-xl border border-emerald-200 bg-white p-3 dark:border-emerald-500/25 dark:bg-slate-950">
+                                              <div className="mb-2 flex items-center justify-between gap-3">
+                                                <div>
+                                                  <p className="text-xs font-black text-slate-800 dark:text-white">Refin C6 • Contrato {c6AutoResult.contrato}</p>
+                                                  <p className="text-[9px] uppercase tracking-wider text-slate-400">Primeira condição retornada pelo C6</p>
+                                                </div>
+                                                <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${c6AutoResult?.hasAvailableTable ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'}`}>
+                                                  {c6AutoResult?.hasAvailableTable ? 'Disponível' : 'Sem liberação'}
+                                                </span>
+                                              </div>
+
+                                              <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+                                                <div className="col-span-2 rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900 md:col-span-1">
+                                                  <p className="text-[8px] font-bold uppercase text-slate-500">Condição / Tabela</p>
+                                                  <p className="mt-0.5 text-[11px] font-black text-slate-800 dark:text-white">
+                                                    {c6AutoResult.summary.tabela}{c6AutoResult.summary.codigoTabela ? ` • ${c6AutoResult.summary.codigoTabela}` : ''}
+                                                  </p>
+                                                </div>
+                                                <div className="rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900">
+                                                  <p className="text-[8px] font-bold uppercase text-slate-500">Prazo</p>
+                                                  <p className="mt-0.5 text-[11px] font-black">{c6AutoResult.summary.prazo ? `${c6AutoResult.summary.prazo}x` : '108x'}</p>
+                                                </div>
+                                                <div className="rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900">
+                                                  <p className="text-[8px] font-bold uppercase text-slate-500">Taxa</p>
+                                                  <p className="mt-0.5 text-[11px] font-black">{c6AutoResult.summary.taxa !== null && c6AutoResult.summary.taxa !== undefined ? `${Number(c6AutoResult.summary.taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</p>
+                                                </div>
+                                                <div className="rounded-lg bg-slate-50 px-2.5 py-2 dark:bg-slate-900">
+                                                  <p className="text-[8px] font-bold uppercase text-slate-500">Parcela</p>
+                                                  <p className="mt-0.5 text-[11px] font-black">{c6AutoResult.summary.parcela !== null && c6AutoResult.summary.parcela !== undefined ? formatCurrency(Number(c6AutoResult.summary.parcela)) : 'N/A'}</p>
+                                                </div>
+                                                <div className="rounded-lg bg-emerald-50 px-2.5 py-2 dark:bg-emerald-500/10">
+                                                  <p className="text-[8px] font-bold uppercase text-emerald-700/70 dark:text-emerald-300/70">Liberado</p>
+                                                  <p className="mt-0.5 text-[11px] font-black text-emerald-700 dark:text-emerald-300">{c6AutoResult.summary.valorLiberado !== null && c6AutoResult.summary.valorLiberado !== undefined ? formatCurrency(Number(c6AutoResult.summary.valorLiberado)) : 'R$ 0,00'}</p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ) : null}
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </Fragment>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
-
-                        {!c6RefinData?.loading
-                          && Array.isArray(c6RefinData?.results)
-                          && c6RefinData.results
-                            .filter(
-                              (result: any) =>
-                                String(result?.beneficio || '')
-                                === String(beneficiario.Beneficio || ''),
-                            )
-                            .map((result: any) => {
-                              const summary = result?.summary;
-                              const available = Boolean(
-                                result?.success
-                                && result?.hasAvailableTable,
-                              );
-
-                              return (
-                                <div
-                                  key={result.key}
-                                  className={`m-4 rounded-xl border p-4 ${
-                                    available
-                                      ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10'
-                                      : 'border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10'
-                                  }`}
-                                >
-                                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                                    <div>
-                                      <p className="text-sm font-black text-slate-800 dark:text-white">
-                                        Refin C6 • Contrato {result.contrato}
-                                      </p>
-                                      <p className="text-[10px] uppercase tracking-wider text-slate-500 mt-1">
-                                        Primeira condição retornada para este contrato
-                                      </p>
-                                    </div>
-                                    <span className={`text-[10px] uppercase font-black ${
-                                      available
-                                        ? 'text-emerald-700 dark:text-emerald-300'
-                                        : 'text-amber-700 dark:text-amber-300'
-                                    }`}>
-                                      {available ? 'Disponível' : 'Sem liberação'}
-                                    </span>
-                                  </div>
-
-                                  {result.error ? (
-                                    <p className="text-xs mt-3 text-amber-700 dark:text-amber-300">
-                                      Refin indisponível para este contrato.
-                                    </p>
-                                  ) : summary ? (
-                                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
-                                      <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3 col-span-2 md:col-span-1">
-                                        <p className="text-[9px] uppercase text-slate-500 font-bold">
-                                          Condição / Tabela
-                                        </p>
-                                        <p className="text-sm font-black text-slate-800 dark:text-white mt-1">
-                                          {summary.tabela}
-                                          {summary.codigoTabela
-                                            ? ` • ${summary.codigoTabela}`
-                                            : ''}
-                                        </p>
-                                      </div>
-
-                                      {summary.produto ? (
-                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3 col-span-2 md:col-span-1">
-                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
-                                            Produto
-                                          </p>
-                                          <p className="text-sm font-black mt-1">
-                                            {summary.produto}
-                                          </p>
-                                        </div>
-                                      ) : null}
-
-                                      {summary.prazo ? (
-                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3">
-                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
-                                            Prazo
-                                          </p>
-                                          <p className="text-sm font-black mt-1">
-                                            {summary.prazo}x
-                                          </p>
-                                        </div>
-                                      ) : null}
-
-                                      {summary.taxa !== null
-                                        && summary.taxa !== undefined ? (
-                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3">
-                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
-                                            Taxa
-                                          </p>
-                                          <p className="text-sm font-black mt-1">
-                                            {Number(summary.taxa)
-                                              .toFixed(2)
-                                              .replace('.', ',')}%
-                                          </p>
-                                        </div>
-                                      ) : null}
-
-                                      {summary.parcela !== null
-                                        && summary.parcela !== undefined ? (
-                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3">
-                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
-                                            Parcela
-                                          </p>
-                                          <p className="text-sm font-black mt-1">
-                                            {formatCurrency(
-                                              Number(summary.parcela),
-                                            )}
-                                          </p>
-                                        </div>
-                                      ) : null}
-
-                                      {summary.valorLiberado !== null
-                                        && summary.valorLiberado !== undefined ? (
-                                        <div className="rounded-lg bg-white/70 dark:bg-black/20 p-3">
-                                          <p className="text-[9px] uppercase text-slate-500 font-bold">
-                                            Liberado
-                                          </p>
-                                          <p className={`text-sm font-black mt-1 ${
-                                            available
-                                              ? 'text-emerald-700 dark:text-emerald-300'
-                                              : 'text-amber-700 dark:text-amber-300'
-                                          }`}>
-                                            {formatCurrency(
-                                              Number(
-                                                summary.valorLiberado,
-                                              ),
-                                            )}
-                                          </p>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ) : (
-                                    <p className="text-xs mt-3 text-slate-600 dark:text-slate-300">
-                                      O C6 não retornou valor liberado para este refinanciamento.
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })}
                       </div>
                     )}
 
