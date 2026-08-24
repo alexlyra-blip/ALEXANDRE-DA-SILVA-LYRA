@@ -11,6 +11,77 @@ export const dynamic = 'force-dynamic';
 
 const CACHE_DAYS = 30;
 
+
+function asArray(value: any): any[] {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
+}
+
+function getRawBenefitArray(rawData: any): any[] {
+  if (Array.isArray(rawData)) return rawData;
+  if (Array.isArray(rawData?.beneficios)) return rawData.beneficios;
+  if (Array.isArray(rawData?.value)) return rawData.value;
+  return rawData ? [rawData] : [];
+}
+
+function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): any[] {
+  const rawBenefits = getRawBenefitArray(rawData);
+
+  return normalizedData.map((normalizedBenefit: any, benefitIndex: number) => {
+    const normalizedNb = String(normalizedBenefit?.Beneficiario?.Beneficio || '').replace(/\D/g, '');
+    const rawBenefit = rawBenefits.find((candidate: any) => {
+      const rawNb = String(candidate?.Beneficiario?.Beneficio || '').replace(/\D/g, '');
+      return normalizedNb && rawNb && normalizedNb === rawNb;
+    }) || rawBenefits[benefitIndex];
+
+    if (!rawBenefit) return normalizedBenefit;
+
+    const rawLoans = asArray(rawBenefit?.Emprestimos);
+    const normalizedLoans = asArray(normalizedBenefit?.Emprestimos);
+
+    const enrichedLoans = normalizedLoans.map((loan: any, loanIndex: number) => {
+      const contract = String(loan?.Contrato || loan?.contrato || '').trim();
+      const rawLoan = rawLoans.find((candidate: any) =>
+        String(candidate?.Contrato || candidate?.contrato || '').trim() === contract,
+      ) || rawLoans[loanIndex];
+
+      if (!rawLoan) return loan;
+
+      return {
+        ...loan,
+        // A API /cpf da MultiCorban entrega essas datas no contrato bruto.
+        // O parser visual antigo não as preservava, por isso as colunas ficavam vazias.
+        InicioDesconto:
+          loan?.InicioDesconto
+          || rawLoan?.InicioDesconto
+          || rawLoan?.inicio_desconto
+          || rawLoan?.DataInicio
+          || rawLoan?.DataInicioContrato
+          || rawLoan?.DataAverbacao
+          || '',
+        FinalDesconto:
+          loan?.FinalDesconto
+          || rawLoan?.FinalDesconto
+          || rawLoan?.final_desconto
+          || rawLoan?.DataFinal
+          || rawLoan?.DataFim
+          || rawLoan?.DataFinalContrato
+          || '',
+        DataAverbacao:
+          loan?.DataAverbacao
+          || rawLoan?.DataAverbacao
+          || rawLoan?.data_averbacao
+          || '',
+      };
+    });
+
+    return {
+      ...normalizedBenefit,
+      Emprestimos: enrichedLoans,
+    };
+  });
+}
+
 export async function GET() {
   try {
     const db = getAdminDb();
@@ -107,10 +178,17 @@ export async function POST(request: Request) {
       type,
       { forceRefresh },
     );
-    const normalizedData = parseConsultaResponse(
+    let normalizedData = parseConsultaResponse(
       rawData,
       type === 'siape',
     );
+
+    if (type === 'inss' && Array.isArray(normalizedData)) {
+      normalizedData = preserveMulticorbanContractDates(
+        rawData,
+        normalizedData,
+      );
+    }
 
     if (
       normalizedData.length === 0

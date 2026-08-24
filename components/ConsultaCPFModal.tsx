@@ -665,7 +665,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                         <div className="relative z-10 flex items-center justify-between gap-2">
                           <p className="text-[9px] font-bold uppercase tracking-wider text-white/80">Valor Liberado</p>
                           {bancoPriority && (
-                            <span className="max-w-[92px] truncate rounded-full bg-white/15 px-2 py-0.5 text-[8px] font-bold">
+                            <span className="max-w-[190px] whitespace-nowrap rounded-full bg-white/15 px-2.5 py-0.5 text-[8px] font-bold">
                               {BANCOS_BRASIL[bancoPriority] || bancoPriority}
                             </span>
                           )}
@@ -708,7 +708,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                         </div>
 
                         <div className="overflow-x-auto">
-                          <table className="w-full min-w-[980px] text-left text-xs">
+                          <table className="w-full min-w-[1080px] text-left text-xs">
                             <thead className="border-b border-slate-200 bg-slate-50 text-[9px] uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900">
                               <tr>
                                 <th className="px-3 py-2.5 font-bold">Banco / Contrato</th>
@@ -720,6 +720,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                 <th className="px-3 py-2.5 font-bold">Valor Original</th>
                                 <th className="px-3 py-2.5 font-bold">Saldo Atual</th>
                                 <th className="px-3 py-2.5 text-right font-bold">Ação</th>
+                                <th className="px-3 py-2.5 text-right font-bold">Refin C6</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -777,52 +778,53 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                       <td className="px-3 py-2.5 whitespace-nowrap font-bold text-slate-800 dark:text-slate-200">{valorOrigin > 0 ? formatCurrency(parseFloat(valorOrigin)) : 'N/A'}</td>
                                       <td className="whitespace-nowrap bg-amber-50/30 px-3 py-2.5 font-black text-amber-600 dark:bg-amber-900/10 dark:text-amber-400">{formatCurrency(saldoAtual)}</td>
                                       <td className="px-3 py-2.5 text-right">
-                                        <div className="flex items-center justify-end gap-1.5">
-                                          {isC6Consignado && !isSiape && (
-                                            hasRefinDetails ? (
-                                              <button
-                                                type="button"
-                                                onClick={() => setExpandedC6Refins(prev => ({ ...prev, [c6Key]: !prev[c6Key] }))}
-                                                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[9px] font-black whitespace-nowrap transition-colors ${
-                                                  c6AutoResult?.success && c6AutoResult?.hasAvailableTable
-                                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300'
-                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
-                                                }`}
-                                                aria-expanded={refinExpanded}
-                                              >
-                                                <KeyRound className="h-3 w-3" />
-                                                {c6AutoResult?.success && c6AutoResult?.hasAvailableTable
-                                                  ? 'Refin C6 disponível'
-                                                  : c6AutoResult?.success
-                                                    ? 'Sem liberação C6'
-                                                    : 'Refin indisponível'}
-                                                <ChevronDown className={`h-3 w-3 transition-transform ${refinExpanded ? 'rotate-180' : ''}`} />
-                                              </button>
-                                            ) : (
-                                              <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[9px] font-black text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                                                {c6RefinData?.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
-                                                {c6RefinData?.loading
-                                                  ? 'Consultando C6'
-                                                  : c6RefinData?.configured
-                                                    ? 'Refin pendente'
-                                                    : 'Credencial C6 necessária'}
-                                              </span>
-                                            )
-                                          )}
-
-                                          <button
-                                            onClick={() => onToggleContract ? onToggleContract(emp, isAdded ? 'remove' : 'add') : null}
-                                            className={`rounded-lg px-2.5 py-1.5 text-[10px] font-bold transition-all whitespace-nowrap ${isAdded ? 'bg-rose-100 text-rose-600 hover:bg-rose-200 dark:bg-rose-900/30' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'}`}
-                                          >
-                                            {isAdded ? 'Remover' : 'Adicionar'}
-                                          </button>
-                                        </div>
+                                        <button
+                                          onClick={() => onToggleContract ? onToggleContract(emp, isAdded ? 'remove' : 'add') : null}
+                                          className={`rounded-lg px-2.5 py-1.5 text-[10px] font-bold transition-all whitespace-nowrap ${isAdded ? 'bg-rose-100 text-rose-600 hover:bg-rose-200 dark:bg-rose-900/30' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'}`}
+                                        >
+                                          {isAdded ? 'Remover' : 'Adicionar'}
+                                        </button>
+                                      </td>
+                                      <td className="px-3 py-2.5 text-right">
+                                        {isC6Consignado && !isSiape ? (
+                                          hasRefinDetails ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => setExpandedC6Refins(prev => ({ ...prev, [c6Key]: !prev[c6Key] }))}
+                                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[9px] font-black whitespace-nowrap transition-colors ${
+                                                c6AutoResult?.success && c6AutoResult?.hasAvailableTable
+                                                  ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300'
+                                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                                              }`}
+                                              aria-expanded={refinExpanded}
+                                            >
+                                              <KeyRound className="h-3 w-3" />
+                                              {c6AutoResult?.success && c6AutoResult?.hasAvailableTable
+                                                ? 'Refin C6 disponível'
+                                                : c6AutoResult?.success
+                                                  ? 'Sem liberação C6'
+                                                  : 'Refin indisponível'}
+                                              <ChevronDown className={`h-3 w-3 transition-transform ${refinExpanded ? 'rotate-180' : ''}`} />
+                                            </button>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[9px] font-black text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                                              {c6RefinData?.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+                                              {c6RefinData?.loading
+                                                ? 'Consultando C6'
+                                                : c6RefinData?.configured
+                                                  ? 'Refin pendente'
+                                                  : 'Credencial C6 necessária'}
+                                            </span>
+                                          )
+                                        ) : (
+                                          <span className="text-[9px] font-semibold text-slate-300 dark:text-slate-700">—</span>
+                                        )}
                                       </td>
                                     </tr>
 
                                     {hasRefinDetails && refinExpanded && (
                                       <tr className="border-b border-slate-100 dark:border-slate-800/60">
-                                        <td colSpan={9} className="bg-slate-50/80 px-4 py-3 dark:bg-slate-900/40">
+                                        <td colSpan={10} className="bg-slate-50/80 px-4 py-3 dark:bg-slate-900/40">
                                           {c6AutoResult?.error ? (
                                             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                                               Refin C6 indisponível para este contrato.

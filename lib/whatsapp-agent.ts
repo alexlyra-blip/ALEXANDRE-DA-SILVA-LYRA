@@ -1188,6 +1188,26 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
         // Mesmo quando nenhuma categoria libera valor, o total permanece explícito.
         response += `\n\n💰 *TOTAL LIBERADO: R$ ${fmt(totalReleased)}*`;
 
+        // Mantém o mesmo pós-simulação do fluxo tradicional do Gutto:
+        // o usuário pode navegar por outros bancos, tabelas e prazos sem reiniciar a consulta.
+        if (firstSuccessful) {
+            const firstBank = String(firstSuccessful?.top?.name || '').trim().toUpperCase();
+            const availableTerms = Array.from(new Set(
+                (firstSuccessful?.offers || [])
+                    .map((offer: any) => Number(offer?.prazoRefinPort || 0))
+                    .filter((term: number) => term > 0),
+            )).sort((a: number, b: number) => b - a);
+
+            response += `\n\n━━━━━━━━━━━━━━━━━━━━`;
+            response += `\n💬 *OPÇÕES DA SIMULAÇÃO*`;
+            response += `\n🏛️ Para ver a simulação em outro banco elegível, envie o *nome do banco* mostrado acima.`;
+            response += `\n📊 Para ver todas as tabelas${firstBank ? ` do *${firstBank}*` : ''}, digite *TABELAS*.`;
+            if (availableTerms.length > 0) {
+                response += `\n📅 Para consultar um prazo específico, digite por exemplo *TABELAS ${availableTerms[0]}*.`;
+            }
+            response += `\n✅ Você pode continuar por aqui sem iniciar uma nova simulação.`;
+        }
+
         return response;
     } catch (error: any) {
         console.error('[Gutto CPF] Falha na consulta/simulação automática:', error);
@@ -1240,6 +1260,9 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     // Contexto da última mensagem do bot
     const lastBotMsgContent = history.length > 0 ? history[history.length - 1].content || '' : '';
     const wasLastMsgSimOrTable = lastBotMsgContent.includes('Simulação concluída') ||
+        lastBotMsgContent.includes('CONSULTA INSS + SIMULAÇÃO AUTOMÁTICA') ||
+        lastBotMsgContent.includes('RESUMO DAS LIBERAÇÕES') ||
+        lastBotMsgContent.includes('OPÇÕES DA SIMULAÇÃO') ||
         lastBotMsgContent.includes('DETALHES DA OPERAÇÃO') ||
         lastBotMsgContent.includes('TABELAS E OFERTAS DISPONÍVEIS');
 
@@ -1398,6 +1421,8 @@ async function internalProcessWhatsAppMessage(message: string, history: any[] = 
     const thanksKeywords = ['obrigado', 'obrigada', 'valeu', 'agradeço', 'grato', 'grata', 'tchau', 'obg', 'perfeito', 'show', 'blz', 'beleza', 'excelente', 'resolvido', 'ajudou', 'satisfeito'];
 
     const wasLastMsgSimulation = lastBotMsgContent.includes('Simulação concluída') ||
+        lastBotMsgContent.includes('CONSULTA INSS + SIMULAÇÃO AUTOMÁTICA') ||
+        lastBotMsgContent.includes('RESUMO DAS LIBERAÇÕES') ||
         lastBotMsgContent.includes('DETALHES DA OPERAÇÃO') ||
         lastBotMsgContent.includes('VALOR DO TROCO LIBERADO');
 
