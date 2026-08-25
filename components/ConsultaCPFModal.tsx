@@ -412,22 +412,24 @@ Contrato: ${e.Contrato || 'N/A'}`,
       y = (doc as any).lastAutoTable.finalY + 8;
     }
 
-    // 6. Refin C6 - inclui todas as condições positivas retornadas pela API
+    // 6. Refin C6 - exibe somente a primeira condição positiva de cada contrato
     if (!isSiape && Array.isArray(c6RefinData?.results)) {
       const refinRows = c6RefinData.results.flatMap((result: any) => {
         const tables = Array.isArray(result?.tables) && result.tables.length > 0
           ? result.tables
           : (result?.summary ? [result.summary] : []);
-        return tables
-          .filter((table: any) => Number(table?.valorLiberado || 0) > 0)
-          .map((table: any) => [
-            result?.contrato || result?.summary?.contrato || 'N/A',
-            table?.tabela || 'Tabela C6',
-            `${table?.prazo || 108}x`,
-            table?.taxa ? `${Number(table.taxa).toFixed(2).replace('.', ',')}%` : 'N/A',
-            formatCurrency(Number(table?.parcela || 0)),
-            formatCurrency(Number(table?.valorLiberado || 0)),
-          ]);
+        const firstAvailableTable = tables.find((table: any) => Number(table?.valorLiberado || 0) > 0);
+
+        if (!firstAvailableTable) return [];
+
+        return [[
+          result?.contrato || result?.summary?.contrato || 'N/A',
+          firstAvailableTable?.tabela || 'Tabela C6',
+          `${firstAvailableTable?.prazo || 108}x`,
+          firstAvailableTable?.taxa ? `${Number(firstAvailableTable.taxa).toFixed(2).replace('.', ',')}%` : 'N/A',
+          formatCurrency(Number(firstAvailableTable?.parcela || 0)),
+          formatCurrency(Number(firstAvailableTable?.valorLiberado || 0)),
+        ]];
       });
 
       if (refinRows.length > 0) {
@@ -438,7 +440,7 @@ Contrato: ${e.Contrato || 'N/A'}`,
         doc.setTextColor(15, 23, 42);
         doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
-        doc.text(`6. Refin C6 - Tabelas com Liberação (${refinRows.length})`, 14, y);
+        doc.text(`6. Refin C6 - Primeira oferta disponível por contrato (${refinRows.length})`, 14, y);
         y += 4;
 
         autoTable(doc, {
@@ -839,17 +841,18 @@ Contrato: ${e.Contrato || 'N/A'}`,
                           {bancoPriority ? formatCurrency(valorLiberado) : 'R$ 0,00'}
                         </p>
                         <select
-                          className="relative z-10 mt-1.5 h-7 w-full cursor-pointer rounded-lg border border-white/20 bg-white/10 px-2 text-[9px] font-bold text-white outline-none"
+                          className="relative z-10 mt-1.5 h-7 w-full cursor-pointer rounded-lg border border-white/20 bg-white/10 px-2 text-[9px] font-bold outline-none"
+                          style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}
                           value={bancoPriority}
                           onChange={(e) => setBancoPriority(e.target.value)}
                         >
                           {Object.keys(activeCoefs).length === 0 ? (
-                            <option value="" className="bg-slate-900 font-semibold text-white">Sem coeficientes</option>
+                            <option value="" style={{ color: '#0f172a', backgroundColor: '#ffffff', WebkitTextFillColor: '#0f172a' }}>Sem coeficientes</option>
                           ) : (
                             <>
-                              <option value="" className="bg-slate-900 font-semibold text-white">Banco preferencial</option>
+                              <option value="" style={{ color: '#0f172a', backgroundColor: '#ffffff', WebkitTextFillColor: '#0f172a' }}>Banco preferencial</option>
                               {Object.entries(activeCoefs).map(([code, val]) => (
-                                <option key={code} value={code} className="bg-slate-900 font-semibold text-white">
+                                <option key={code} value={code} style={{ color: '#0f172a', backgroundColor: '#ffffff', WebkitTextFillColor: '#0f172a' }}>
                                   {code} - {BANCOS_BRASIL[code] || code} ({val.toString().replace('.', ',')})
                                 </option>
                               ))}
