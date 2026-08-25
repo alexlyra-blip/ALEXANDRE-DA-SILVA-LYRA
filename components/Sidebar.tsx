@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { LayoutDashboard, Landmark, FileText, Users, Banknote, LogOut, Settings, Sun, Moon, ClipboardList, Clock, Calendar, Search, Calculator } from 'lucide-react';
+import { LayoutDashboard, Landmark, FileText, Users, Banknote, LogOut, Settings, Sun, Moon, ClipboardList, Clock, Calendar, Search, MessageCircle } from 'lucide-react';
 import { motion, useAnimation } from 'motion/react';
 import { PromotoraAvatar } from './PromotoraAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -61,18 +61,17 @@ export default function Sidebar() {
   // Admin and Promotora menus
   if (profile?.role === 'admin' || profile?.role === 'promotora') {
     menuItems.push({ name: 'Regras e Bancos', icon: Landmark, path: '/regras/banco' });
-    menuItems.push({ name: 'Coeficientes Diários', icon: Calculator, path: '/admin/coeficientes' });
     menuItems.push({ name: 'Usuários', icon: Users, path: '/admin/usuarios' });
-    menuItems.push({ name: 'Logs WhatsApp', icon: FileText, path: '/admin/whatsapp-logs' });
+    menuItems.push({ name: 'Logs WhatsApp', icon: Clock, path: '/admin/whatsapp-logs' });
   }
 
   // Simulador WhatsApp (Chat interface) apenas para Admin
   if (profile?.role === 'admin') {
-    menuItems.push({ name: 'Simulador WhatsApp', icon: FileText, path: '/admin/simulador-whatsapp' });
+    menuItems.push({ name: 'Simulador WhatsApp', icon: MessageCircle, path: '/admin/simulador-whatsapp' });
   }
 
   return (
-    <aside className="hidden md:flex flex-col w-64 shrink-0 bg-[var(--sidebar-bg)] dark:bg-black text-white h-screen sticky top-0 shadow-2xl z-50 border-r border-white/5 dark:border-white/10 overflow-y-auto overflow-x-hidden custom-scrollbar">
+    <aside className="hidden md:flex flex-col w-64 shrink-0 bg-[var(--sidebar-bg)] dark:bg-black text-white h-screen sticky top-0 shadow-2xl z-50 border-r border-white/5 dark:border-white/10 overflow-y-auto custom-scrollbar">
       {/* Decorative elements to match dashboard header pattern */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl animate-pulse pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary/10 rounded-full -ml-12 -mb-12 blur-xl pointer-events-none" />

@@ -79,6 +79,15 @@ function getFirstValue(...values: any[]): any {
   return '';
 }
 
+function getFirstPositiveNumber(...values: any[]): number {
+  for (const value of values) {
+    if (value === null || value === undefined || String(value).trim() === '') continue;
+    const parsed = Number(String(value).replace(',', '.'));
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return 0;
+}
+
 function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): any[] {
   const rawBenefits = getRawBenefitArray(rawData);
 
@@ -134,7 +143,36 @@ function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): 
       );
 
       const prazoTotal = toPositiveInt(
-        loan?.Prazo || loan?.PrazoTotal || rawLoan?.Prazo || rawLoan?.PrazoTotal,
+        rawLoan?.Prazo || rawLoan?.PrazoTotal || loan?.Prazo || loan?.PrazoTotal,
+      );
+      const parcelasRestantes = toPositiveInt(
+        rawLoan?.ParcelasRestantes
+          || rawLoan?.PrazoRestantes
+          || rawLoan?.prazo_restante
+          || loan?.ParcelasRestantes
+          || loan?.prazo_restante,
+      );
+      const saldoDevedor = getFirstPositiveNumber(
+        rawLoan?.SaldoDevedor,
+        rawLoan?.saldo,
+        loan?.SaldoDevedor,
+        loan?.saldo,
+      );
+      // Valor do contrato deve vir dos campos de valor original da MultiCorban.
+      // Nao usamos SaldoDevedor como fallback, pois isso fazia o valor do contrato
+      // repetir incorretamente o saldo atual na Consulta CPF.
+      const valorContrato = getFirstPositiveNumber(
+        rawLoan?.ValorContrato,
+        rawLoan?.valor_contrato,
+        rawLoan?.ValorEmprestado,
+        rawLoan?.valorEmprestado,
+        rawLoan?.ValorFinanciado,
+        rawLoan?.ValorOriginal,
+        rawLoan?.ValorLiberado,
+        rawLoan?.Vl_Emprestimo,
+        loan?.ValorEmprestado,
+        loan?.ValorFinanciado,
+        loan?.ValorLiberado,
       );
 
       let inicioDesconto = String(inicioApi || '').trim();
@@ -174,6 +212,10 @@ function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): 
 
       return {
         ...loan,
+        Prazo: prazoTotal || loan?.Prazo || rawLoan?.Prazo || 0,
+        ParcelasRestantes: parcelasRestantes || loan?.ParcelasRestantes || rawLoan?.ParcelasRestantes || 0,
+        SaldoDevedor: saldoDevedor || loan?.SaldoDevedor || rawLoan?.SaldoDevedor || 0,
+        ValorContrato: valorContrato,
         DataAverbacao: dataAverbacao || '',
         InicioDesconto: inicioDesconto,
         FinalDesconto: finalDesconto,

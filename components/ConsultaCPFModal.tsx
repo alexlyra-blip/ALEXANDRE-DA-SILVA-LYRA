@@ -363,14 +363,13 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
       const loansRows = empList.map((e: any) => {
         const prazoTotal = parseInt(e.Prazo || e.parcelas || 0);
         const parcelasRestantes = parseInt(e.ParcelasRestantes || e.prazo_restante || 0);
-        const parcelasPagas = e.ParcelasPagas !== undefined
-          ? parseInt(e.ParcelasPagas)
-          : Math.max(0, prazoTotal - parcelasRestantes);
         const taxa = e.Taxa || e.taxa || 0;
-        const valorOriginAPI = e.ValorEmprestado || e.ValorContrato || e.ValorFinanciado || e.ValorLiberado || e.SaldoDevedor || e.saldo || 0;
-        const valorOriginCalc = calculateSaldoDevedor(parseFloat(e.ValorParcela || 0), prazoTotal, taxa);
-        const valorOriginal = parseFloat(valorOriginAPI) > 0 ? parseFloat(valorOriginAPI) : valorOriginCalc;
-        const saldoAtual = calculateSaldoDevedor(parseFloat(e.ValorParcela || 0), parcelasRestantes, taxa);
+        const valorContratoApi = parseFloat(e.ValorContrato || e.ValorEmprestado || e.ValorFinanciado || e.ValorLiberado || 0);
+        const valorContratoCalc = calculateSaldoDevedor(parseFloat(e.ValorParcela || 0), prazoTotal, taxa);
+        const valorContrato = valorContratoApi > 0 ? valorContratoApi : valorContratoCalc;
+        const saldoDevedorApi = parseFloat(e.SaldoDevedor || e.saldo || 0);
+        const saldoAtualCalc = calculateSaldoDevedor(parseFloat(e.ValorParcela || 0), parcelasRestantes, taxa);
+        const saldoAtual = saldoDevedorApi > 0 ? saldoDevedorApi : saldoAtualCalc;
         const banco = formatBancoComCodigo(e.Banco, e.NomeBanco || getBancoName(e.Banco));
         const averbacao = formatContractDate(e.DataAverbacao);
         const inicio = formatContractMonth(e.InicioDesconto);
@@ -384,16 +383,16 @@ Contrato: ${e.Contrato || 'N/A'}`,
           averbacao,
           `${inicioLabel} / ${finalLabel}`,
           formatCurrency(e.ValorParcela || 0),
-          prazoTotal > 0 ? `${parcelasPagas}/${prazoTotal}` : `${parcelasRestantes} rest.`,
+          prazoTotal > 0 ? `${parcelasRestantes}/${prazoTotal}` : `${parcelasRestantes} rest.`,
           taxa ? `${parseFloat(taxa).toFixed(2).replace('.', ',')}%` : 'N/A',
-          valorOriginal > 0 ? formatCurrency(valorOriginal) : 'N/A',
+          valorContrato > 0 ? formatCurrency(valorContrato) : 'N/A',
           formatCurrency(saldoAtual),
         ];
       });
 
       autoTable(doc, {
         startY: y,
-        head: [['Banco / Contrato', 'Averbação', 'Início / Final', 'Parcela', 'Prazo', 'Taxa', 'Valor Original', 'Saldo Atual']],
+        head: [['Banco / Contrato', 'Averbação', 'Início / Final', 'Parcela', 'Prazo Rest./Total', 'Taxa', 'Valor do Contrato', 'Saldo Atual']],
         body: loansRows,
         theme: 'striped',
         headStyles: { fillColor: primaryRgb },
@@ -699,6 +698,14 @@ Contrato: ${e.Contrato || 'N/A'}`,
                 const valorLiberado = margemLivre > 0
                   ? truncateDecimals(margemLivre / getMarginCoefficient())
                   : 0;
+                const percentualComprometido = base > 0
+                  ? truncateDecimals((totalComprometido / base) * 100)
+                  : 0;
+                const percentualMargemLivre = base > 0
+                  ? truncateDecimals((margemLivre / base) * 100)
+                  : 0;
+                const formatPercentual = (value: number) =>
+                  `${Math.abs(value).toFixed(2).replace('.', ',')}%`;
 
                 const isBlocked = beneficiario.BloqueadoEmprestimo === "1" || beneficiario.BloqueadoEmprestimo === true;
                 const isActive = beneficiario.Situacao === 'Ativo';
@@ -779,7 +786,10 @@ Contrato: ${e.Contrato || 'N/A'}`,
                     {/* Margens - resumo compacto */}
                     <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
-                        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Margem Consignável</p>
+                        <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                          <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                          Margem Consignável
+                        </p>
                         <p className="mt-0.5 text-lg font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavel)}</p>
                         <p className="mt-0.5 truncate text-[8px] text-slate-400">
                           {isSiape
@@ -789,19 +799,36 @@ Contrato: ${e.Contrato || 'N/A'}`,
                       </div>
 
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
-                        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Total Comprometido</p>
+                        <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                          <Wallet className="h-3.5 w-3.5 text-rose-500" />
+                          Total Comprometido
+                        </p>
                         <p className="mt-0.5 text-lg font-black text-rose-600 dark:text-rose-400">{formatCurrency(totalComprometido)}</p>
+                        <p className="mt-0.5 text-[8px] font-semibold text-rose-500/80 dark:text-rose-300/80">
+                          {formatPercentual(percentualComprometido)} da margem comprometida
+                        </p>
                       </div>
 
                       <div className={`${margemLivre < 0 ? 'border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10' : 'border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'} rounded-xl border px-3 py-2.5`}>
-                        <p className={`text-[9px] font-bold uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600/80'}`}>Margem Livre</p>
+                        <p className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600/80'}`}>
+                          <TrendingUp className="h-3.5 w-3.5" />
+                          Margem Livre
+                        </p>
                         <p className={`mt-0.5 text-lg font-black ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
+                        <p className={`mt-0.5 text-[8px] font-semibold ${margemLivre < 0 ? 'text-rose-600/80 dark:text-rose-300/80' : 'text-emerald-600/80 dark:text-emerald-300/80'}`}>
+                          {margemLivre < 0
+                            ? `${formatPercentual(percentualMargemLivre)} de margem excedida`
+                            : `${formatPercentual(percentualMargemLivre)} de margem livre`}
+                        </p>
                       </div>
 
                       <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-primary to-primary-dark px-3 py-2.5 text-white shadow-md">
                         <div className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-white/10 blur-xl"></div>
                         <div className="relative z-10 flex items-center justify-between gap-2">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-white/80">Valor Liberado</p>
+                          <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-white/80">
+                            <DollarSign className="h-3.5 w-3.5 text-white" />
+                            Valor Liberado
+                          </p>
                           {bancoPriority && (
                             <span className="max-w-[190px] whitespace-nowrap rounded-full bg-white/15 px-2.5 py-0.5 text-[8px] font-bold">
                               {BANCOS_BRASIL[bancoPriority] || bancoPriority}
@@ -817,12 +844,12 @@ Contrato: ${e.Contrato || 'N/A'}`,
                           onChange={(e) => setBancoPriority(e.target.value)}
                         >
                           {Object.keys(activeCoefs).length === 0 ? (
-                            <option value="" className="font-semibold text-slate-900">Sem coeficientes</option>
+                            <option value="" className="bg-slate-900 font-semibold text-white">Sem coeficientes</option>
                           ) : (
                             <>
-                              <option value="" className="font-semibold text-slate-900">Banco preferencial</option>
+                              <option value="" className="bg-slate-900 font-semibold text-white">Banco preferencial</option>
                               {Object.entries(activeCoefs).map(([code, val]) => (
-                                <option key={code} value={code} className="font-semibold text-slate-900">
+                                <option key={code} value={code} className="bg-slate-900 font-semibold text-white">
                                   {code} - {BANCOS_BRASIL[code] || code} ({val.toString().replace('.', ',')})
                                 </option>
                               ))}
@@ -853,9 +880,9 @@ Contrato: ${e.Contrato || 'N/A'}`,
                                 <th className="px-3 py-2.5 font-bold">Início</th>
                                 <th className="px-3 py-2.5 font-bold">Final</th>
                                 <th className="px-3 py-2.5 font-bold">Parcela</th>
-                                <th className="px-3 py-2.5 font-bold">Prazo</th>
+                                <th className="px-3 py-2.5 font-bold">Prazo Rest./Total</th>
                                 <th className="px-3 py-2.5 font-bold">Taxa</th>
-                                <th className="px-3 py-2.5 font-bold">Valor Original</th>
+                                <th className="px-3 py-2.5 font-bold">Valor do Contrato</th>
                                 <th className="px-3 py-2.5 font-bold">Saldo Atual</th>
                                 <th className="px-3 py-2.5 text-right font-bold">Ação</th>
                                 <th className="px-3 py-2.5 text-right font-bold">Refin C6</th>
@@ -865,14 +892,13 @@ Contrato: ${e.Contrato || 'N/A'}`,
                               {emprestimos.map((emp: any, idx: number) => {
                                 const prazoTotal = parseInt(emp.Prazo || emp.parcelas || 0);
                                 const parcelasRestantes = parseInt(emp.ParcelasRestantes || emp.prazo_restante || 0);
-                                const parcelasPagas = emp.ParcelasPagas !== undefined
-                                  ? parseInt(emp.ParcelasPagas)
-                                  : Math.max(0, prazoTotal - parcelasRestantes);
                                 const taxa = emp.Taxa || emp.taxa || 0;
-                                const valorOriginAPI = emp.ValorEmprestado || emp.ValorContrato || emp.ValorFinanciado || emp.ValorLiberado || emp.SaldoDevedor || emp.saldo || 0;
-                                const valorOriginCalc = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), prazoTotal, taxa);
-                                const valorOrigin = parseFloat(valorOriginAPI) > 0 ? parseFloat(valorOriginAPI) : valorOriginCalc;
-                                const saldoAtual = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
+                                const valorContratoApi = parseFloat(emp.ValorContrato || emp.ValorEmprestado || emp.ValorFinanciado || emp.ValorLiberado || 0);
+                                const valorContratoCalc = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), prazoTotal, taxa);
+                                const valorContrato = valorContratoApi > 0 ? valorContratoApi : valorContratoCalc;
+                                const saldoDevedorApi = parseFloat(emp.SaldoDevedor || emp.saldo || 0);
+                                const saldoAtualCalc = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
+                                const saldoAtual = saldoDevedorApi > 0 ? saldoDevedorApi : saldoAtualCalc;
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
                                 const bancoNomeSemPrefixo = getBancoName(emp.Banco) !== String(emp.Banco || '')
                                   ? getBancoName(emp.Banco)
@@ -927,10 +953,10 @@ Contrato: ${e.Contrato || 'N/A'}`,
                                       </td>
                                       <td className="px-3 py-2.5 whitespace-nowrap font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
                                       <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">
-                                        {prazoTotal > 0 ? `${parcelasPagas}/${prazoTotal}` : `${parcelasRestantes} rest.`}
+                                        {prazoTotal > 0 ? `${parcelasRestantes}/${prazoTotal}` : `${parcelasRestantes} rest.`}
                                       </td>
                                       <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">{taxa ? `${parseFloat(taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</td>
-                                      <td className="px-3 py-2.5 whitespace-nowrap font-bold text-slate-800 dark:text-slate-200">{valorOrigin > 0 ? formatCurrency(parseFloat(valorOrigin)) : 'N/A'}</td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap font-bold text-slate-800 dark:text-slate-200">{valorContrato > 0 ? formatCurrency(valorContrato) : 'N/A'}</td>
                                       <td className="whitespace-nowrap bg-amber-50/30 px-3 py-2.5 font-black text-amber-600 dark:bg-amber-900/10 dark:text-amber-400">{formatCurrency(saldoAtual)}</td>
                                       <td className="px-3 py-2.5 text-right">
                                         <button
