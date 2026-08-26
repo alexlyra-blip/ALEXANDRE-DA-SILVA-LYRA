@@ -180,6 +180,9 @@ function BrandingWrapper({ children }: { children: React.ReactNode }) {
             promoterName: data.promoterName || ''
           };
           setBranding(newBranding);
+          if (data.slug) {
+            safeLocalStorageSet('currentPromoterSlug', data.slug);
+          }
           safeLocalStorageSet(CACHE_KEY, JSON.stringify({
             data: newBranding,
             timestamp: Date.now()

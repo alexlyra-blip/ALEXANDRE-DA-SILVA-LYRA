@@ -38,7 +38,8 @@ export default function Error({
         </button>
         <button
           onClick={() => {
-            window.location.href = '/';
+            const savedSlug = typeof window !== 'undefined' ? localStorage.getItem('currentPromoterSlug') : null;
+            window.location.href = savedSlug ? `/p/${savedSlug}` : '/';
           }}
           className="w-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold py-3 px-4 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
         >

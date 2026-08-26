@@ -84,7 +84,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (isAuthReady && !user) {
-      router.push('/');
+      const savedSlug = typeof window !== 'undefined' ? localStorage.getItem('currentPromoterSlug') : null;
+      if (savedSlug) {
+        router.push(`/p/${savedSlug}`);
+      } else {
+        router.push('/');
+      }
     }
   }, [isAuthReady, user, router]);
 

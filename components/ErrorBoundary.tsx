@@ -46,7 +46,8 @@ export class ErrorBoundary extends Component<Props, State> {
             <button
               onClick={() => {
                 this.setState({ hasError: false, error: null });
-                window.location.href = '/';
+                const savedSlug = typeof window !== 'undefined' ? localStorage.getItem('currentPromoterSlug') : null;
+                window.location.href = savedSlug ? `/p/${savedSlug}` : '/';
               }}
               className="w-full bg-primary text-white font-bold py-3 px-4 rounded-xl hover:bg-primary/90 transition-colors"
             >

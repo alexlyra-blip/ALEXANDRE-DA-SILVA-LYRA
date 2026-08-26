@@ -370,12 +370,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      const savedSlug = typeof window !== 'undefined' ? localStorage.getItem('currentPromoterSlug') : null;
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('isLoggedInThisSession');
         sessionStorage.removeItem('userSessionToken');
       }
       await signOut(auth);
-      router.push('/');
+      if (savedSlug) {
+        router.push(`/p/${savedSlug}`);
+      } else {
+        router.push('/');
+      }
     } catch (error) {
       console.error("Error signing out:", error);
     }

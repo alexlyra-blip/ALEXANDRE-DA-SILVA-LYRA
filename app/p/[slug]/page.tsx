@@ -73,6 +73,8 @@ export default function PromotoraLogin() {
           setBranding(brandingData);
           setIsFindingPromotora(false);
 
+          safeLocalStorageSet('currentPromoterSlug', slug);
+
           // Update cache
           safeLocalStorageSet(CACHE_KEY, safeStringify({
             data: brandingData,

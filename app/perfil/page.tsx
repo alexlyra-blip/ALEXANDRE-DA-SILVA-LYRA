@@ -114,7 +114,6 @@ export default function Perfil() {
 
   const handleLogout = async () => {
     await logout();
-    router.push('/');
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
