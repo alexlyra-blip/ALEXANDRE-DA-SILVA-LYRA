@@ -3,3 +3,4 @@ export {
   normalizePortabilidadeMultiplaConsulta,
   normalizePortabilidadeMultiplaContract,
 } from './normalizer';
+export * from './rules';
