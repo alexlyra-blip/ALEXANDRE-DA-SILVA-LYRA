@@ -76,6 +76,119 @@ function normalizeDate(value: unknown): string {
   return raw;
 }
 
+function calculateAge(dateValue: unknown): number {
+  const normalized = normalizeDate(dateValue);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return 0;
+
+  const birthDate = new Date(`${normalized}T12:00:00`);
+
+  if (Number.isNaN(birthDate.getTime())) return 0;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDifference = today.getMonth() - birthDate.getMonth();
+
+  if (
+    monthDifference < 0
+    || (
+      monthDifference === 0
+      && today.getDate() < birthDate.getDate()
+    )
+  ) {
+    age -= 1;
+  }
+
+  return Math.max(0, age);
+}
+
+function booleanFromValue(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+
+  const normalized = text(value).toLowerCase();
+
+  if (!normalized) return null;
+
+  if (['sim', 's', '1', 'true'].includes(normalized)) return true;
+  if (['nao', 'não', 'n', '0', 'false'].includes(normalized)) return false;
+
+  return null;
+}
+
+function inferIlliterate(benefit: any): boolean {
+  const person = benefitPerson(benefit);
+
+  const direct = booleanFromValue(
+    firstDefined(
+      person?.Analfabeto,
+      person?.analfabeto,
+      benefit?.Analfabeto,
+      benefit?.analfabeto,
+    ),
+  );
+
+  if (direct !== null) return direct;
+
+  const literate = booleanFromValue(
+    firstDefined(
+      person?.Alfabetizado,
+      person?.alfabetizado,
+      benefit?.Alfabetizado,
+      benefit?.alfabetizado,
+    ),
+  );
+
+  if (literate !== null) return !literate;
+
+  // Mantém o comportamento histórico quando o provider não informa alfabetização.
+  return false;
+}
+
+function extractCardArray(benefit: any, keys: string[]): any[] {
+  for (const key of keys) {
+    const value = benefit?.[key];
+
+    if (value !== undefined && value !== null) {
+      return asArray(value);
+    }
+  }
+
+  return [];
+}
+
+function getBenefitCardContext(benefit: any): {
+  hasTwoCards: boolean;
+  negativeCardValue: number;
+} {
+  const rmc = extractCardArray(benefit, ['Rmc', 'RMC', 'rmc']);
+  const rcc = extractCardArray(benefit, ['RCC', 'Rcc', 'rcc']);
+  const hasTwoCards = rmc.length > 0 && rcc.length > 0;
+
+  if (!hasTwoCards) {
+    return {
+      hasTwoCards: false,
+      negativeCardValue: 0,
+    };
+  }
+
+  const values = [...rmc, ...rcc].map(item =>
+    numberValue(
+      firstDefined(
+        item?.ValorParcela,
+        item?.valorParcela,
+        item?.valor_parcela,
+        item?.Desconto,
+        item?.desconto,
+      ),
+    ),
+  );
+
+  return {
+    hasTwoCards: true,
+    negativeCardValue: Math.max(0, ...values),
+  };
+}
+
 function extractBenefits(data: any): any[] {
   if (Array.isArray(data)) return data;
 
@@ -297,6 +410,7 @@ export function normalizePortabilidadeMultiplaContract(
 function normalizeBenefit(benefit: any): PortabilidadeMultiplaBeneficio {
   const person = benefitPerson(benefit);
   const summary = financialSummary(benefit);
+  const cardContext = getBenefitCardContext(benefit);
 
   const numero = text(
     firstDefined(
@@ -341,6 +455,21 @@ function normalizeBenefit(benefit: any): PortabilidadeMultiplaBeneficio {
         person?.ValorBeneficio,
       ),
     ),
+    data_concessao: normalizeDate(
+      firstDefined(
+        person?.DDB,
+        person?.DIB,
+        person?.DataConcessao,
+        person?.dataConcessao,
+        benefit?.DDB,
+        benefit?.DIB,
+        benefit?.DataConcessao,
+        benefit?.data_concessao,
+      ),
+    ),
+    analfabeto: inferIlliterate(benefit),
+    has_two_cards: cardContext.hasTwoCards,
+    negative_card_value: cardContext.negativeCardValue,
     margens: {
       margem_livre: numberValue(
         firstDefined(
@@ -399,6 +528,24 @@ export function normalizePortabilidadeMultiplaConsulta(
           data?.data_nascimento,
         ),
       ),
+      idade:
+        nonNegativeInt(
+          firstDefined(
+            firstPerson?.Idade,
+            firstPerson?.idade,
+            data?.Idade,
+            data?.idade,
+          ),
+        )
+        || calculateAge(
+          firstDefined(
+            firstPerson?.DataNascimento,
+            firstPerson?.dataNascimento,
+            firstPerson?.data_nascimento,
+            data?.DataNascimento,
+            data?.data_nascimento,
+          ),
+        ),
       uf: text(
         firstDefined(
           firstPerson?.UF,

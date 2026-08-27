@@ -2,6 +2,7 @@ export interface PortabilidadeMultiplaCliente {
   cpf: string;
   nome: string;
   data_nascimento: string;
+  idade: number;
   uf: string;
 }
 
@@ -50,6 +51,16 @@ export interface PortabilidadeMultiplaBeneficio {
   especie: string;
   situacao: string;
   salario: number;
+
+  /**
+   * Contexto necessário para executar as regras INSS do Motor por contrato.
+   * São campos internos normalizados; nomes crus do provider não saem daqui.
+   */
+  data_concessao: string;
+  analfabeto: boolean;
+  has_two_cards: boolean;
+  negative_card_value: number;
+
   margens: PortabilidadeMultiplaMargens;
   contratos: PortabilidadeMultiplaContrato[];
 }

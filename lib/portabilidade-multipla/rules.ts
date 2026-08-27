@@ -14,7 +14,9 @@ export type PortabilidadeMultiplaBloqueioCodigo =
   | 'PARCELA_INVALIDA'
   | 'MARGEM_INSUFICIENTE'
   | 'PARCELA_REFIN_MINIMA'
-  | 'VALOR_CONTRATO_REFIN_MINIMO';
+  | 'VALOR_CONTRATO_REFIN_MINIMO'
+  | 'REGRA_BANCO_ORIGEM'
+  | 'SEM_TABELA_FACTA';
 
 export interface PortabilidadeMultiplaBloqueio {
   codigo: PortabilidadeMultiplaBloqueioCodigo;

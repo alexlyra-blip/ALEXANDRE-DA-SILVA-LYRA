@@ -73,6 +73,33 @@ type PreValidacao = {
   bloqueios: Bloqueio[];
 };
 
+type TabelaFactaOrigem = {
+  chave: string;
+  nome: string;
+  prazo: number;
+  taxa: number;
+};
+
+type ContratoOrigemValidado = {
+  contrato_id: string;
+  contrato: string;
+  banco: string;
+  codigo_banco: string;
+  beneficio: string;
+  elegivel_origem: boolean;
+  ofertas_facta_count: number;
+  tabelas_facta: TabelaFactaOrigem[];
+};
+
+type ValidacaoOrigens = {
+  elegivel: boolean;
+  facta_configurada: boolean;
+  beneficio: string;
+  quantidade_contratos: number;
+  contratos: ContratoOrigemValidado[];
+  bloqueios_contratos: Bloqueio[];
+};
+
 function onlyDigits(value: string): string {
   return value.replace(/\D/g, '').slice(0, 11);
 }
@@ -177,10 +204,13 @@ export default function PortabilidadeMultiplaPage() {
   const [selectedBenefitNumber, setSelectedBenefitNumber] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [validation, setValidation] = useState<PreValidacao | null>(null);
+  const [originValidation, setOriginValidation] =
+    useState<ValidacaoOrigens | null>(null);
 
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [loadingConsulta, setLoadingConsulta] = useState(false);
   const [loadingValidation, setLoadingValidation] = useState(false);
+  const [loadingOrigins, setLoadingOrigins] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -269,6 +299,7 @@ export default function PortabilidadeMultiplaPage() {
     setSelectedBenefitNumber(null);
     setSelectedIds([]);
     setValidation(null);
+    setOriginValidation(null);
     setError('');
   };
 
@@ -296,6 +327,7 @@ export default function PortabilidadeMultiplaPage() {
     setSelectedBenefitNumber(null);
     setSelectedIds([]);
     setValidation(null);
+    setOriginValidation(null);
 
     try {
       const response = await fetch(
@@ -341,6 +373,7 @@ export default function PortabilidadeMultiplaPage() {
     setSelectedBenefitNumber(benefitNumber);
     setSelectedIds([]);
     setValidation(null);
+    setOriginValidation(null);
     setError('');
   };
 
@@ -350,6 +383,7 @@ export default function PortabilidadeMultiplaPage() {
     if (isSelected) {
       setSelectedIds(current => current.filter(id => id !== contract.id));
       setValidation(null);
+      setOriginValidation(null);
       return;
     }
 
@@ -362,6 +396,7 @@ export default function PortabilidadeMultiplaPage() {
 
     setError('');
     setValidation(null);
+    setOriginValidation(null);
     setSelectedIds(current => [...current, contract.id]);
   };
 
@@ -377,7 +412,9 @@ export default function PortabilidadeMultiplaPage() {
     }
 
     setLoadingValidation(true);
+    setLoadingOrigins(false);
     setValidation(null);
+    setOriginValidation(null);
     setError('');
 
     try {
@@ -396,16 +433,44 @@ export default function PortabilidadeMultiplaPage() {
         },
       );
 
-      const payload = await readResponse(response);
+      const payload: PreValidacao = await readResponse(response);
       setValidation(payload);
+
+      if (!payload.elegivel_previo) {
+        return;
+      }
+
+      setLoadingOrigins(true);
+
+      const originResponse = await fetch(
+        '/api/portabilidade-multipla/validar-origens',
+        {
+          method: 'POST',
+          headers: await getAuthHeaders(true),
+          body: JSON.stringify({
+            cpf: onlyDigits(cpf),
+            beneficio: selectedBenefit.numero,
+            contrato_ids: selectedContracts.map(
+              contract => contract.id,
+            ),
+          }),
+          cache: 'no-store',
+        },
+      );
+
+      const originPayload: ValidacaoOrigens =
+        await readResponse(originResponse);
+
+      setOriginValidation(originPayload);
     } catch (validationError) {
       setError(
         validationError instanceof Error
           ? validationError.message
-          : 'Falha ao pré-validar seleção.',
+          : 'Falha ao validar seleção.',
       );
     } finally {
       setLoadingValidation(false);
+      setLoadingOrigins(false);
     }
   };
 
@@ -825,15 +890,15 @@ export default function PortabilidadeMultiplaPage() {
                     <button
                       type="button"
                       onClick={handlePreValidate}
-                      disabled={!selectedContracts.length || loadingValidation}
+                      disabled={!selectedContracts.length || loadingValidation || loadingOrigins}
                       className="flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 text-[11px] font-black uppercase tracking-wider text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-slate-950"
                     >
-                      {loadingValidation ? (
+                      {loadingValidation || loadingOrigins ? (
                         <Loader2 size={17} className="animate-spin" />
                       ) : (
                         <ShieldCheck size={17} />
                       )}
-                      Pré-validar seleção
+                      Validar seleção
                     </button>
                   </div>
                 </section>
@@ -887,7 +952,7 @@ export default function PortabilidadeMultiplaPage() {
                         : 'Seleção possui bloqueios'}
                     </h2>
                     <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
-                      Esta etapa ainda não consulta o Motor nem as tabelas FACTA. A validação individual de cada banco de origem será feita na próxima camada.
+                      A pré-validação estrutural é feita primeiro. Quando ela aprova a seleção, o Motor valida cada contrato separadamente contra as regras e tabelas FACTA, sem consolidar parcelas ou saldos.
                     </p>
                   </div>
                 </div>
@@ -983,6 +1048,151 @@ export default function PortabilidadeMultiplaPage() {
             </section>
           )}
 
+          {loadingOrigins && (
+            <section className="flex items-center justify-center gap-3 rounded-[2rem] border border-slate-200 bg-white py-8 text-sm font-bold text-slate-500 shadow-sm dark:border-white/10 dark:bg-slate-900">
+              <Loader2 size={20} className="animate-spin" />
+              Validando cada contrato individualmente no Motor...
+            </section>
+          )}
+
+          {originValidation && (
+            <section
+              className={`rounded-[2rem] border p-6 shadow-sm ${
+                originValidation.elegivel
+                  ? 'border-emerald-200 bg-white dark:border-emerald-500/20 dark:bg-slate-900'
+                  : 'border-amber-200 bg-white dark:border-amber-500/20 dark:bg-slate-900'
+              }`}
+            >
+              <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 dark:border-white/10 md:flex-row md:items-start md:justify-between">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                      originValidation.elegivel
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                        : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+                    }`}
+                  >
+                    <ShieldCheck size={22} />
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                      Motor • validação individual
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-slate-900 dark:text-white">
+                      {originValidation.elegivel
+                        ? 'Todos os contratos passaram individualmente'
+                        : 'Existe contrato bloqueado pelas regras de origem'}
+                    </h2>
+                    <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">
+                      Cada contrato foi processado isoladamente. Nenhuma parcela ou saldo foi consolidado nesta etapa. A interseção das tabelas FACTA será feita somente depois que todos passarem.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Badge
+                    text={
+                      originValidation.facta_configurada
+                        ? 'FACTA configurada'
+                        : 'FACTA sem configuração'
+                    }
+                  />
+                  <Badge
+                    text={`${originValidation.quantidade_contratos} contratos`}
+                  />
+                </div>
+              </div>
+
+              {!!originValidation.contratos.length && (
+                <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                  {originValidation.contratos.map(contract => (
+                    <div
+                      key={contract.contrato_id}
+                      className={`rounded-2xl border p-4 ${
+                        contract.elegivel_origem
+                          ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/5'
+                          : 'border-amber-200 bg-amber-50/50 dark:border-amber-500/20 dark:bg-amber-500/5'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-black uppercase text-slate-800 dark:text-white">
+                            {contract.banco || 'Banco não informado'}
+                          </p>
+                          <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                            Contrato {contract.contrato || '—'} • NB {contract.beneficio || '—'}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
+                            contract.elegivel_origem
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+                          }`}
+                        >
+                          {contract.elegivel_origem
+                            ? 'Aprovado'
+                            : 'Bloqueado'}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 rounded-xl bg-white/80 px-3 py-3 dark:bg-white/5">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                          Tabelas FACTA elegíveis neste contrato
+                        </p>
+                        <p className="mt-1 text-sm font-black text-slate-800 dark:text-white">
+                          {contract.ofertas_facta_count}
+                        </p>
+
+                        {!!contract.tabelas_facta.length && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {contract.tabelas_facta
+                              .slice(0, 6)
+                              .map(table => (
+                                <span
+                                  key={table.chave}
+                                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[9px] font-black text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+                                >
+                                  {table.nome}
+                                  {table.prazo ? ` • ${table.prazo}x` : ''}
+                                </span>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!!originValidation.bloqueios_contratos.length && (
+                <div className="mt-5 space-y-2">
+                  {originValidation.bloqueios_contratos.map((block, index) => (
+                    <div
+                      key={`${block.codigo}-${block.contrato_id || index}`}
+                      className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/20 dark:bg-amber-500/10"
+                    >
+                      <AlertTriangle
+                        size={17}
+                        className="mt-0.5 shrink-0 text-amber-600"
+                      />
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                          {block.codigo}
+                        </p>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          {block.mensagem}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           {!consulta && !loadingConsulta && !loadingConfig && (
             <section className="grid gap-4 md:grid-cols-3">
               <FeatureCard
@@ -998,7 +1208,7 @@ export default function PortabilidadeMultiplaPage() {
               <FeatureCard
                 icon={<ShieldCheck size={21} />}
                 title="3. Pré-validar"
-                text="O servidor recalcula margem, parcelas, saldo e bloqueios da seleção."
+                text="O servidor recalcula os dados e, se aprovado, valida cada contrato separadamente no Motor."
               />
             </section>
           )}

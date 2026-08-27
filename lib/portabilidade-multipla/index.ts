@@ -6,3 +6,5 @@ export {
 export * from './rules';
 export * from './financial';
 export * from './api';
+
+export * from './origin-validation';
