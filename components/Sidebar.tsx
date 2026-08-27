@@ -54,6 +54,7 @@ export default function Sidebar() {
     { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
     { name: 'Nova Simulação', icon: FileText, path: '/simulacao/nova' },
     { name: 'Consulta CPF', icon: Search, path: '/consulta-cpf' },
+  { name: 'Portabilidade Múltipla', icon: Search, path: '/portabilidade-multipla' },
     { name: 'Card de Ofertas', icon: Banknote, path: '/simulacao/recomendacoes' },
     { name: 'Propostas', icon: ClipboardList, path: '/propostas' },
   ];
