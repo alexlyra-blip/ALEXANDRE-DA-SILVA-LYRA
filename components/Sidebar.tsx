@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { LayoutDashboard, Landmark, FileText, Users, Banknote, LogOut, Settings, Sun, Moon, ClipboardList, Clock, Calendar, Search, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, Landmark, FileText, Users, Banknote, LogOut, Settings, Sun, Moon, ClipboardList, Clock, Calendar, Search, MessageCircle, GitMerge} from 'lucide-react';
 import { motion, useAnimation } from 'motion/react';
 import { PromotoraAvatar } from './PromotoraAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -54,7 +54,7 @@ export default function Sidebar() {
     { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
     { name: 'Nova Simulação', icon: FileText, path: '/simulacao/nova' },
     { name: 'Consulta CPF', icon: Search, path: '/consulta-cpf' },
-  { name: 'Portabilidade Múltipla', icon: Search, path: '/portabilidade-multipla' },
+  { name: 'Portabilidade Múltipla', icon: GitMerge, path: '/portabilidade-multipla' },
     { name: 'Card de Ofertas', icon: Banknote, path: '/simulacao/recomendacoes' },
     { name: 'Propostas', icon: ClipboardList, path: '/propostas' },
   ];
