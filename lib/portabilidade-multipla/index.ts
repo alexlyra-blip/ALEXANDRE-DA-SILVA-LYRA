@@ -4,3 +4,4 @@ export {
   normalizePortabilidadeMultiplaContract,
 } from './normalizer';
 export * from './rules';
+export * from './financial';

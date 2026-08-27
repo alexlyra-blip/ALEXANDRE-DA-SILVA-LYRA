@@ -8,7 +8,12 @@ export type PortabilidadeMultiplaBloqueioCodigo =
   | 'NB_DIFERENTE'
   | 'BANCO_NAO_UNIFICAVEL'
   | 'BANCO_NAO_CLASSIFICADO'
-  | 'GRUPOS_INCOMPATIVEIS';
+  | 'GRUPOS_INCOMPATIVEIS'
+  | 'SALDO_AUSENTE'
+  | 'PARCELA_INVALIDA'
+  | 'MARGEM_INSUFICIENTE'
+  | 'PARCELA_REFIN_MINIMA'
+  | 'VALOR_CONTRATO_REFIN_MINIMO';
 
 export interface PortabilidadeMultiplaBloqueio {
   codigo: PortabilidadeMultiplaBloqueioCodigo;
