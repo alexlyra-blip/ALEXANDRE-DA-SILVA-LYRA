@@ -1,14 +1,19 @@
 import type { PortabilidadeMultiplaContrato } from './types';
 
-export type PortabilidadeMultiplaGrupo = 'A' | 'B' | 'C' | 'NAO_CLASSIFICADO';
+export type PortabilidadeMultiplaGrupo =
+  | 'A'
+  | 'B'
+  | 'MESMO_BANCO'
+  | 'SEM_BANCO';
 
 export type PortabilidadeMultiplaBloqueioCodigo =
   | 'CPF_INVALIDO'
+  | 'MIN_CONTRATOS'
   | 'MAX_CONTRATOS'
   | 'NB_AUSENTE'
   | 'NB_DIFERENTE'
-  | 'BANCO_NAO_UNIFICAVEL'
-  | 'BANCO_NAO_CLASSIFICADO'
+  | 'BANCO_AUSENTE'
+  | 'BANCOS_DIFERENTES'
   | 'GRUPOS_INCOMPATIVEIS'
   | 'SALDO_AUSENTE'
   | 'PARCELA_INVALIDA'
@@ -31,21 +36,34 @@ export interface PortabilidadeMultiplaClassificacaoContrato {
   banco_original: string;
   banco_normalizado: string;
   codigo_banco: string;
+  identidade_banco: string;
   grupo: PortabilidadeMultiplaGrupo;
   selecionavel: boolean;
 }
 
 export interface PortabilidadeMultiplaPreValidacaoEstrutural {
   elegivel_previo: boolean;
-  grupo: 'A' | 'B' | null;
+  grupo: 'A' | 'B' | 'MESMO_BANCO' | null;
   quantidade_contratos: number;
   beneficio: string | null;
   classificacoes: PortabilidadeMultiplaClassificacaoContrato[];
   bloqueios: PortabilidadeMultiplaBloqueio[];
 }
 
+export const PORTABILIDADE_MULTIPLA_MIN_CONTRATOS = 2;
 export const PORTABILIDADE_MULTIPLA_MAX_CONTRATOS = 6;
 
+/**
+ * Grupos oficiais de unificação do projeto FACTA de referência.
+ *
+ * Regra:
+ * - A + A = permitido;
+ * - B + B = permitido;
+ * - banco fora de A/B = somente com a MESMA instituição.
+ *
+ * Bancos fora de A/B seguem a regra de mesma instituição. O fato de uma
+ * origem ser portável ou não continua sendo decidido pelas regras FACTA do Motor.
+ */
 export const PORTABILIDADE_MULTIPLA_GRUPOS = {
   A: [
     'BANRISUL',
@@ -66,14 +84,6 @@ export const PORTABILIDADE_MULTIPLA_GRUPOS = {
     'MERCANTIL',
     'BANCO DO BRASIL',
     'PICPAY',
-  ],
-  C: [
-    'QI SOCIEDADE',
-    'BANCO ORIGINAL',
-    'BANCO INTER',
-    'BANCO MULTIPLO',
-    'BRB',
-    'DIGIO',
   ],
 } as const;
 
@@ -97,7 +107,6 @@ const BANK_CODE_TO_CANONICAL: Record<string, string> = {
   '623': 'PAN',
   '626': 'C6',
   '707': 'DAYCOVAL',
-  // Alguns providers do ecossistema historicamente retornam BRB como 925.
   '925': 'BRB',
 };
 
@@ -175,15 +184,12 @@ function normalizeBankCode(value: unknown): string {
   return digits.slice(-3).padStart(3, '0');
 }
 
-/**
- * Retorna o nome canonico usado exclusivamente pelas regras da Multipla.
- * Banco desconhecido permanece desconhecido: nao ha classificacao automatica por semelhanca.
- */
 export function normalizarBancoPortabilidadeMultipla(
   banco: unknown,
   codigoBanco?: unknown,
 ): string {
   const code = normalizeBankCode(codigoBanco);
+
   if (code && BANK_CODE_TO_CANONICAL[code]) {
     return BANK_CODE_TO_CANONICAL[code];
   }
@@ -191,8 +197,8 @@ export function normalizarBancoPortabilidadeMultipla(
   const normalized = normalizeComparableBankName(banco);
   if (!normalized) return '';
 
-  // Se o provider inclui o codigo no proprio nome, aproveitamos apenas codigos explicitamente cadastrados.
   const inlineCode = normalized.match(/^(\d{1,3})\b/)?.[1];
+
   if (inlineCode) {
     const canonicalByCode =
       BANK_CODE_TO_CANONICAL[inlineCode.padStart(3, '0')];
@@ -206,8 +212,8 @@ export function normalizarBancoPortabilidadeMultipla(
     const normalizedAlias = normalizeComparableBankName(alias);
 
     if (
-      withoutLeadingCode === normalizedAlias ||
-      withoutLeadingCode.startsWith(`${normalizedAlias} `)
+      withoutLeadingCode === normalizedAlias
+      || withoutLeadingCode.startsWith(`${normalizedAlias} `)
     ) {
       return canonical;
     }
@@ -216,25 +222,51 @@ export function normalizarBancoPortabilidadeMultipla(
   return withoutLeadingCode;
 }
 
+export function identidadeBancoPortabilidadeMultipla(
+  banco: unknown,
+  codigoBanco?: unknown,
+): string {
+  const normalized = normalizarBancoPortabilidadeMultipla(
+    banco,
+    codigoBanco,
+  );
+
+  // A identidade canônica vem primeiro para que códigos alternativos da
+  // mesma instituição (quando conhecidos) não criem bancos artificiais.
+  if (normalized) return `NOME:${normalized}`;
+
+  const code = normalizeBankCode(codigoBanco);
+  return code ? `COD:${code}` : '';
+}
+
 export function classificarGrupoFacta(
   banco: unknown,
   codigoBanco?: unknown,
 ): PortabilidadeMultiplaGrupo {
-  const normalized = normalizarBancoPortabilidadeMultipla(banco, codigoBanco);
+  const normalized = normalizarBancoPortabilidadeMultipla(
+    banco,
+    codigoBanco,
+  );
 
-  if ((PORTABILIDADE_MULTIPLA_GRUPOS.A as readonly string[]).includes(normalized)) {
+  if (!normalized && !normalizeBankCode(codigoBanco)) {
+    return 'SEM_BANCO';
+  }
+
+  if (
+    (PORTABILIDADE_MULTIPLA_GRUPOS.A as readonly string[])
+      .includes(normalized)
+  ) {
     return 'A';
   }
 
-  if ((PORTABILIDADE_MULTIPLA_GRUPOS.B as readonly string[]).includes(normalized)) {
+  if (
+    (PORTABILIDADE_MULTIPLA_GRUPOS.B as readonly string[])
+      .includes(normalized)
+  ) {
     return 'B';
   }
 
-  if ((PORTABILIDADE_MULTIPLA_GRUPOS.C as readonly string[]).includes(normalized)) {
-    return 'C';
-  }
-
-  return 'NAO_CLASSIFICADO';
+  return 'MESMO_BANCO';
 }
 
 export function classificarContratoPortabilidadeMultipla(
@@ -248,14 +280,19 @@ export function classificarContratoPortabilidadeMultipla(
     contrato.banco,
     contrato.codigo_banco,
   );
+  const identidadeBanco = identidadeBancoPortabilidadeMultipla(
+    contrato.banco,
+    contrato.codigo_banco,
+  );
 
   return {
     contrato_id: contrato.id,
     banco_original: contrato.banco,
     banco_normalizado: bancoNormalizado,
     codigo_banco: contrato.codigo_banco,
+    identidade_banco: identidadeBanco,
     grupo,
-    selecionavel: grupo === 'A' || grupo === 'B',
+    selecionavel: grupo !== 'SEM_BANCO',
   };
 }
 
@@ -265,22 +302,53 @@ function uniqueNonEmpty(values: string[]): string[] {
   );
 }
 
+function structuralGroup(
+  classificacoes: PortabilidadeMultiplaClassificacaoContrato[],
+): 'A' | 'B' | 'MESMO_BANCO' | null {
+  if (!classificacoes.length) return null;
+
+  const groups = uniqueNonEmpty(
+    classificacoes.map(item => item.grupo),
+  );
+
+  if (groups.length !== 1) return null;
+
+  const group = groups[0];
+
+  if (group === 'A' || group === 'B' || group === 'MESMO_BANCO') {
+    return group;
+  }
+
+  return null;
+}
+
 /**
- * Pre-validacao estrutural barata.
+ * Pré-validação estrutural da seleção.
  *
- * Esta fase NAO calcula margem, NAO chama o Motor e NAO valida tabelas FACTA.
- * Ela somente garante as regras de composicao da operacao:
- * - maximo de 6 contratos;
- * - mesmo beneficio/NB;
- * - grupos A e B nao podem ser misturados;
- * - grupo C bloqueado;
- * - banco desconhecido bloqueado.
+ * Não chama o Motor. Ela só garante:
+ * - 2 a 6 contratos;
+ * - mesmo benefício/NB;
+ * - Grupo A somente com A;
+ * - Grupo B somente com B;
+ * - fora de A/B, somente contratos da MESMA instituição.
+ *
+ * A portabilidade de cada banco é validada posteriormente pelo Motor FACTA.
  */
 export function validarEstruturaPortabilidadeMultipla(
   contratos: PortabilidadeMultiplaContrato[],
 ): PortabilidadeMultiplaPreValidacaoEstrutural {
   const bloqueios: PortabilidadeMultiplaBloqueio[] = [];
-  const classificacoes = contratos.map(classificarContratoPortabilidadeMultipla);
+  const classificacoes = contratos.map(
+    classificarContratoPortabilidadeMultipla,
+  );
+
+  if (contratos.length < PORTABILIDADE_MULTIPLA_MIN_CONTRATOS) {
+    bloqueios.push({
+      codigo: 'MIN_CONTRATOS',
+      mensagem:
+        `Selecione pelo menos ${PORTABILIDADE_MULTIPLA_MIN_CONTRATOS} contratos para uma Portabilidade Múltipla.`,
+    });
+  }
 
   if (contratos.length > PORTABILIDADE_MULTIPLA_MAX_CONTRATOS) {
     bloqueios.push({
@@ -301,7 +369,8 @@ export function validarEstruturaPortabilidadeMultipla(
   if (missingBenefit) {
     bloqueios.push({
       codigo: 'NB_AUSENTE',
-      mensagem: 'Todos os contratos precisam possuir benefício/NB identificado.',
+      mensagem:
+        'Todos os contratos precisam possuir benefício/NB identificado.',
       contrato_id: missingBenefit.id,
       banco: missingBenefit.banco,
     });
@@ -310,50 +379,59 @@ export function validarEstruturaPortabilidadeMultipla(
   if (beneficios.length > 1) {
     bloqueios.push({
       codigo: 'NB_DIFERENTE',
-      mensagem: 'Todos os contratos selecionados devem pertencer ao mesmo benefício/NB.',
+      mensagem:
+        'Todos os contratos selecionados devem pertencer ao mesmo benefício/NB.',
     });
   }
 
-  for (const item of classificacoes) {
-    if (item.grupo === 'C') {
-      bloqueios.push({
-        codigo: 'BANCO_NAO_UNIFICAVEL',
-        mensagem: `${item.banco_normalizado || item.banco_original || 'Banco'} pertence ao Grupo C e não pode ser unificado.`,
-        contrato_id: item.contrato_id,
-        banco: item.banco_normalizado || item.banco_original,
-      });
-    }
-
-    if (item.grupo === 'NAO_CLASSIFICADO') {
-      bloqueios.push({
-        codigo: 'BANCO_NAO_CLASSIFICADO',
-        mensagem: `${item.banco_original || 'Banco'} não está classificado nos grupos FACTA e não pode ser selecionado.`,
-        contrato_id: item.contrato_id,
-        banco: item.banco_original,
-      });
-    }
-  }
-
-  const gruposSelecionaveis = uniqueNonEmpty(
-    classificacoes
-      .map(item => item.grupo)
-      .filter((grupo): grupo is 'A' | 'B' => grupo === 'A' || grupo === 'B'),
+  const missingBank = classificacoes.find(
+    item => item.grupo === 'SEM_BANCO' || !item.identidade_banco,
   );
 
-  if (gruposSelecionaveis.length > 1) {
+  if (missingBank) {
     bloqueios.push({
-      codigo: 'GRUPOS_INCOMPATIVEIS',
-      mensagem: 'Contratos dos grupos A e B não podem ser unificados.',
+      codigo: 'BANCO_AUSENTE',
+      mensagem:
+        'Todos os contratos precisam possuir banco de origem identificado.',
+      contrato_id: missingBank.contrato_id,
+      banco: missingBank.banco_original,
     });
   }
 
-  const grupo =
-    gruposSelecionaveis.length === 1
-      ? gruposSelecionaveis[0] as 'A' | 'B'
-      : null;
+  const groups = uniqueNonEmpty(
+    classificacoes
+      .filter(item => item.grupo !== 'SEM_BANCO')
+      .map(item => item.grupo),
+  );
+
+  if (groups.length > 1) {
+    bloqueios.push({
+      codigo: 'GRUPOS_INCOMPATIVEIS',
+      mensagem:
+        'A seleção não pode misturar Grupo A, Grupo B e bancos da regra de mesma instituição.',
+    });
+  }
+
+  if (groups.length === 1 && groups[0] === 'MESMO_BANCO') {
+    const identities = uniqueNonEmpty(
+      classificacoes.map(item => item.identidade_banco),
+    );
+
+    if (identities.length > 1) {
+      bloqueios.push({
+        codigo: 'BANCOS_DIFERENTES',
+        mensagem:
+          'Bancos fora dos Grupos A/B só podem ser unificados com contratos da mesma instituição.',
+      });
+    }
+  }
+
+  const grupo = structuralGroup(classificacoes);
 
   return {
-    elegivel_previo: contratos.length > 0 && bloqueios.length === 0,
+    elegivel_previo:
+      contratos.length >= PORTABILIDADE_MULTIPLA_MIN_CONTRATOS
+      && bloqueios.length === 0,
     grupo,
     quantidade_contratos: contratos.length,
     beneficio: beneficios.length === 1 ? beneficios[0] : null,
@@ -369,34 +447,23 @@ export interface PortabilidadeMultiplaSelecaoResult {
 }
 
 /**
- * Regra para o frontend bloquear a selecao antes de montar uma operacao invalida.
+ * Regra de UI para impedir combinações inválidas enquanto o usuário marca
+ * os contratos. A validação definitiva continua existindo no servidor.
  */
 export function validarInclusaoContratoPortabilidadeMultipla(
   selecionados: PortabilidadeMultiplaContrato[],
   candidato: PortabilidadeMultiplaContrato,
 ): PortabilidadeMultiplaSelecaoResult {
-  const candidatoClassificado = classificarContratoPortabilidadeMultipla(candidato);
+  const candidate = classificarContratoPortabilidadeMultipla(candidato);
 
-  if (candidatoClassificado.grupo === 'C') {
+  if (candidate.grupo === 'SEM_BANCO' || !candidate.identidade_banco) {
     return {
       permitido: false,
-      grupo: 'C',
+      grupo: 'SEM_BANCO',
       bloqueio: {
-        codigo: 'BANCO_NAO_UNIFICAVEL',
-        mensagem: `${candidatoClassificado.banco_normalizado || candidato.banco || 'Banco'} pertence ao Grupo C e não pode ser unificado.`,
-        contrato_id: candidato.id,
-        banco: candidatoClassificado.banco_normalizado || candidato.banco,
-      },
-    };
-  }
-
-  if (candidatoClassificado.grupo === 'NAO_CLASSIFICADO') {
-    return {
-      permitido: false,
-      grupo: 'NAO_CLASSIFICADO',
-      bloqueio: {
-        codigo: 'BANCO_NAO_CLASSIFICADO',
-        mensagem: `${candidato.banco || 'Banco'} não está classificado nos grupos FACTA e não pode ser selecionado.`,
+        codigo: 'BANCO_AUSENTE',
+        mensagem:
+          'O contrato precisa possuir banco de origem identificado.',
         contrato_id: candidato.id,
         banco: candidato.banco,
       },
@@ -406,7 +473,7 @@ export function validarInclusaoContratoPortabilidadeMultipla(
   if (selecionados.length >= PORTABILIDADE_MULTIPLA_MAX_CONTRATOS) {
     return {
       permitido: false,
-      grupo: candidatoClassificado.grupo,
+      grupo: candidate.grupo,
       bloqueio: {
         codigo: 'MAX_CONTRATOS',
         mensagem:
@@ -420,10 +487,11 @@ export function validarInclusaoContratoPortabilidadeMultipla(
   if (!beneficioCandidato) {
     return {
       permitido: false,
-      grupo: candidatoClassificado.grupo,
+      grupo: candidate.grupo,
       bloqueio: {
         codigo: 'NB_AUSENTE',
-        mensagem: 'O contrato precisa possuir benefício/NB identificado.',
+        mensagem:
+          'O contrato precisa possuir benefício/NB identificado.',
         contrato_id: candidato.id,
         banco: candidato.banco,
       },
@@ -435,15 +503,16 @@ export function validarInclusaoContratoPortabilidadeMultipla(
     .find(Boolean);
 
   if (
-    beneficioSelecionado &&
-    beneficioSelecionado !== beneficioCandidato
+    beneficioSelecionado
+    && beneficioSelecionado !== beneficioCandidato
   ) {
     return {
       permitido: false,
-      grupo: candidatoClassificado.grupo,
+      grupo: candidate.grupo,
       bloqueio: {
         codigo: 'NB_DIFERENTE',
-        mensagem: 'Todos os contratos selecionados devem pertencer ao mesmo benefício/NB.',
+        mensagem:
+          'Todos os contratos selecionados devem pertencer ao mesmo benefício/NB.',
         contrato_id: candidato.id,
         banco: candidato.banco,
         beneficio: beneficioCandidato,
@@ -451,31 +520,59 @@ export function validarInclusaoContratoPortabilidadeMultipla(
     };
   }
 
-  const gruposSelecionados = uniqueNonEmpty(
-    selecionados
-      .map(classificarContratoPortabilidadeMultipla)
-      .map(item => item.grupo)
-      .filter((grupo): grupo is 'A' | 'B' => grupo === 'A' || grupo === 'B'),
+  if (!selecionados.length) {
+    return {
+      permitido: true,
+      grupo: candidate.grupo,
+    };
+  }
+
+  const first = classificarContratoPortabilidadeMultipla(
+    selecionados[0],
   );
 
-  if (
-    gruposSelecionados.length > 0 &&
-    !gruposSelecionados.includes(candidatoClassificado.grupo)
-  ) {
+  if (first.grupo === 'A' || first.grupo === 'B') {
+    if (candidate.grupo !== first.grupo) {
+      return {
+        permitido: false,
+        grupo: candidate.grupo,
+        bloqueio: {
+          codigo: 'GRUPOS_INCOMPATIVEIS',
+          mensagem:
+            `A seleção atual pertence ao Grupo ${first.grupo}; escolha somente contratos do mesmo grupo.`,
+          contrato_id: candidato.id,
+          banco: candidato.banco,
+        },
+      };
+    }
+
     return {
-      permitido: false,
-      grupo: candidatoClassificado.grupo,
-      bloqueio: {
-        codigo: 'GRUPOS_INCOMPATIVEIS',
-        mensagem: 'Contratos dos grupos A e B não podem ser unificados.',
-        contrato_id: candidato.id,
-        banco: candidato.banco,
-      },
+      permitido: true,
+      grupo: candidate.grupo,
     };
+  }
+
+  if (first.grupo === 'MESMO_BANCO') {
+    if (
+      candidate.grupo !== 'MESMO_BANCO'
+      || candidate.identidade_banco !== first.identidade_banco
+    ) {
+      return {
+        permitido: false,
+        grupo: candidate.grupo,
+        bloqueio: {
+          codigo: 'BANCOS_DIFERENTES',
+          mensagem:
+            'Para bancos fora dos Grupos A/B, selecione somente contratos da mesma instituição.',
+          contrato_id: candidato.id,
+          banco: candidato.banco,
+        },
+      };
+    }
   }
 
   return {
     permitido: true,
-    grupo: candidatoClassificado.grupo,
+    grupo: candidate.grupo,
   };
 }

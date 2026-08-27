@@ -1,6 +1,7 @@
 import type { PortabilidadeMultiplaContrato } from './types';
 import {
   PORTABILIDADE_MULTIPLA_GRUPOS,
+  PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
   PORTABILIDADE_MULTIPLA_MAX_CONTRATOS,
   type PortabilidadeMultiplaBloqueio,
 } from './rules';
@@ -15,6 +16,7 @@ import {
 export const PORTABILIDADE_MULTIPLA_API_CONFIG = {
   banco_destino: 'FACTA',
   convenio: 'INSS',
+  min_contratos: PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
   max_contratos: PORTABILIDADE_MULTIPLA_MAX_CONTRATOS,
   adicional_viabilidade: PORTABILIDADE_MULTIPLA_ADICIONAL_VIABILIDADE,
   parcela_minima_refin: PORTABILIDADE_MULTIPLA_PARCELA_MINIMA_REFIN,
@@ -26,8 +28,8 @@ export const PORTABILIDADE_MULTIPLA_API_CONFIG = {
   grupos: {
     A: [...PORTABILIDADE_MULTIPLA_GRUPOS.A],
     B: [...PORTABILIDADE_MULTIPLA_GRUPOS.B],
-    C: [...PORTABILIDADE_MULTIPLA_GRUPOS.C],
   },
+  regra_outros_bancos: 'MESMA_INSTITUICAO',
 } as const;
 
 export interface PortabilidadeMultiplaValidarPayload {
@@ -270,7 +272,7 @@ export function executarPreValidacaoApiPortabilidadeMultipla(
     beneficio_solicitado: beneficioSolicitado,
     bloqueios,
     elegivel_previo:
-      payload.contratos.length > 0
+      payload.contratos.length >= PORTABILIDADE_MULTIPLA_MIN_CONTRATOS
       && bloqueios.length === 0,
   };
 }

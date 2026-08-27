@@ -147,6 +147,39 @@ function rateFromOffer(offer: any): number {
   );
 }
 
+
+function normalizeRateKey(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+
+  return value
+    .toFixed(6)
+    .replace(/0+$/, '')
+    .replace(/\.$/, '')
+    || '0';
+}
+
+/**
+ * Chave estável da oferta/tabela FACTA usada na interseção.
+ *
+ * A especificação da Múltipla exige identidade por:
+ * banco + tabela + prazo + taxa.
+ *
+ * Como esta camada já filtra apenas FACTA, o banco fica explicitamente
+ * fixado como FACTA na chave.
+ */
+export function criarChaveTabelaFacta(
+  nome: string,
+  prazo: number,
+  taxa: number,
+): string {
+  return [
+    'FACTA',
+    normalizeText(nome),
+    String(Math.max(0, Math.trunc(prazo || 0))),
+    normalizeRateKey(taxa || 0),
+  ].join('|');
+}
+
 export function resumirTabelasFactaDoMotor(
   offers: any[],
 ): PortabilidadeMultiplaTabelaFactaOrigem[] {
@@ -158,8 +191,7 @@ export function resumirTabelasFactaDoMotor(
     const nome = tableNameFromOffer(offer);
     const prazo = termFromOffer(offer);
     const taxa = rateFromOffer(offer);
-
-    const key = `${normalizeText(nome)}|${prazo}`;
+    const key = criarChaveTabelaFacta(nome, prazo, taxa);
 
     if (!unique.has(key)) {
       unique.set(key, {

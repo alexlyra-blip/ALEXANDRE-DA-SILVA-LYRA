@@ -14,7 +14,20 @@ import {
   validarContratosIndividualmenteNoMotor,
   type PortabilidadeMultiplaResultadoOrigens,
 } from './origin-validation';
-import type { PortabilidadeMultiplaBloqueio } from './rules';
+import {
+  interseccionarTabelasFacta,
+  type PortabilidadeMultiplaIntersecaoFacta,
+} from './intersection';
+import {
+  PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
+  PORTABILIDADE_MULTIPLA_MAX_CONTRATOS,
+  type PortabilidadeMultiplaBloqueio,
+} from './rules';
+import {
+  emptySimulacaoConsolidadaPortabilidadeMultipla,
+  executarSimulacaoConsolidadaPortabilidadeMultipla,
+  type PortabilidadeMultiplaSimulacaoConsolidada,
+} from './consolidated-simulation';
 
 export interface PortabilidadeMultiplaValidarOrigensInput {
   cpf: string;
@@ -23,13 +36,39 @@ export interface PortabilidadeMultiplaValidarOrigensInput {
 }
 
 export interface PortabilidadeMultiplaValidarOrigensResponse {
+  /**
+   * Compatibilidade retroativa da 1F:
+   * indica que todas as origens passaram individualmente.
+   */
   elegivel: boolean;
+
   facta_configurada: boolean;
   beneficio: string;
   quantidade_contratos: number;
   pre_validacao: ReturnType<typeof validarPreviamentePortabilidadeMultipla>;
   contratos: PortabilidadeMultiplaResultadoOrigens['contratos'];
   bloqueios_contratos: PortabilidadeMultiplaBloqueio[];
+
+  /**
+   * Compatibilidade técnica das origens. A taxa individual não é usada como
+   * identidade; a compatibilidade considera a mesma tabela + mesmo prazo.
+   */
+  intersecao_facta: PortabilidadeMultiplaIntersecaoFacta;
+  bloqueios_intersecao: PortabilidadeMultiplaBloqueio[];
+
+  /** Resultado financeiro FINAL: uma única operação FACTA consolidada. */
+  simulacao_consolidada: PortabilidadeMultiplaSimulacaoConsolidada;
+  pronta_para_consolidar: boolean;
+}
+
+
+function emptyIntersection(): PortabilidadeMultiplaIntersecaoFacta {
+  return {
+    possui_intersecao: false,
+    quantidade_tabelas_comuns: 0,
+    tabelas_comuns: [],
+    prazos_disponiveis: [],
+  };
 }
 
 export class PortabilidadeMultiplaOrigemError extends Error {
@@ -183,12 +222,13 @@ async function loadMotorContext(profile: any) {
 }
 
 /**
- * Fonte de verdade da 1F:
+ * Fonte de verdade da Portabilidade Múltipla:
  * - recebe apenas CPF, NB e IDs selecionados;
  * - consulta novamente o MultiCorban no servidor;
- * - normaliza novamente;
- * - reconstrói os contratos selecionados com dados confiáveis;
- * - executa o Motor individualmente para cada contrato.
+ * - reconstrói exclusivamente contratos daquele mesmo benefício/NB;
+ * - valida cada origem no Motor apenas como filtro de elegibilidade;
+ * - soma parcelas e saldos reais;
+ * - executa UMA única simulação FACTA para a operação consolidada.
  */
 export async function validarOrigensPortabilidadeMultiplaServer(
   input: PortabilidadeMultiplaValidarOrigensInput,
@@ -224,16 +264,16 @@ export async function validarOrigensPortabilidadeMultiplaServer(
     ),
   );
 
-  if (ids.length === 0) {
+  if (ids.length < PORTABILIDADE_MULTIPLA_MIN_CONTRATOS) {
     throw new PortabilidadeMultiplaOrigemError(
-      'Selecione pelo menos um contrato.',
+      `Selecione pelo menos ${PORTABILIDADE_MULTIPLA_MIN_CONTRATOS} contratos do mesmo benefício/NB.`,
       400,
     );
   }
 
-  if (ids.length > 6) {
+  if (ids.length > PORTABILIDADE_MULTIPLA_MAX_CONTRATOS) {
     throw new PortabilidadeMultiplaOrigemError(
-      'A Portabilidade Múltipla permite no máximo 6 contratos.',
+      `A Portabilidade Múltipla permite no máximo ${PORTABILIDADE_MULTIPLA_MAX_CONTRATOS} contratos.`,
       400,
     );
   }
@@ -282,6 +322,15 @@ export async function validarOrigensPortabilidadeMultiplaServer(
       pre_validacao: preValidation,
       contratos: [],
       bloqueios_contratos: preValidation.bloqueios,
+      intersecao_facta: emptyIntersection(),
+      bloqueios_intersecao: [],
+      simulacao_consolidada:
+        emptySimulacaoConsolidadaPortabilidadeMultipla(
+          benefit.numero,
+          selectedContracts.length,
+          preValidation,
+        ),
+      pronta_para_consolidar: false,
     };
   }
 
@@ -302,7 +351,16 @@ export async function validarOrigensPortabilidadeMultiplaServer(
       quantidade_contratos: selectedContracts.length,
       pre_validacao: preValidation,
       contratos: [],
-      bloqueios_contratos: [block],
+      bloqueios_contratos: [],
+      intersecao_facta: emptyIntersection(),
+      bloqueios_intersecao: [block],
+      simulacao_consolidada:
+        emptySimulacaoConsolidadaPortabilidadeMultipla(
+          benefit.numero,
+          selectedContracts.length,
+          preValidation,
+        ),
+      pronta_para_consolidar: false,
     };
   }
 
@@ -315,15 +373,71 @@ export async function validarOrigensPortabilidadeMultiplaServer(
     calculateRate,
   );
 
+  if (!originValidation.elegivel_origens) {
+    return {
+      elegivel: false,
+      facta_configurada: true,
+      beneficio: benefit.numero,
+      quantidade_contratos: selectedContracts.length,
+      pre_validacao: preValidation,
+      contratos: originValidation.contratos,
+      bloqueios_contratos: originValidation.bloqueios_contratos,
+      intersecao_facta: emptyIntersection(),
+      bloqueios_intersecao: [],
+      simulacao_consolidada:
+        emptySimulacaoConsolidadaPortabilidadeMultipla(
+          benefit.numero,
+          selectedContracts.length,
+          preValidation,
+        ),
+      pronta_para_consolidar: false,
+    };
+  }
+
+  const intersecao = interseccionarTabelasFacta(
+    originValidation.contratos,
+  );
+
+  const bloqueiosIntersecao: PortabilidadeMultiplaBloqueio[] = [];
+
+  if (!intersecao.possui_intersecao) {
+    bloqueiosIntersecao.push({
+      codigo: 'SEM_TABELA_FACTA',
+      mensagem:
+        'Não existe tabela/prazo FACTA compatível simultaneamente com todos os contratos selecionados.',
+    });
+  }
+
+  const simulacaoConsolidada = intersecao.possui_intersecao
+    ? executarSimulacaoConsolidadaPortabilidadeMultipla(
+        consulta,
+        benefit,
+        selectedContracts,
+        preValidation,
+        intersecao,
+        motorContext,
+        calculateOffers,
+      )
+    : emptySimulacaoConsolidadaPortabilidadeMultipla(
+        benefit.numero,
+        selectedContracts.length,
+        preValidation,
+      );
+
   return {
-    elegivel:
-      preValidation.elegivel_previo
-      && originValidation.elegivel_origens,
+    // Compatibilidade: todas as origens foram aprovadas individualmente.
+    elegivel: true,
     facta_configurada: true,
     beneficio: benefit.numero,
     quantidade_contratos: selectedContracts.length,
     pre_validacao: preValidation,
     contratos: originValidation.contratos,
-    bloqueios_contratos: originValidation.bloqueios_contratos,
+    bloqueios_contratos: [],
+    intersecao_facta: intersecao,
+    bloqueios_intersecao: bloqueiosIntersecao,
+    simulacao_consolidada: simulacaoConsolidada,
+    pronta_para_consolidar:
+      simulacaoConsolidada.executada
+      && simulacaoConsolidada.elegivel,
   };
 }
