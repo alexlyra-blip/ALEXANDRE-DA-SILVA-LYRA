@@ -239,7 +239,12 @@ export function calcularResumoFinanceiroPortabilidadeMultipla(
     });
   }
 
-  const parcelaRefinCents = somaParcelasCents - margemNegativaCents;
+  // Na margem negativa, a nova parcela precisa permanecer R$ 20,00
+  // acima do valor necessário para absorver o negativo.
+  // Ex.: 598,08 - 175,07 + 20,00 = 443,01.
+  const parcelaRefinCents = margemNegativaCents > 0
+    ? somaParcelasCents - margemNegativaCents + adicionalCents
+    : somaParcelasCents;
   const parcelaMinimaRefinCents = moneyToCents(cfg.parcela_minima_refin);
 
   const parcelaRefinMinimaAtendida =

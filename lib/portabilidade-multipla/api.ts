@@ -29,7 +29,7 @@ export const PORTABILIDADE_MULTIPLA_API_CONFIG = {
     A: [...PORTABILIDADE_MULTIPLA_GRUPOS.A],
     B: [...PORTABILIDADE_MULTIPLA_GRUPOS.B],
   },
-  regra_outros_bancos: 'MESMA_INSTITUICAO',
+  regra_outros_bancos: 'GRUPO_C_BLOQUEADO',
 } as const;
 
 export interface PortabilidadeMultiplaValidarPayload {

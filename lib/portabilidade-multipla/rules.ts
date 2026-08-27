@@ -3,7 +3,7 @@ import type { PortabilidadeMultiplaContrato } from './types';
 export type PortabilidadeMultiplaGrupo =
   | 'A'
   | 'B'
-  | 'MESMO_BANCO'
+  | 'C'
   | 'SEM_BANCO';
 
 export type PortabilidadeMultiplaBloqueioCodigo =
@@ -43,7 +43,7 @@ export interface PortabilidadeMultiplaClassificacaoContrato {
 
 export interface PortabilidadeMultiplaPreValidacaoEstrutural {
   elegivel_previo: boolean;
-  grupo: 'A' | 'B' | 'MESMO_BANCO' | null;
+  grupo: 'A' | 'B' | 'AB' | null;
   quantidade_contratos: number;
   beneficio: string | null;
   classificacoes: PortabilidadeMultiplaClassificacaoContrato[];
@@ -57,12 +57,10 @@ export const PORTABILIDADE_MULTIPLA_MAX_CONTRATOS = 6;
  * Grupos oficiais de unificação do projeto FACTA de referência.
  *
  * Regra:
- * - A + A = permitido;
- * - B + B = permitido;
- * - banco fora de A/B = somente com a MESMA instituição.
- *
- * Bancos fora de A/B seguem a regra de mesma instituição. O fato de uma
- * origem ser portável ou não continua sendo decidido pelas regras FACTA do Motor.
+ * - Grupo A e Grupo B podem ser combinados entre si;
+ * - bancos fora de A/B são classificados como Grupo C e NÃO participam
+ *   da Portabilidade Múltipla;
+ * - a portabilidade individual continua sendo validada pelo Motor FACTA.
  */
 export const PORTABILIDADE_MULTIPLA_GRUPOS = {
   A: [
@@ -266,7 +264,7 @@ export function classificarGrupoFacta(
     return 'B';
   }
 
-  return 'MESMO_BANCO';
+  return 'C';
 }
 
 export function classificarContratoPortabilidadeMultipla(
@@ -292,7 +290,7 @@ export function classificarContratoPortabilidadeMultipla(
     codigo_banco: contrato.codigo_banco,
     identidade_banco: identidadeBanco,
     grupo,
-    selecionavel: grupo !== 'SEM_BANCO',
+    selecionavel: grupo === 'A' || grupo === 'B',
   };
 }
 
@@ -304,22 +302,16 @@ function uniqueNonEmpty(values: string[]): string[] {
 
 function structuralGroup(
   classificacoes: PortabilidadeMultiplaClassificacaoContrato[],
-): 'A' | 'B' | 'MESMO_BANCO' | null {
-  if (!classificacoes.length) return null;
-
+): 'A' | 'B' | 'AB' | null {
   const groups = uniqueNonEmpty(
-    classificacoes.map(item => item.grupo),
+    classificacoes
+      .filter(item => item.grupo === 'A' || item.grupo === 'B')
+      .map(item => item.grupo),
   );
 
-  if (groups.length !== 1) return null;
-
-  const group = groups[0];
-
-  if (group === 'A' || group === 'B' || group === 'MESMO_BANCO') {
-    return group;
-  }
-
-  return null;
+  if (!groups.length) return null;
+  if (groups.length === 1) return groups[0] as 'A' | 'B';
+  return 'AB';
 }
 
 /**
@@ -328,11 +320,10 @@ function structuralGroup(
  * Não chama o Motor. Ela só garante:
  * - 2 a 6 contratos;
  * - mesmo benefício/NB;
- * - Grupo A somente com A;
- * - Grupo B somente com B;
- * - fora de A/B, somente contratos da MESMA instituição.
- *
- * A portabilidade de cada banco é validada posteriormente pelo Motor FACTA.
+ * - Grupo A pode combinar com Grupo A ou B;
+ * - Grupo B pode combinar com Grupo A ou B;
+ * - Grupo C não pode ser selecionado;
+ * - a portabilidade de cada banco é validada posteriormente pelo Motor FACTA.
  */
 export function validarEstruturaPortabilidadeMultipla(
   contratos: PortabilidadeMultiplaContrato[],
@@ -398,32 +389,16 @@ export function validarEstruturaPortabilidadeMultipla(
     });
   }
 
-  const groups = uniqueNonEmpty(
-    classificacoes
-      .filter(item => item.grupo !== 'SEM_BANCO')
-      .map(item => item.grupo),
-  );
+  const grupoC = classificacoes.find(item => item.grupo === 'C');
 
-  if (groups.length > 1) {
+  if (grupoC) {
     bloqueios.push({
       codigo: 'GRUPOS_INCOMPATIVEIS',
       mensagem:
-        'A seleção não pode misturar Grupo A, Grupo B e bancos da regra de mesma instituição.',
+        'Contratos do Grupo C não participam da Portabilidade Múltipla FACTA.',
+      contrato_id: grupoC.contrato_id,
+      banco: grupoC.banco_original,
     });
-  }
-
-  if (groups.length === 1 && groups[0] === 'MESMO_BANCO') {
-    const identities = uniqueNonEmpty(
-      classificacoes.map(item => item.identidade_banco),
-    );
-
-    if (identities.length > 1) {
-      bloqueios.push({
-        codigo: 'BANCOS_DIFERENTES',
-        mensagem:
-          'Bancos fora dos Grupos A/B só podem ser unificados com contratos da mesma instituição.',
-      });
-    }
   }
 
   const grupo = structuralGroup(classificacoes);
@@ -520,57 +495,21 @@ export function validarInclusaoContratoPortabilidadeMultipla(
     };
   }
 
-  if (!selecionados.length) {
+  if (candidate.grupo === 'C') {
     return {
-      permitido: true,
+      permitido: false,
       grupo: candidate.grupo,
+      bloqueio: {
+        codigo: 'GRUPOS_INCOMPATIVEIS',
+        mensagem:
+          'Este contrato pertence ao Grupo C e não pode ser usado na Portabilidade Múltipla FACTA.',
+        contrato_id: candidato.id,
+        banco: candidato.banco,
+      },
     };
   }
 
-  const first = classificarContratoPortabilidadeMultipla(
-    selecionados[0],
-  );
-
-  if (first.grupo === 'A' || first.grupo === 'B') {
-    if (candidate.grupo !== first.grupo) {
-      return {
-        permitido: false,
-        grupo: candidate.grupo,
-        bloqueio: {
-          codigo: 'GRUPOS_INCOMPATIVEIS',
-          mensagem:
-            `A seleção atual pertence ao Grupo ${first.grupo}; escolha somente contratos do mesmo grupo.`,
-          contrato_id: candidato.id,
-          banco: candidato.banco,
-        },
-      };
-    }
-
-    return {
-      permitido: true,
-      grupo: candidate.grupo,
-    };
-  }
-
-  if (first.grupo === 'MESMO_BANCO') {
-    if (
-      candidate.grupo !== 'MESMO_BANCO'
-      || candidate.identidade_banco !== first.identidade_banco
-    ) {
-      return {
-        permitido: false,
-        grupo: candidate.grupo,
-        bloqueio: {
-          codigo: 'BANCOS_DIFERENTES',
-          mensagem:
-            'Para bancos fora dos Grupos A/B, selecione somente contratos da mesma instituição.',
-          contrato_id: candidato.id,
-          banco: candidato.banco,
-        },
-      };
-    }
-  }
-
+  // Grupos A e B são compatíveis entre si.
   return {
     permitido: true,
     grupo: candidate.grupo,

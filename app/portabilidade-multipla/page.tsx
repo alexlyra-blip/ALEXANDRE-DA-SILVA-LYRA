@@ -41,7 +41,7 @@ type ConfigMultipla = {
     A: string[];
     B: string[];
   };
-  regra_outros_bancos: 'MESMA_INSTITUICAO';
+  regra_outros_bancos: 'GRUPO_C_BLOQUEADO';
 };
 
 type Bloqueio = {
@@ -54,7 +54,7 @@ type Bloqueio = {
 
 type PreValidacao = {
   elegivel_previo: boolean;
-  grupo: 'A' | 'B' | 'MESMO_BANCO' | null;
+  grupo: 'A' | 'B' | 'AB' | null;
   quantidade_contratos: number;
   beneficio: string | null;
   cpf_valido: boolean;
@@ -90,6 +90,19 @@ type ContratoOrigemValidado = {
   elegivel_origem: boolean;
   ofertas_facta_count: number;
   tabelas_facta: TabelaFactaOrigem[];
+};
+
+type ElegibilidadeContrato = {
+  contrato_id: string;
+  contrato: string;
+  banco: string;
+  codigo_banco: string;
+  beneficio: string;
+  grupo: 'A' | 'B' | 'C' | 'SEM_BANCO';
+  selecionavel: boolean;
+  motivo: string;
+  parcelas_pagas: number;
+  parcelas_minimas: number;
 };
 
 type IntersecaoFacta = {
@@ -198,7 +211,15 @@ function benefitLabel(benefit: PortabilidadeMultiplaBeneficio): string {
 function contractSelectionReason(
   selected: PortabilidadeMultiplaContrato[],
   contract: PortabilidadeMultiplaContrato,
+  eligibility?: ElegibilidadeContrato,
 ): { allowed: boolean; reason: string } {
+  if (eligibility && !eligibility.selecionavel) {
+    return {
+      allowed: false,
+      reason: eligibility.motivo || 'Contrato bloqueado pelas regras FACTA.',
+    };
+  }
+
   if (contract.parcela <= 0) {
     return {
       allowed: false,
@@ -251,10 +272,14 @@ export default function PortabilidadeMultiplaPage() {
   const [originValidation, setOriginValidation] =
     useState<ValidacaoOrigens | null>(null);
 
+  const [eligibilidadeContratos, setElegibilidadeContratos] =
+    useState<Record<string, ElegibilidadeContrato> | null>(null);
+
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [loadingConsulta, setLoadingConsulta] = useState(false);
   const [loadingValidation, setLoadingValidation] = useState(false);
   const [loadingOrigins, setLoadingOrigins] = useState(false);
+  const [loadingEligibility, setLoadingEligibility] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -329,6 +354,18 @@ export default function PortabilidadeMultiplaPage() {
     );
   }, [selectedBenefit, selectedIds]);
 
+  const orderedContracts = useMemo(() => {
+    if (!selectedBenefit) return [];
+
+    const order: Record<string, number> = { A: 0, B: 1, C: 2, SEM_BANCO: 3 };
+
+    return [...selectedBenefit.contratos].sort((a, b) => {
+      const groupA = classificarContratoPortabilidadeMultipla(a).grupo;
+      const groupB = classificarContratoPortabilidadeMultipla(b).grupo;
+      return (order[groupA] ?? 9) - (order[groupB] ?? 9);
+    });
+  }, [selectedBenefit]);
+
   const selectedGroup = useMemo(() => {
     if (!selectedContracts.length) return null;
 
@@ -336,7 +373,13 @@ export default function PortabilidadeMultiplaPage() {
       selectedContracts[0],
     ).grupo;
 
-    if (group === 'MESMO_BANCO') return 'Mesma instituição';
+    const groups = new Set(
+      selectedContracts.map(contract =>
+        classificarContratoPortabilidadeMultipla(contract).grupo,
+      ),
+    );
+
+    if (groups.has('A') && groups.has('B')) return 'Grupos A + B';
     if (group === 'A' || group === 'B') return `Grupo ${group}`;
     return null;
   }, [selectedContracts]);
@@ -347,6 +390,7 @@ export default function PortabilidadeMultiplaPage() {
     setSelectedIds([]);
     setValidation(null);
     setOriginValidation(null);
+    setElegibilidadeContratos(null);
     setError('');
   };
 
@@ -355,6 +399,46 @@ export default function PortabilidadeMultiplaPage() {
 
     if (consulta) {
       resetOperation();
+    }
+  };
+
+  const loadBenefitEligibility = async (
+    benefitNumber: string,
+    cpfValue: string,
+  ) => {
+    setLoadingEligibility(true);
+    setElegibilidadeContratos(null);
+
+    try {
+      const response = await fetch(
+        '/api/portabilidade-multipla/elegibilidade',
+        {
+          method: 'POST',
+          headers: await getAuthHeaders(true),
+          body: JSON.stringify({
+            cpf: onlyDigits(cpfValue),
+            beneficio: benefitNumber,
+          }),
+          cache: 'no-store',
+        },
+      );
+
+      const payload = await readResponse(response);
+      const map: Record<string, ElegibilidadeContrato> = {};
+
+      for (const contract of payload?.contratos || []) {
+        map[contract.contrato_id] = contract;
+      }
+
+      setElegibilidadeContratos(map);
+    } catch (eligibilityError) {
+      setError(
+        eligibilityError instanceof Error
+          ? eligibilityError.message
+          : 'Falha ao validar elegibilidade FACTA dos contratos.',
+      );
+    } finally {
+      setLoadingEligibility(false);
     }
   };
 
@@ -375,6 +459,7 @@ export default function PortabilidadeMultiplaPage() {
     setSelectedIds([]);
     setValidation(null);
     setOriginValidation(null);
+    setElegibilidadeContratos(null);
 
     try {
       const response = await fetch(
@@ -403,7 +488,9 @@ export default function PortabilidadeMultiplaPage() {
       setConsulta(normalized);
 
       if (normalized.beneficios.length === 1) {
-        setSelectedBenefitNumber(normalized.beneficios[0].numero);
+        const singleBenefit = normalized.beneficios[0].numero;
+        setSelectedBenefitNumber(singleBenefit);
+        void loadBenefitEligibility(singleBenefit, cpfDigits);
       }
     } catch (consultaError) {
       setError(
@@ -421,7 +508,9 @@ export default function PortabilidadeMultiplaPage() {
     setSelectedIds([]);
     setValidation(null);
     setOriginValidation(null);
+    setElegibilidadeContratos(null);
     setError('');
+    void loadBenefitEligibility(benefitNumber, cpf);
   };
 
   const toggleContract = (contract: PortabilidadeMultiplaContrato) => {
@@ -434,7 +523,11 @@ export default function PortabilidadeMultiplaPage() {
       return;
     }
 
-    const check = contractSelectionReason(selectedContracts, contract);
+    const check = contractSelectionReason(
+      selectedContracts,
+      contract,
+      eligibilidadeContratos?.[contract.id],
+    );
 
     if (!check.allowed) {
       setError(check.reason || 'Este contrato não pode ser selecionado.');
@@ -609,7 +702,7 @@ export default function PortabilidadeMultiplaPage() {
                       onChange={event => handleCpfChange(event.target.value)}
                       placeholder="000.000.000-00"
                       inputMode="numeric"
-                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition focus:border-rose-400 focus:bg-white focus:ring-4 focus:ring-rose-500/10 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition focus:border-primary/60 focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-white/10 dark:bg-white/5 dark:text-white"
                     />
                   </div>
                 </div>
@@ -617,7 +710,7 @@ export default function PortabilidadeMultiplaPage() {
                 <button
                   type="submit"
                   disabled={loadingConsulta || loadingConfig}
-                  className="flex h-12 min-w-44 items-center justify-center gap-2 rounded-2xl bg-rose-600 px-6 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-rose-600/20 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex h-12 min-w-44 items-center justify-center gap-2 rounded-2xl bg-primary px-6 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loadingConsulta ? (
                     <Loader2 size={18} className="animate-spin" />
@@ -782,7 +875,7 @@ export default function PortabilidadeMultiplaPage() {
                         </h2>
                       </div>
                       <p className="mt-1 text-xs font-semibold text-slate-400">
-                        Selecione de 2 a 6 contratos do mesmo NB. Grupo A combina com A, Grupo B com B e bancos fora dos grupos somente com a mesma instituição.
+                        Selecione de 2 a 6 contratos do mesmo NB. Grupo A e Grupo B podem ser combinados. Grupo C fica bloqueado.
                       </p>
                     </div>
 
@@ -797,16 +890,20 @@ export default function PortabilidadeMultiplaPage() {
 
                   {selectedBenefit.contratos.length ? (
                     <div className="grid gap-4 xl:grid-cols-2">
-                      {selectedBenefit.contratos.map(contract => {
+                      {orderedContracts.map(contract => {
                         const classified =
                           classificarContratoPortabilidadeMultipla(contract);
                         const selected = selectedIds.includes(contract.id);
+                        const eligibility = eligibilidadeContratos?.[contract.id];
                         const selection = selected
                           ? { allowed: true, reason: '' }
-                          : contractSelectionReason(
-                              selectedContracts,
-                              contract,
-                            );
+                          : loadingEligibility
+                            ? { allowed: false, reason: 'Validando regras FACTA...' }
+                            : contractSelectionReason(
+                                selectedContracts,
+                                contract,
+                                eligibility,
+                              );
                         const disabled = !selected && !selection.allowed;
 
                         return (
@@ -818,10 +915,10 @@ export default function PortabilidadeMultiplaPage() {
                             title={disabled ? selection.reason : undefined}
                             className={`relative overflow-hidden rounded-[1.5rem] border p-5 text-left transition ${
                               selected
-                                ? 'border-rose-400 bg-rose-50/70 ring-4 ring-rose-500/10 dark:bg-rose-500/10'
+                                ? 'border-emerald-400 bg-emerald-50/70 ring-4 ring-emerald-500/10 dark:bg-emerald-500/10'
                                 : disabled
                                   ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-55 dark:border-white/10 dark:bg-white/[0.03]'
-                                  : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-rose-300 hover:shadow-lg dark:border-white/10 dark:bg-white/[0.03]'
+                                  : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg dark:border-white/10 dark:bg-white/[0.03]'
                             }`}
                           >
                             <div className="flex items-start justify-between gap-4">
@@ -839,14 +936,12 @@ export default function PortabilidadeMultiplaPage() {
                                         ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
                                         : classified.grupo === 'B'
                                           ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
-                                          : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+                                          : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
                                     }`}
                                   >
-                                    {classified.grupo === 'MESMO_BANCO'
-                                      ? 'Mesma instituição'
-                                      : classified.grupo === 'SEM_BANCO'
-                                        ? 'Banco não identificado'
-                                        : `Grupo ${classified.grupo}`}
+                                    {classified.grupo === 'SEM_BANCO'
+                                      ? 'Banco não identificado'
+                                      : `Grupo ${classified.grupo}`}
                                   </span>
                                 </div>
 
@@ -858,7 +953,7 @@ export default function PortabilidadeMultiplaPage() {
                               <div
                                 className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
                                   selected
-                                    ? 'border-rose-500 bg-rose-600 text-white'
+                                    ? 'border-emerald-500 bg-emerald-600 text-white'
                                     : 'border-slate-200 bg-white text-slate-300 dark:border-white/10 dark:bg-white/5'
                                 }`}
                               >
@@ -911,7 +1006,19 @@ export default function PortabilidadeMultiplaPage() {
                               />
                             </div>
 
-                            {disabled && selection.reason && (
+                            {eligibility && (
+                              <div
+                                className={`mt-4 rounded-xl px-3 py-2.5 text-[10px] font-bold leading-relaxed ${
+                                  eligibility.selecionavel
+                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200'
+                                    : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200'
+                                }`}
+                              >
+                                {eligibility.motivo}
+                              </div>
+                            )}
+
+                            {disabled && selection.reason && !eligibility && (
                               <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-[10px] font-bold leading-relaxed text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
                                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                                 {selection.reason}
@@ -1007,13 +1114,13 @@ export default function PortabilidadeMultiplaPage() {
                         : 'Seleção possui bloqueios'}
                     </h2>
                     <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
-                      Primeiro o servidor confirma NB, grupo e dados financeiros. Depois cada origem passa pelas regras FACTA e, se todas forem elegíveis, parcelas e saldos são consolidados em uma única simulação.
+                      O servidor confirma o mesmo NB, aceita combinações entre os Grupos A e B, bloqueia Grupo C e valida cada origem nas regras FACTA antes da simulação consolidada.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex gap-2">
-                  <Badge text={validation.grupo === 'MESMO_BANCO' ? 'Mesma instituição' : `Grupo ${validation.grupo || '—'}`} />
+                  <Badge text={validation.grupo === 'AB' ? 'Grupos A + B' : `Grupo ${validation.grupo || '—'}`} />
                   <Badge text={`${validation.quantidade_contratos} contratos`} />
                 </div>
               </div>
@@ -1023,11 +1130,13 @@ export default function PortabilidadeMultiplaPage() {
                   icon={<CircleDollarSign size={18} />}
                   label="Margem livre"
                   value={formatMoney(validation.margem_livre)}
+                  tone={validation.margem_livre < 0 ? 'danger' : 'success'}
                 />
                 <SummaryCard
                   icon={<AlertTriangle size={18} />}
                   label="Margem negativa"
                   value={formatMoney(validation.margem_negativa)}
+                  tone={validation.margem_negativa > 0 ? 'danger' : 'success'}
                 />
                 <SummaryCard
                   icon={<Banknote size={18} />}
@@ -1174,6 +1283,7 @@ export default function PortabilidadeMultiplaPage() {
                   icon={<AlertTriangle size={18} />}
                   label="Margem negativa"
                   value={formatMoney(originValidation.simulacao_consolidada.margem_negativa)}
+                  tone={originValidation.simulacao_consolidada.margem_negativa > 0 ? 'danger' : 'success'}
                 />
                 <SummaryCard
                   icon={<Layers3 size={18} />}
@@ -1200,72 +1310,105 @@ export default function PortabilidadeMultiplaPage() {
                         Resultado da operação unificada
                       </p>
                       <h3 className="mt-1 text-lg font-black text-slate-900 dark:text-white">
-                        Tabelas FACTA disponíveis
+                        Melhor oferta FACTA
                       </h3>
                     </div>
-                    <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-                      Mesmo benefício/NB
+                    <span className="rounded-full bg-primary/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-primary">
+                      108X como referência
                     </span>
                   </div>
 
-                  <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-                    {originValidation.simulacao_consolidada.ofertas.map(offer => (
-                      <div
-                        key={offer.id}
-                        className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-5 dark:border-emerald-500/20 dark:bg-emerald-500/5"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                              {offer.banco || 'FACTA'}
-                            </p>
-                            <h4 className="mt-1 text-base font-black text-slate-900 dark:text-white">
-                              {offer.tabela || 'Tabela FACTA'}
-                            </h4>
+                  {(() => {
+                    const offers = originValidation.simulacao_consolidada.ofertas;
+                    const primaryOffer = offers[0];
+                    const otherOffers = offers.slice(1);
+
+                    return (
+                      <>
+                        <div className="relative overflow-hidden rounded-[1.75rem] border border-primary/20 bg-white p-5 shadow-lg shadow-primary/5 dark:border-primary/20 dark:bg-slate-900 md:p-6">
+                          <div className="absolute right-0 top-0 rounded-bl-2xl bg-primary px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white">
+                            Oferta principal
                           </div>
-                          {offer.prazo > 0 && (
-                            <Badge text={`${offer.prazo}X`} />
-                          )}
+
+                          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">
+                                {primaryOffer.banco || 'FACTA'} • Portabilidade + Refin
+                              </p>
+                              <h4 className="mt-1 text-xl font-black text-slate-900 dark:text-white">
+                                {primaryOffer.tabela || 'Tabela FACTA'}
+                              </h4>
+                              <p className="mt-1 text-xs font-semibold text-slate-500">
+                                {primaryOffer.prazo === 108
+                                  ? 'Prazo de 108 meses priorizado como referência.'
+                                  : '108x não disponível nesta seleção; exibindo a primeira tabela válida do Motor.'}
+                              </p>
+                            </div>
+
+                            <Badge text={primaryOffer.prazo > 0 ? `${primaryOffer.prazo}X` : 'Prazo tabela'} />
+                          </div>
+
+                          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            <InfoTile label="Parcela refin" value={formatMoney(primaryOffer.parcela_refin)} />
+                            <InfoTile label="Novo contrato" value={formatMoney(primaryOffer.valor_contrato)} />
+                            <InfoTile label="Saldo portado" value={formatMoney(primaryOffer.saldo_total)} />
+                            <InfoTile label="Valor liberado" value={formatMoney(primaryOffer.valor_liberado)} />
+                            <InfoTile
+                              label="Taxa"
+                              value={formatRate(
+                                primaryOffer.taxa_portabilidade
+                                || primaryOffer.taxa_base
+                                || primaryOffer.taxa_ponderada
+                              )}
+                            />
+                            <InfoTile label="Tabela" value={primaryOffer.tabela || 'FACTA'} />
+                          </div>
                         </div>
 
-                        <div className="mt-4 grid grid-cols-2 gap-2">
-                          <InfoTile
-                            label="Novo contrato"
-                            value={formatMoney(offer.valor_contrato)}
-                          />
-                          <InfoTile
-                            label="Troco / liberação"
-                            value={formatMoney(offer.valor_liberado)}
-                          />
-                          <InfoTile
-                            label="Parcela unificada"
-                            value={formatMoney(offer.parcela_refin)}
-                          />
-                          <InfoTile
-                            label="Taxa"
-                            value={formatRate(
-                              offer.taxa_portabilidade
-                              || offer.taxa_base
-                              || offer.taxa_ponderada
-                            )}
-                          />
-                        </div>
+                        {otherOffers.length > 0 && (
+                          <details className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
+                            <summary className="cursor-pointer text-xs font-black uppercase tracking-wider text-primary">
+                              Ver outros prazos e tabelas disponíveis ({otherOffers.length})
+                            </summary>
+                            <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                              {otherOffers.map(offer => (
+                                <div
+                                  key={offer.id}
+                                  className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 dark:border-white/10 dark:bg-white/[0.03]"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-[9px] font-black uppercase tracking-widest text-primary">
+                                        {offer.banco || 'FACTA'}
+                                      </p>
+                                      <h4 className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                                        {offer.tabela || 'Tabela FACTA'}
+                                      </h4>
+                                    </div>
+                                    {offer.prazo > 0 && <Badge text={`${offer.prazo}X`} />}
+                                  </div>
 
-                        {!!offer.regras.length && (
-                          <div className="mt-3 flex flex-wrap gap-1.5">
-                            {offer.regras.slice(0, 5).map(rule => (
-                              <span
-                                key={`${offer.id}-${rule}`}
-                                className="rounded-lg bg-white px-2 py-1 text-[8px] font-black uppercase tracking-wide text-slate-500 dark:bg-white/5 dark:text-slate-300"
-                              >
-                                {rule}
-                              </span>
-                            ))}
-                          </div>
+                                  <div className="mt-3 grid grid-cols-2 gap-2">
+                                    <InfoTile label="Novo contrato" value={formatMoney(offer.valor_contrato)} />
+                                    <InfoTile label="Valor liberado" value={formatMoney(offer.valor_liberado)} />
+                                    <InfoTile label="Parcela refin" value={formatMoney(offer.parcela_refin)} />
+                                    <InfoTile
+                                      label="Taxa"
+                                      value={formatRate(
+                                        offer.taxa_portabilidade
+                                        || offer.taxa_base
+                                        || offer.taxa_ponderada
+                                      )}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
                         )}
-                      </div>
-                    ))}
-                  </div>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -1354,7 +1497,7 @@ export default function PortabilidadeMultiplaPage() {
               <FeatureCard
                 icon={<Layers3 size={21} />}
                 title="2. Selecionar"
-                text="Escolha um único NB e de 2 a 6 contratos: Grupo A com A, B com B ou mesma instituição fora dos grupos."
+                text="Escolha um único NB e de 2 a 6 contratos. Grupos A e B podem ser combinados; Grupo C não participa."
               />
               <FeatureCard
                 icon={<ShieldCheck size={21} />}
@@ -1427,20 +1570,28 @@ function SummaryCard({
   icon,
   label,
   value,
+  tone = 'default',
 }: {
   icon?: React.ReactNode;
   label: string;
   value: string;
+  tone?: 'default' | 'danger' | 'success';
 }) {
+  const toneClass = tone === 'danger'
+    ? 'text-rose-600 dark:text-rose-300'
+    : tone === 'success'
+      ? 'text-emerald-600 dark:text-emerald-300'
+      : 'text-slate-800 dark:text-white';
+
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-white/10 dark:bg-white/5">
-      <div className="flex items-center gap-2 text-slate-400">
+      <div className={`flex items-center gap-2 ${tone === 'danger' ? 'text-rose-400' : tone === 'success' ? 'text-emerald-400' : 'text-slate-400'}`}>
         {icon}
         <p className="text-[9px] font-black uppercase tracking-widest">
           {label}
         </p>
       </div>
-      <p className="mt-2 text-sm font-black text-slate-800 dark:text-white">
+      <p className={`mt-2 text-sm font-black ${toneClass}`}>
         {value}
       </p>
     </div>
