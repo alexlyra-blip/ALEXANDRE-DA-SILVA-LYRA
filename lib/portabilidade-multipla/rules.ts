@@ -3,6 +3,7 @@ import type { PortabilidadeMultiplaContrato } from './types';
 export type PortabilidadeMultiplaGrupo = 'A' | 'B' | 'C' | 'NAO_CLASSIFICADO';
 
 export type PortabilidadeMultiplaBloqueioCodigo =
+  | 'CPF_INVALIDO'
   | 'MAX_CONTRATOS'
   | 'NB_AUSENTE'
   | 'NB_DIFERENTE'
