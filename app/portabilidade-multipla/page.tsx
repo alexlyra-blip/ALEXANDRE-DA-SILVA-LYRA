@@ -54,7 +54,7 @@ type Bloqueio = {
 
 type PreValidacao = {
   elegivel_previo: boolean;
-  grupo: 'A' | 'B' | 'AB' | null;
+  grupo: 'A' | 'B' | 'C' | null;
   quantidade_contratos: number;
   beneficio: string | null;
   cpf_valido: boolean;
@@ -379,8 +379,14 @@ export default function PortabilidadeMultiplaPage() {
       ),
     );
 
-    if (groups.has('A') && groups.has('B')) return 'Grupos A + B';
+    if (groups.size !== 1) return null;
     if (group === 'A' || group === 'B') return `Grupo ${group}`;
+    if (group === 'C') {
+      const bank = classificarContratoPortabilidadeMultipla(
+        selectedContracts[0],
+      ).banco_normalizado || selectedContracts[0].banco;
+      return bank ? `Grupo C • ${bank}` : 'Grupo C';
+    }
     return null;
   }, [selectedContracts]);
 
@@ -628,13 +634,13 @@ export default function PortabilidadeMultiplaPage() {
             <div className="border-b border-slate-100 px-6 py-6 dark:border-white/10 md:px-8">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-start gap-4">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 ring-1 ring-rose-100 dark:bg-rose-500/10 dark:ring-rose-500/20">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20 dark:bg-primary/10 dark:ring-primary/20">
                     <Layers3 size={28} />
                   </div>
 
                   <div>
                     <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-rose-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-rose-600 dark:bg-rose-500/10">
+                      <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-primary dark:bg-primary/10">
                         FACTA • INSS
                       </span>
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:bg-white/5 dark:text-slate-300">
@@ -791,7 +797,7 @@ export default function PortabilidadeMultiplaPage() {
 
                 <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
                   <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-500/10">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary dark:bg-primary/10">
                       <FileText size={20} />
                     </div>
 
@@ -819,7 +825,7 @@ export default function PortabilidadeMultiplaPage() {
                             onClick={() => handleBenefitChange(benefit.numero)}
                             className={`rounded-2xl border p-4 text-left transition ${
                               active
-                                ? 'border-rose-400 bg-rose-50 ring-4 ring-rose-500/10 dark:bg-rose-500/10'
+                                ? 'border-emerald-400 bg-emerald-50 ring-4 ring-emerald-500/10 dark:bg-emerald-500/10'
                                 : 'border-slate-200 bg-slate-50 hover:border-slate-300 dark:border-white/10 dark:bg-white/5'
                             }`}
                           >
@@ -828,7 +834,7 @@ export default function PortabilidadeMultiplaPage() {
                                 NB {benefit.numero || 'não informado'}
                               </span>
                               {active && (
-                                <CheckCircle2 size={17} className="text-rose-600" />
+                                <CheckCircle2 size={17} className="text-emerald-600" />
                               )}
                             </div>
 
@@ -869,13 +875,13 @@ export default function PortabilidadeMultiplaPage() {
                   <div className="mb-5 flex flex-col gap-4 border-b border-slate-100 pb-5 dark:border-white/10 md:flex-row md:items-end md:justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <Landmark size={20} className="text-rose-600" />
+                        <Landmark size={20} className="text-primary" />
                         <h2 className="text-lg font-black text-slate-900 dark:text-white">
                           Contratos do benefício
                         </h2>
                       </div>
                       <p className="mt-1 text-xs font-semibold text-slate-400">
-                        Selecione de 2 a 6 contratos do mesmo NB. Grupo A e Grupo B podem ser combinados. Grupo C fica bloqueado.
+                        Selecione de 2 a 6 contratos do mesmo NB. Grupo A somente com A, Grupo B somente com B e Grupo C somente com contratos do mesmo banco.
                       </p>
                     </div>
 
@@ -936,7 +942,7 @@ export default function PortabilidadeMultiplaPage() {
                                         ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
                                         : classified.grupo === 'B'
                                           ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
-                                          : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
+                                          : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
                                     }`}
                                   >
                                     {classified.grupo === 'SEM_BANCO'
@@ -1066,8 +1072,8 @@ export default function PortabilidadeMultiplaPage() {
                 </section>
               ) : (
                 consulta.beneficios.length > 1 && (
-                  <div className="rounded-[2rem] border border-dashed border-rose-200 bg-rose-50/50 px-6 py-10 text-center dark:border-rose-500/20 dark:bg-rose-500/5">
-                    <FileText size={32} className="mx-auto text-rose-400" />
+                  <div className="rounded-[2rem] border border-dashed border-primary/20 bg-primary/5 px-6 py-10 text-center dark:border-primary/20 dark:bg-primary/5">
+                    <FileText size={32} className="mx-auto text-primary/60" />
                     <h3 className="mt-3 text-sm font-black text-slate-800 dark:text-white">
                       Selecione o benefício que será trabalhado
                     </h3>
@@ -1114,13 +1120,13 @@ export default function PortabilidadeMultiplaPage() {
                         : 'Seleção possui bloqueios'}
                     </h2>
                     <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
-                      O servidor confirma o mesmo NB, aceita combinações entre os Grupos A e B, bloqueia Grupo C e valida cada origem nas regras FACTA antes da simulação consolidada.
+                      O servidor confirma o mesmo NB e a regra de unificação do grupo. Antes da simulação, cada origem é validada somente por banco não portável e quantidade mínima de parcelas pagas; troco mínimo e regras do refin são aplicados apenas na operação consolidada.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex gap-2">
-                  <Badge text={validation.grupo === 'AB' ? 'Grupos A + B' : `Grupo ${validation.grupo || '—'}`} />
+                  <Badge text={`Grupo ${validation.grupo || '—'}`} />
                   <Badge text={`${validation.quantidade_contratos} contratos`} />
                 </div>
               </div>
@@ -1255,7 +1261,7 @@ export default function PortabilidadeMultiplaPage() {
                           : 'Existe contrato bloqueado pela regra FACTA'}
                     </h2>
                     <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">
-                      As origens são verificadas individualmente apenas para respeitar as regras FACTA. Depois disso, o sistema usa o mesmo NB, soma as parcelas e os saldos selecionados e executa uma única simulação financeira consolidada.
+                      As origens são verificadas antes da seleção somente pelas regras do banco de origem e quantidade mínima de parcelas pagas. Depois, o sistema soma parcelas e saldos do mesmo NB e aplica troco mínimo e demais regras do refin apenas na única simulação consolidada.
                     </p>
                   </div>
                 </div>
@@ -1477,7 +1483,7 @@ export default function PortabilidadeMultiplaPage() {
                           </span>
                         </div>
                         <p className="mt-2 text-[10px] font-bold text-slate-500">
-                          {contract.ofertas_facta_count} tabela(s)/prazo(s) FACTA elegíveis para esta origem.
+                          Pré-validação da origem concluída sem aplicar regra de troco mínimo.
                         </p>
                       </div>
                     ))}
@@ -1497,12 +1503,12 @@ export default function PortabilidadeMultiplaPage() {
               <FeatureCard
                 icon={<Layers3 size={21} />}
                 title="2. Selecionar"
-                text="Escolha um único NB e de 2 a 6 contratos. Grupos A e B podem ser combinados; Grupo C não participa."
+                text="Escolha um único NB e de 2 a 6 contratos. Grupo A somente com A, Grupo B somente com B e Grupo C somente com o mesmo banco."
               />
               <FeatureCard
                 icon={<ShieldCheck size={21} />}
                 title="3. Simular"
-                text="O servidor valida as origens, soma parcelas e saldos e executa uma única simulação consolidada na FACTA."
+                text="Antes da soma, o servidor valida apenas banco não portável e parcelas pagas. Troco mínimo e regras do refin são aplicados somente na simulação consolidada FACTA."
               />
             </section>
           )}
@@ -1609,7 +1615,7 @@ function FeatureCard({
 }) {
   return (
     <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-500/10">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary dark:bg-primary/10">
         {icon}
       </div>
       <h3 className="mt-4 text-sm font-black text-slate-800 dark:text-white">

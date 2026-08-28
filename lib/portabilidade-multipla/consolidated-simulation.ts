@@ -16,12 +16,8 @@ import type {
   PortabilidadeMultiplaMotorContext,
   PortabilidadeMultiplaCalculateOffers,
 } from './origin-validation';
-import {
-  resumirTabelasFactaDoMotor,
-} from './origin-validation';
-import {
-  criarChaveCompatibilidadeTabelaFacta,
-  type PortabilidadeMultiplaIntersecaoFacta,
+import type {
+  PortabilidadeMultiplaIntersecaoFacta,
 } from './intersection';
 
 export interface PortabilidadeMultiplaOfertaConsolidada {
@@ -147,24 +143,6 @@ export function buildMotorParamsConsolidadosPortabilidadeMultipla(
   };
 }
 
-function offerCompatibilityKey(offer: any): string {
-  const summary = resumirTabelasFactaDoMotor([offer])[0];
-
-  return summary
-    ? criarChaveCompatibilidadeTabelaFacta(summary)
-    : '';
-}
-
-function allowedCompatibilityKeys(
-  intersecao: PortabilidadeMultiplaIntersecaoFacta,
-): Set<string> {
-  return new Set(
-    intersecao.tabelas_comuns.map(
-      criarChaveCompatibilidadeTabelaFacta,
-    ),
-  );
-}
-
 function mapOffer(
   offer: any,
   preValidation: PortabilidadeMultiplaPreValidacaoCompleta,
@@ -217,16 +195,16 @@ export function emptySimulacaoConsolidadaPortabilidadeMultipla(
  *
  * Antes desta função:
  * 1. o NB já foi validado;
- * 2. o grupo/misma instituição já foi validado;
- * 3. cada origem já passou individualmente pelas regras FACTA;
- * 4. existe ao menos uma tabela/prazo FACTA compatível com todas as origens.
+ * 2. o grupo/mesma instituição já foi validado;
+ * 3. cada origem já passou somente pelas regras prévias de banco/parcelas pagas;
+ * 4. troco mínimo e demais regras do refin são avaliados nesta chamada consolidada.
  */
 export function executarSimulacaoConsolidadaPortabilidadeMultipla(
   consulta: PortabilidadeMultiplaConsulta,
   benefit: PortabilidadeMultiplaBeneficio,
   contracts: PortabilidadeMultiplaContrato[],
   preValidation: PortabilidadeMultiplaPreValidacaoCompleta,
-  intersecao: PortabilidadeMultiplaIntersecaoFacta,
+  _intersecao: PortabilidadeMultiplaIntersecaoFacta,
   context: PortabilidadeMultiplaMotorContext,
   calculateOffers: PortabilidadeMultiplaCalculateOffers,
 ): PortabilidadeMultiplaSimulacaoConsolidada {
@@ -239,25 +217,6 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
       codigo: 'SEM_TABELA_FACTA',
       mensagem:
         'Nenhuma regra/tabela FACTA ativa foi localizada para executar a operação unificada.',
-    });
-
-    return {
-      ...emptySimulacaoConsolidadaPortabilidadeMultipla(
-        benefit.numero,
-        contracts.length,
-        preValidation,
-      ),
-      bloqueios,
-    };
-  }
-
-  const commonKeys = allowedCompatibilityKeys(intersecao);
-
-  if (!commonKeys.size) {
-    bloqueios.push({
-      codigo: 'SEM_TABELA_FACTA',
-      mensagem:
-        'Não existe tabela/prazo FACTA compatível com todas as origens selecionadas.',
     });
 
     return {
@@ -292,12 +251,6 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
   const finalOffers: PortabilidadeMultiplaOfertaConsolidada[] = [];
 
   for (const offer of offers || []) {
-    const compatibilityKey = offerCompatibilityKey(offer);
-
-    if (!compatibilityKey || !commonKeys.has(compatibilityKey)) {
-      continue;
-    }
-
     const valorLiberado = toNumber(offer?.valorTroco);
     const offerValidation = validarOfertaRefinPortabilidadeMultipla({
       saldo_total: preValidation.saldo_total,

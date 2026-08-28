@@ -43,7 +43,7 @@ export interface PortabilidadeMultiplaClassificacaoContrato {
 
 export interface PortabilidadeMultiplaPreValidacaoEstrutural {
   elegivel_previo: boolean;
-  grupo: 'A' | 'B' | 'AB' | null;
+  grupo: 'A' | 'B' | 'C' | null;
   quantidade_contratos: number;
   beneficio: string | null;
   classificacoes: PortabilidadeMultiplaClassificacaoContrato[];
@@ -57,9 +57,10 @@ export const PORTABILIDADE_MULTIPLA_MAX_CONTRATOS = 6;
  * Grupos oficiais de unificação do projeto FACTA de referência.
  *
  * Regra:
- * - Grupo A e Grupo B podem ser combinados entre si;
- * - bancos fora de A/B são classificados como Grupo C e NÃO participam
- *   da Portabilidade Múltipla;
+ * - Grupo A unifica somente com Grupo A;
+ * - Grupo B unifica somente com Grupo B;
+ * - bancos fora de A/B são classificados como Grupo C e só unificam
+ *   com contratos da mesma instituição;
  * - a portabilidade individual continua sendo validada pelo Motor FACTA.
  */
 export const PORTABILIDADE_MULTIPLA_GRUPOS = {
@@ -290,7 +291,7 @@ export function classificarContratoPortabilidadeMultipla(
     codigo_banco: contrato.codigo_banco,
     identidade_banco: identidadeBanco,
     grupo,
-    selecionavel: grupo === 'A' || grupo === 'B',
+    selecionavel: grupo !== 'SEM_BANCO',
   };
 }
 
@@ -302,16 +303,16 @@ function uniqueNonEmpty(values: string[]): string[] {
 
 function structuralGroup(
   classificacoes: PortabilidadeMultiplaClassificacaoContrato[],
-): 'A' | 'B' | 'AB' | null {
+): 'A' | 'B' | 'C' | null {
   const groups = uniqueNonEmpty(
     classificacoes
-      .filter(item => item.grupo === 'A' || item.grupo === 'B')
+      .filter(item => item.grupo !== 'SEM_BANCO')
       .map(item => item.grupo),
   );
 
-  if (!groups.length) return null;
-  if (groups.length === 1) return groups[0] as 'A' | 'B';
-  return 'AB';
+  return groups.length === 1
+    ? groups[0] as 'A' | 'B' | 'C'
+    : null;
 }
 
 /**
@@ -320,9 +321,9 @@ function structuralGroup(
  * Não chama o Motor. Ela só garante:
  * - 2 a 6 contratos;
  * - mesmo benefício/NB;
- * - Grupo A pode combinar com Grupo A ou B;
- * - Grupo B pode combinar com Grupo A ou B;
- * - Grupo C não pode ser selecionado;
+ * - Grupo A unifica somente com Grupo A;
+ * - Grupo B unifica somente com Grupo B;
+ * - Grupo C unifica somente com Grupo C da mesma instituição;
  * - a portabilidade de cada banco é validada posteriormente pelo Motor FACTA.
  */
 export function validarEstruturaPortabilidadeMultipla(
@@ -389,16 +390,32 @@ export function validarEstruturaPortabilidadeMultipla(
     });
   }
 
-  const grupoC = classificacoes.find(item => item.grupo === 'C');
+  const grupos = uniqueNonEmpty(
+    classificacoes
+      .filter(item => item.grupo !== 'SEM_BANCO')
+      .map(item => item.grupo),
+  );
 
-  if (grupoC) {
+  if (grupos.length > 1) {
     bloqueios.push({
       codigo: 'GRUPOS_INCOMPATIVEIS',
       mensagem:
-        'Contratos do Grupo C não participam da Portabilidade Múltipla FACTA.',
-      contrato_id: grupoC.contrato_id,
-      banco: grupoC.banco_original,
+        'Os contratos selecionados devem pertencer ao mesmo grupo de unificação: Grupo A somente com A, Grupo B somente com B e Grupo C somente com C da mesma instituição.',
     });
+  }
+
+  if (grupos.length === 1 && grupos[0] === 'C') {
+    const identidades = uniqueNonEmpty(
+      classificacoes.map(item => item.identidade_banco),
+    );
+
+    if (identidades.length > 1) {
+      bloqueios.push({
+        codigo: 'BANCOS_DIFERENTES',
+        mensagem:
+          'Contratos do Grupo C só podem ser unificados quando pertencem ao mesmo banco.',
+      });
+    }
   }
 
   const grupo = structuralGroup(classificacoes);
@@ -495,21 +512,50 @@ export function validarInclusaoContratoPortabilidadeMultipla(
     };
   }
 
-  if (candidate.grupo === 'C') {
+  if (!selecionados.length) {
+    return {
+      permitido: true,
+      grupo: candidate.grupo,
+    };
+  }
+
+  const selecionadosClassificados = selecionados.map(
+    classificarContratoPortabilidadeMultipla,
+  );
+  const grupoSelecionado = selecionadosClassificados[0].grupo;
+
+  if (candidate.grupo !== grupoSelecionado) {
     return {
       permitido: false,
       grupo: candidate.grupo,
       bloqueio: {
         codigo: 'GRUPOS_INCOMPATIVEIS',
         mensagem:
-          'Este contrato pertence ao Grupo C e não pode ser usado na Portabilidade Múltipla FACTA.',
+          `Grupo ${candidate.grupo} não pode ser unificado com Grupo ${grupoSelecionado}. Grupo A unifica somente com A e Grupo B somente com B.`,
         contrato_id: candidato.id,
         banco: candidato.banco,
       },
     };
   }
 
-  // Grupos A e B são compatíveis entre si.
+  if (candidate.grupo === 'C') {
+    const identidadeSelecionada = selecionadosClassificados[0].identidade_banco;
+
+    if (candidate.identidade_banco !== identidadeSelecionada) {
+      return {
+        permitido: false,
+        grupo: candidate.grupo,
+        bloqueio: {
+          codigo: 'BANCOS_DIFERENTES',
+          mensagem:
+            'Grupo C só pode ser unificado com outros contratos do mesmo banco.',
+          contrato_id: candidato.id,
+          banco: candidato.banco,
+        },
+      };
+    }
+  }
+
   return {
     permitido: true,
     grupo: candidate.grupo,

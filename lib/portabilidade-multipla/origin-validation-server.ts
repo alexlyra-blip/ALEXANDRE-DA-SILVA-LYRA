@@ -1,7 +1,6 @@
 import { getAdminDb } from '@/lib/firebase-admin';
 import {
   calculateOffers,
-  calculateRate,
 } from '@/lib/simulation-engine';
 import { consultarCpfMulticorban } from '@/lib/multicorban-service';
 import {
@@ -10,13 +9,11 @@ import {
 } from './api';
 import { normalizePortabilidadeMultiplaConsulta } from './normalizer';
 import { validarPreviamentePortabilidadeMultipla } from './financial';
-import {
-  validarContratosIndividualmenteNoMotor,
-  type PortabilidadeMultiplaResultadoOrigens,
+import type {
+  PortabilidadeMultiplaResultadoOrigens,
 } from './origin-validation';
-import {
-  interseccionarTabelasFacta,
-  type PortabilidadeMultiplaIntersecaoFacta,
+import type {
+  PortabilidadeMultiplaIntersecaoFacta,
 } from './intersection';
 import {
   PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
@@ -330,16 +327,20 @@ function requiredPaidInstallmentsForOrigin(
   return requirements.length ? Math.min(...requirements) : 0;
 }
 
-function explicitOriginBlockReason(
+function avaliarRegraBasicaOrigem(
   contract: any,
   context: any,
-): string {
+): { elegivel: boolean; motivo: string; parcelas_minimas: number } {
   const nonPortable = (context.nonPortableBanks || []).find(
     (bank: string) => bankRuleMatchesContract(bank, contract),
   );
 
   if (nonPortable) {
-    return 'Banco de origem marcado como não portável nas regras atuais.';
+    return {
+      elegivel: false,
+      motivo: 'Banco de origem marcado como não portável nas regras atuais.',
+      parcelas_minimas: requiredPaidInstallmentsForOrigin(contract, context),
+    };
   }
 
   const factaBanks = factaOriginRules(context);
@@ -351,17 +352,31 @@ function explicitOriginBlockReason(
   );
 
   if (nonAccepted) {
-    return 'Banco de origem não aceito para portabilidade pela FACTA.';
+    return {
+      elegivel: false,
+      motivo: 'Banco de origem não aceito para portabilidade pela FACTA.',
+      parcelas_minimas: requiredPaidInstallmentsForOrigin(contract, context),
+    };
   }
 
   const required = requiredPaidInstallmentsForOrigin(contract, context);
   const paid = Math.max(0, Math.trunc(Number(contract.parcelas_pagas) || 0));
 
   if (required > 0 && paid < required) {
-    return `Quantidade de parcelas pagas insuficiente: ${paid} paga(s), mínimo ${required}.`;
+    return {
+      elegivel: false,
+      motivo: `Quantidade de parcelas pagas insuficiente: ${paid} paga(s), mínimo ${required}.`,
+      parcelas_minimas: required,
+    };
   }
 
-  return 'Contrato não atende às regras/tabelas FACTA atuais para esta origem.';
+  return {
+    elegivel: true,
+    motivo: required > 0
+      ? `Elegível para seleção. Parcelas pagas: ${paid}/${required}.`
+      : 'Elegível para seleção pelas regras do banco de origem.',
+    parcelas_minimas: required,
+  };
 }
 
 export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
@@ -406,22 +421,6 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
     const paid = Math.max(0, Math.trunc(contract.parcelas_pagas || 0));
     const required = requiredPaidInstallmentsForOrigin(contract, motorContext);
 
-    if (classified.grupo === 'C') {
-      contratos.push({
-        contrato_id: contract.id,
-        contrato: contract.contrato,
-        banco: contract.banco,
-        codigo_banco: contract.codigo_banco,
-        beneficio: contract.beneficio,
-        grupo: 'C',
-        selecionavel: false,
-        motivo: 'Grupo C: banco fora dos grupos A/B permitidos para a Portabilidade Múltipla.',
-        parcelas_pagas: paid,
-        parcelas_minimas: required,
-      });
-      continue;
-    }
-
     if (classified.grupo === 'SEM_BANCO') {
       contratos.push({
         contrato_id: contract.id,
@@ -454,13 +453,9 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
       continue;
     }
 
-    const validation = validarContratosIndividualmenteNoMotor(
-      consulta,
-      benefit,
-      [contract],
+    const basicEligibility = avaliarRegraBasicaOrigem(
+      contract,
       motorContext,
-      calculateOffers,
-      calculateRate,
     );
 
     contratos.push({
@@ -470,14 +465,10 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
       codigo_banco: contract.codigo_banco,
       beneficio: contract.beneficio,
       grupo: classified.grupo,
-      selecionavel: validation.elegivel_origens,
-      motivo: validation.elegivel_origens
-        ? (required > 0
-            ? `Elegível na FACTA. Parcelas pagas: ${paid}/${required}.`
-            : 'Elegível nas regras/tabelas FACTA atuais.')
-        : explicitOriginBlockReason(contract, motorContext),
+      selecionavel: basicEligibility.elegivel,
+      motivo: basicEligibility.motivo,
       parcelas_pagas: paid,
-      parcelas_minimas: required,
+      parcelas_minimas: basicEligibility.parcelas_minimas,
     });
   }
 
@@ -493,7 +484,8 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
  * - recebe apenas CPF, NB e IDs selecionados;
  * - consulta novamente o MultiCorban no servidor;
  * - reconstrói exclusivamente contratos daquele mesmo benefício/NB;
- * - valida cada origem no Motor apenas como filtro de elegibilidade;
+ * - antes da simulação, valida somente banco não portável e parcelas pagas mínimas;
+ * - regras de refinanciamento/troco mínimo são aplicadas apenas na operação consolidada;
  * - soma parcelas e saldos reais;
  * - executa UMA única simulação FACTA para a operação consolidada.
  */
@@ -631,24 +623,46 @@ export async function validarOrigensPortabilidadeMultiplaServer(
     };
   }
 
-  const originValidation = validarContratosIndividualmenteNoMotor(
-    consulta,
-    benefit,
-    selectedContracts,
-    motorContext,
-    calculateOffers,
-    calculateRate,
-  );
+  const resultadosContratos: PortabilidadeMultiplaResultadoOrigens['contratos'] = [];
+  const bloqueiosContratos: PortabilidadeMultiplaBloqueio[] = [];
 
-  if (!originValidation.elegivel_origens) {
+  for (const contract of selectedContracts) {
+    const basicEligibility = avaliarRegraBasicaOrigem(
+      contract,
+      motorContext,
+    );
+
+    resultadosContratos.push({
+      contrato_id: contract.id,
+      contrato: contract.contrato,
+      banco: contract.banco,
+      codigo_banco: contract.codigo_banco,
+      beneficio: contract.beneficio,
+      elegivel_origem: basicEligibility.elegivel,
+      ofertas_facta_count: 0,
+      tabelas_facta: [],
+    });
+
+    if (!basicEligibility.elegivel) {
+      bloqueiosContratos.push({
+        codigo: 'REGRA_BANCO_ORIGEM',
+        mensagem: basicEligibility.motivo,
+        contrato_id: contract.id,
+        banco: contract.banco,
+        beneficio: contract.beneficio,
+      });
+    }
+  }
+
+  if (bloqueiosContratos.length) {
     return {
       elegivel: false,
       facta_configurada: true,
       beneficio: benefit.numero,
       quantidade_contratos: selectedContracts.length,
       pre_validacao: preValidation,
-      contratos: originValidation.contratos,
-      bloqueios_contratos: originValidation.bloqueios_contratos,
+      contratos: resultadosContratos,
+      bloqueios_contratos: bloqueiosContratos,
       intersecao_facta: emptyIntersection(),
       bloqueios_intersecao: [],
       simulacao_consolidada:
@@ -661,44 +675,30 @@ export async function validarOrigensPortabilidadeMultiplaServer(
     };
   }
 
-  const intersecao = interseccionarTabelasFacta(
-    originValidation.contratos,
-  );
-
+  // Não existe interseção por contrato nesta fase: regras de troco mínimo,
+  // valor liberado e demais regras do refin são avaliadas somente depois da
+  // soma das parcelas/saldos, na única chamada consolidada ao Motor FACTA.
+  const intersecao = emptyIntersection();
   const bloqueiosIntersecao: PortabilidadeMultiplaBloqueio[] = [];
 
-  if (!intersecao.possui_intersecao) {
-    bloqueiosIntersecao.push({
-      codigo: 'SEM_TABELA_FACTA',
-      mensagem:
-        'Não existe tabela/prazo FACTA compatível simultaneamente com todos os contratos selecionados.',
-    });
-  }
-
-  const simulacaoConsolidada = intersecao.possui_intersecao
-    ? executarSimulacaoConsolidadaPortabilidadeMultipla(
-        consulta,
-        benefit,
-        selectedContracts,
-        preValidation,
-        intersecao,
-        motorContext,
-        calculateOffers,
-      )
-    : emptySimulacaoConsolidadaPortabilidadeMultipla(
-        benefit.numero,
-        selectedContracts.length,
-        preValidation,
-      );
+  const simulacaoConsolidada = executarSimulacaoConsolidadaPortabilidadeMultipla(
+    consulta,
+    benefit,
+    selectedContracts,
+    preValidation,
+    intersecao,
+    motorContext,
+    calculateOffers,
+  );
 
   return {
-    // Compatibilidade: todas as origens foram aprovadas individualmente.
+    // As origens passaram nas regras prévias de banco/parcelas pagas.
     elegivel: true,
     facta_configurada: true,
     beneficio: benefit.numero,
     quantidade_contratos: selectedContracts.length,
     pre_validacao: preValidation,
-    contratos: originValidation.contratos,
+    contratos: resultadosContratos,
     bloqueios_contratos: [],
     intersecao_facta: intersecao,
     bloqueios_intersecao: bloqueiosIntersecao,
