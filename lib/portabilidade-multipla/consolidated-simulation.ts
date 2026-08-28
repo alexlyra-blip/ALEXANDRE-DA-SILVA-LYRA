@@ -270,15 +270,9 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
     finalOffers.push(mapOffer(offer, preValidation));
   }
 
-  // A tela usa 108x como referência comercial quando disponível,
-  // sem ocultar os demais prazos/tabelas aceitos pelo Motor.
-  finalOffers.sort((a, b) => {
-    const aRef = a.prazo === 108 ? 0 : 1;
-    const bRef = b.prazo === 108 ? 0 : 1;
-    if (aRef !== bRef) return aRef - bRef;
-    if (a.prazo !== b.prazo) return b.prazo - a.prazo;
-    return b.valor_liberado - a.valor_liberado;
-  });
+  // IMPORTANTE: preserva exatamente a ordem das tabelas devolvida pelo Motor.
+  // A interface agrupa por prazo e considera a primeira tabela de cada prazo
+  // como a Melhor Oferta. Não reordena por troco, taxa ou valor liberado.
 
   if (!finalOffers.length && bloqueios.length === 0) {
     bloqueios.push({

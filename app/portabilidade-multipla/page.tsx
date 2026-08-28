@@ -271,6 +271,7 @@ export default function PortabilidadeMultiplaPage() {
   const [validation, setValidation] = useState<PreValidacao | null>(null);
   const [originValidation, setOriginValidation] =
     useState<ValidacaoOrigens | null>(null);
+  const [selectedOfferTerm, setSelectedOfferTerm] = useState<number | null>(null);
 
   const [eligibilidadeContratos, setElegibilidadeContratos] =
     useState<Record<string, ElegibilidadeContrato> | null>(null);
@@ -365,6 +366,50 @@ export default function PortabilidadeMultiplaPage() {
       return (order[groupA] ?? 9) - (order[groupB] ?? 9);
     });
   }, [selectedBenefit]);
+
+  const availableOfferTerms = useMemo(() => {
+    const offers = originValidation?.simulacao_consolidada.ofertas || [];
+    const seen = new Set<number>();
+    const terms: number[] = [];
+
+    for (const offer of offers) {
+      const term = Math.max(0, Math.trunc(offer.prazo || 0));
+      if (term <= 0 || seen.has(term)) continue;
+      seen.add(term);
+      terms.push(term);
+    }
+
+    // Mantém a ordem comercial: 108x primeiro quando existir;
+    // os demais prazos seguem a ordem em que o Motor os devolveu.
+    if (seen.has(108)) {
+      return [108, ...terms.filter(term => term !== 108)];
+    }
+
+    return terms;
+  }, [originValidation]);
+
+  useEffect(() => {
+    if (!availableOfferTerms.length) {
+      setSelectedOfferTerm(null);
+      return;
+    }
+
+    setSelectedOfferTerm(current =>
+      current && availableOfferTerms.includes(current)
+        ? current
+        : availableOfferTerms[0],
+    );
+  }, [availableOfferTerms]);
+
+  const offersSelectedTerm = useMemo(() => {
+    const offers = originValidation?.simulacao_consolidada.ofertas || [];
+
+    if (!selectedOfferTerm) return [];
+
+    // Não reordena as tabelas: a primeira tabela devolvida pelo Motor
+    // para este prazo é sempre a oferta principal.
+    return offers.filter(offer => offer.prazo === selectedOfferTerm);
+  }, [originValidation, selectedOfferTerm]);
 
   const selectedGroup = useMemo(() => {
     if (!selectedContracts.length) return null;
@@ -1320,20 +1365,47 @@ export default function PortabilidadeMultiplaPage() {
                       </h3>
                     </div>
                     <span className="rounded-full bg-primary/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-primary">
-                      108X como referência
+                      {selectedOfferTerm ? `${selectedOfferTerm}X selecionado` : '108X como referência'}
                     </span>
                   </div>
 
-                  {(() => {
-                    const offers = originValidation.simulacao_consolidada.ofertas;
-                    const primaryOffer = offers[0];
-                    const otherOffers = offers.slice(1);
+                  {offersSelectedTerm.length > 0 && (() => {
+                    const primaryOffer = offersSelectedTerm[0];
+                    const otherOffers = offersSelectedTerm.slice(1);
 
                     return (
                       <>
+                        {availableOfferTerms.length > 0 && (
+                          <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
+                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                              Selecione o prazo
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {availableOfferTerms.map(term => (
+                                <button
+                                  key={term}
+                                  type="button"
+                                  onClick={() => setSelectedOfferTerm(term)}
+                                  className={`rounded-xl border px-4 py-2 text-xs font-black transition ${
+                                    selectedOfferTerm === term
+                                      ? 'border-primary bg-primary text-white shadow-md shadow-primary/15'
+                                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-primary/40 hover:text-primary dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300'
+                                  }`}
+                                >
+                                  {term}X
+                                </button>
+                              ))}
+                            </div>
+                            <p className="mt-3 text-[11px] font-semibold text-slate-500">
+                              As tabelas são exibidas na ordem comercial devolvida pelo Motor FACTA.
+                              A primeira tabela do prazo selecionado é sempre a Melhor Oferta.
+                            </p>
+                          </div>
+                        )}
+
                         <div className="relative overflow-hidden rounded-[1.75rem] border border-primary/20 bg-white p-5 shadow-lg shadow-primary/5 dark:border-primary/20 dark:bg-slate-900 md:p-6">
                           <div className="absolute right-0 top-0 rounded-bl-2xl bg-primary px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white">
-                            Oferta principal
+                            Melhor oferta
                           </div>
 
                           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
@@ -1345,9 +1417,7 @@ export default function PortabilidadeMultiplaPage() {
                                 {primaryOffer.tabela || 'Tabela FACTA'}
                               </h4>
                               <p className="mt-1 text-xs font-semibold text-slate-500">
-                                {primaryOffer.prazo === 108
-                                  ? 'Prazo de 108 meses priorizado como referência.'
-                                  : '108x não disponível nesta seleção; exibindo a primeira tabela válida do Motor.'}
+                                Primeira tabela disponível para o prazo {primaryOffer.prazo || selectedOfferTerm}X.
                               </p>
                             </div>
 
@@ -1374,27 +1444,32 @@ export default function PortabilidadeMultiplaPage() {
                         {otherOffers.length > 0 && (
                           <details className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
                             <summary className="cursor-pointer text-xs font-black uppercase tracking-wider text-primary">
-                              Ver outros prazos e tabelas disponíveis ({otherOffers.length})
+                              Ver outras ofertas de {selectedOfferTerm}X ({otherOffers.length})
                             </summary>
-                            <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-                              {otherOffers.map(offer => (
+                            <div className="mt-4 space-y-3">
+                              {otherOffers.map((offer, index) => (
                                 <div
-                                  key={offer.id}
+                                  key={`${offer.id}-${offer.prazo}-${index}`}
                                   className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 dark:border-white/10 dark:bg-white/[0.03]"
                                 >
                                   <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                      <p className="text-[9px] font-black uppercase tracking-widest text-primary">
-                                        {offer.banco || 'FACTA'}
-                                      </p>
-                                      <h4 className="mt-1 text-sm font-black text-slate-900 dark:text-white">
-                                        {offer.tabela || 'Tabela FACTA'}
-                                      </h4>
+                                    <div className="flex items-start gap-3">
+                                      <span className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-primary/10 px-2 text-[10px] font-black text-primary">
+                                        {index + 2}ª
+                                      </span>
+                                      <div>
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-primary">
+                                          {offer.banco || 'FACTA'}
+                                        </p>
+                                        <h4 className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                                          {offer.tabela || 'Tabela FACTA'}
+                                        </h4>
+                                      </div>
                                     </div>
                                     {offer.prazo > 0 && <Badge text={`${offer.prazo}X`} />}
                                   </div>
 
-                                  <div className="mt-3 grid grid-cols-2 gap-2">
+                                  <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
                                     <InfoTile label="Novo contrato" value={formatMoney(offer.valor_contrato)} />
                                     <InfoTile label="Valor liberado" value={formatMoney(offer.valor_liberado)} />
                                     <InfoTile label="Parcela refin" value={formatMoney(offer.parcela_refin)} />
