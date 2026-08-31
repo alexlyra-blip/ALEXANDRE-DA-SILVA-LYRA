@@ -909,7 +909,9 @@ Contrato: ${e.Contrato || 'N/A'}`,
                                 const bancoExibicao = formatBancoComCodigo(emp.Banco, bancoNomeSemPrefixo);
                                 const bancoCode = String(emp.Banco || emp.IdBanco || '').replace(/\D/g, '').padStart(3, '0');
                                 const isC6Consignado = bancoCode === '626'
-                                  || String(emp.NomeBanco || emp.Rubrica || '').toUpperCase().includes('C6 CONSIG');
+                                  || bancoCode === '336'
+                                  || String(emp.NomeBanco || emp.Rubrica || '').toUpperCase().includes('C6')
+                                  || String(emp.NomeBanco || emp.Rubrica || '').toUpperCase().includes('FICSA');
                                 const c6Key = `${beneficiario.Beneficio || ''}-${emp.Contrato || ''}`;
                                 const c6AutoResult = Array.isArray(c6RefinData?.results)
                                   ? c6RefinData.results.find((result: any) => result?.key === c6Key)

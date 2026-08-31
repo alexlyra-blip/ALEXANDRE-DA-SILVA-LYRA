@@ -157,7 +157,7 @@ function isCredentialFailureStatus(status: number): boolean {
 export function isC6Consignado(bankCode: string, bankName = ''): boolean {
   const code = String(bankCode || '').replace(/\D/g, '').padStart(3, '0');
   const name = String(bankName || '').toUpperCase();
-  return code === '626' || name.includes('C6 CONSIGNADO') || name.includes('C6 CONSIG');
+  return code === '626' || code === '336' || name.includes('C6') || name.includes('FICSA');
 }
 
 export async function autenticarC6(
