@@ -100,6 +100,33 @@ const formatContractMonth = (value: any) => {
   return raw;
 };
 
+const parseNumber = (value: any): number => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (value === null || value === undefined) return 0;
+  const raw = String(value).trim();
+  if (!raw) return 0;
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '')
+    : raw.replace(/[^0-9.-]/g, '');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const isCardContract = (emp: any): boolean => {
+  if (!emp || typeof emp !== 'object') return false;
+  const rubricaUpper = String(emp.NomeBanco || emp.Rubrica || emp.rubrica || emp.TipoContrato || '').toUpperCase();
+  const tipoUpper = String(emp.TipoCartao || emp.Tipo || '').toUpperCase();
+  return (
+    tipoUpper === 'RMC' ||
+    tipoUpper === 'RCC' ||
+    rubricaUpper.includes('RMC') ||
+    rubricaUpper.includes('RCC') ||
+    rubricaUpper.includes('CARTAO') ||
+    rubricaUpper.includes('CARTÃO') ||
+    rubricaUpper.includes('SAQUE')
+  );
+};
+
 const normalizeConsultaDataForModal = (source: any) => {
   if (Array.isArray(source) && source.some((item: any) => item?.Beneficiario)) {
     return source;
@@ -267,14 +294,17 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
 
     const activeBen = beneficios[activeTab] || firstBenefit;
     const resFin = activeBen.ResumoFinanceiro || {};
-    const empList = activeBen.Emprestimos || [];
+    const rawEmpList = activeBen.Emprestimos || [];
+    const empList = rawEmpList.filter((e: any) => !isCardContract(e));
     const rmcList = activeBen.Rmc || [];
     const rccList = activeBen.RCC || [];
+    const allCards = [...rmcList, ...rccList];
 
     let totalEmpComp = 0;
-    empList.forEach((e: any) => totalEmpComp += parseFloat(e.ValorParcela || 0));
+    empList.forEach((e: any) => totalEmpComp += parseNumber(e.ValorParcela || e.Parcela || e.parcela || 0));
+    totalEmpComp = Math.floor(totalEmpComp * 100) / 100;
 
-    const valBen = parseFloat(resFin.ValorBeneficio || 0);
+    const valBen = parseNumber(resFin.ValorBeneficio || resFin.BaseCalculo || resFin.Bruto || 0);
     const margemEmprestimoCons = Math.floor(valBen * 0.35 * 100) / 100;
     const margemCalculadaPdf = Math.floor((margemEmprestimoCons - totalEmpComp) * 100) / 100;
     const rawMargemPdf = resFin.MargemDisponivelEmprestimo;
@@ -282,7 +312,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
       && rawMargemPdf !== null
       && String(rawMargemPdf).trim() !== '';
     const margemLivreVal = hasMargemPdf
-      ? Math.floor(parseFloat(rawMargemPdf || 0) * 100) / 100
+      ? Math.floor(parseNumber(rawMargemPdf) * 100) / 100
       : margemCalculadaPdf;
     const valLiberadoVal = margemLivreVal > 0
       ? Math.floor((margemLivreVal / getMarginCoefficient()) * 100) / 100
@@ -335,8 +365,8 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
         c.Tipo || 'Cartão',
         formatBancoComCodigo(c.Banco, c.NomeBanco || getBancoName(c.Banco)),
         c.Contrato || 'N/A',
-        formatCurrency(c.ValorParcela || 0),
-        formatCurrency(c.Limite || 0)
+        formatCurrency(parseNumber(c.ValorParcela || c.Desconto || 0)),
+        formatCurrency(parseNumber(c.Limite || 0))
       ]);
 
       autoTable(doc, {
@@ -361,12 +391,13 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
       const loansRows = empList.map((e: any) => {
         const prazoTotal = parseInt(e.Prazo || e.parcelas || 0);
         const parcelasRestantes = parseInt(e.ParcelasRestantes || e.prazo_restante || 0);
-        const taxa = e.Taxa || e.taxa || 0;
-        const valorContratoApi = parseFloat(e.ValorContrato || e.ValorEmprestado || e.ValorFinanciado || e.ValorLiberado || 0);
-        const valorContratoCalc = calculateSaldoDevedor(parseFloat(e.ValorParcela || 0), prazoTotal, taxa);
+        const taxa = parseNumber(e.Taxa || e.taxa || 0);
+        const parcelaValor = parseNumber(e.ValorParcela || e.Parcela || e.parcela || 0);
+        const valorContratoApi = parseNumber(e.ValorContrato || e.ValorEmprestado || e.ValorFinanciado || e.ValorLiberado || 0);
+        const valorContratoCalc = calculateSaldoDevedor(parcelaValor, prazoTotal, taxa);
         const valorContrato = valorContratoApi > 0 ? valorContratoApi : valorContratoCalc;
-        const saldoDevedorApi = parseFloat(e.SaldoDevedor || e.saldo || 0);
-        const saldoAtualCalc = calculateSaldoDevedor(parseFloat(e.ValorParcela || 0), parcelasRestantes, taxa);
+        const saldoDevedorApi = parseNumber(e.SaldoDevedor || e.saldo || 0);
+        const saldoAtualCalc = calculateSaldoDevedor(parcelaValor, parcelasRestantes, taxa);
         const saldoAtual = saldoDevedorApi > 0 ? saldoDevedorApi : saldoAtualCalc;
         const banco = formatBancoComCodigo(e.Banco, e.NomeBanco || getBancoName(e.Banco));
         const averbacao = formatContractDate(e.DataAverbacao);
@@ -376,13 +407,12 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
         const finalLabel = e.FinalDescontoCalculado && final !== 'N/A' ? `${final} calc.` : final;
 
         return [
-          `${banco}
-Contrato: ${e.Contrato || 'N/A'}`,
+          `${banco}\nContrato: ${e.Contrato || 'N/A'}`,
           averbacao,
           `${inicioLabel} / ${finalLabel}`,
-          formatCurrency(e.ValorParcela || 0),
+          formatCurrency(parcelaValor),
           prazoTotal > 0 ? `${parcelasRestantes}/${prazoTotal}` : `${parcelasRestantes} rest.`,
-          taxa ? `${parseFloat(taxa).toFixed(2).replace('.', ',')}%` : 'N/A',
+          taxa ? `${taxa.toFixed(2).replace('.', ',')}%` : 'N/A',
           valorContrato > 0 ? formatCurrency(valorContrato) : 'N/A',
           formatCurrency(saldoAtual),
         ];
@@ -611,61 +641,65 @@ Contrato: ${e.Contrato || 'N/A'}`,
                 const dadosBancarios = b.DadosBancarios || {};
 
                 const isSiape = !!b.isSiape || !!beneficiario.isSiape;
-                const valorBeneficio = parseFloat(resumo.ValorBeneficio || 0);
+                const valorBeneficio = parseNumber(resumo.ValorBeneficio || resumo.BaseCalculo || resumo.Bruto || 0);
 
                 // Emprestimos e cartões
-                const emprestimos = Array.isArray(b.Emprestimos) ? b.Emprestimos : (b.Emprestimos ? [b.Emprestimos] : []);
+                const rawLoans = Array.isArray(b.Emprestimos) ? b.Emprestimos : (b.Emprestimos ? [b.Emprestimos] : []);
+                // Separa estritamente empréstimos consignados normais dos saques/contratos de cartão
+                const emprestimos = rawLoans.filter((emp: any) => !isCardContract(emp));
                 const rmc = Array.isArray(b.Rmc) ? b.Rmc : (b.Rmc ? [b.Rmc] : []);
                 const rcc = Array.isArray(b.RCC) ? b.RCC : (b.RCC ? [b.RCC] : []);
                 const cartoes = [...rmc, ...rcc];
-                // Somar parcelas de empréstimos e cartões
-                let totalComprometidoEmprestimos = 0;
-                emprestimos.forEach((e: any) => totalComprometidoEmprestimos += parseFloat(e.ValorParcela || 0));
-
-                let totalComprometidoCartoes = 0;
-                cartoes.forEach((c: any) => totalComprometidoCartoes += parseFloat(c.ValorParcela || c.Desconto || c.Margem || 0));
-
-                const rmcMargem = parseFloat(rmc[0]?.ValorParcela || rmc[0]?.MargemTotal || 0);
-                const rccMargem = parseFloat(rcc[0]?.ValorParcela || rcc[0]?.MargemTotal || 0);
 
                 const getCardLoans = (item: any) => {
                   if (Array.isArray(item.CardLoansList) && item.CardLoansList.length > 0) {
                     return item.CardLoansList;
                   }
-                  const rawEmp = Array.isArray(item.Emprestimos) ? item.Emprestimos : [];
+                  const rawEmp = Array.isArray(item.Emprestimos) ? item.Emprestimos : (item.Emprestimos ? [item.Emprestimos] : []);
                   const list: any[] = [];
                   rawEmp.forEach((emp: any) => {
-                    if (!emp || typeof emp !== 'object') return;
-                    const rubricaUpper = String(emp.NomeBanco || emp.Rubrica || emp.rubrica || '').toUpperCase();
+                    if (!isCardContract(emp)) return;
+                    const rubricaUpper = String(emp.NomeBanco || emp.Rubrica || emp.rubrica || emp.TipoContrato || '').toUpperCase();
                     const bancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).trim();
+                    const pr = parseInt(emp.ParcelasRestantes || emp.PrazoRestantes || emp.prazoRestante || 0);
+                    const pt = parseInt(emp.Prazo || emp.prazo || emp.parcelas || (pr > 0 ? pr : 0));
+                    const p = parseNumber(emp.ValorParcela || emp.Parcela || emp.parcela || 0);
+                    const vl = parseNumber(emp.ValorLiberado || emp.ValorEmprestado || emp.ValorContrato || emp.SaldoDevedor || emp.saldo || 0);
 
-                    if (rubricaUpper.includes('RCC') || rubricaUpper.includes('RMC') || bancoCode === '0' || bancoCode === '' || !rubricaUpper || rubricaUpper === 'NULL' || (!rubricaUpper && (bancoCode === '0' || bancoCode === ''))) {
-                      const pr = parseInt(emp.ParcelasRestantes || emp.PrazoRestantes || emp.prazoRestante || 0);
-                      const pt = parseInt(emp.Prazo || emp.prazo || emp.parcelas || (pr > 0 ? pr : 0));
-                      const p = parseFloat(emp.ValorParcela || emp.Parcela || emp.parcela || 0);
-                      const vl = parseFloat(emp.ValorLiberado || emp.ValorEmprestado || emp.ValorContrato || emp.SaldoDevedor || emp.saldo || 0);
-
-                      list.push({
-                        TipoCartao: rubricaUpper.includes('RMC') ? 'RMC' : 'RCC',
-                        Banco: bancoCode || '0',
-                        NomeBanco: String(emp.NomeBanco || emp.Rubrica || emp.rubrica || '').trim(),
-                        Contrato: String(emp.Contrato || emp.contrato || '').trim(),
-                        ValorParcela: isNaN(p) ? 0 : p,
-                        Prazo: String(pt || pr || 0),
-                        ParcelasRestantes: String(pr || 0),
-                        ValorLiberado: isNaN(vl) ? 0 : vl,
-                      });
-                    }
+                    list.push({
+                      TipoCartao: (rubricaUpper.includes('RMC') || emp.TipoCartao === 'RMC') ? 'RMC' : 'RCC',
+                      Banco: bancoCode || '0',
+                      NomeBanco: String(emp.NomeBanco || emp.Rubrica || emp.rubrica || '').trim(),
+                      Contrato: String(emp.Contrato || emp.contrato || '').trim(),
+                      ValorParcela: isNaN(p) ? 0 : p,
+                      Prazo: String(pt || pr || 0),
+                      ParcelasRestantes: String(pr || 0),
+                      ValorLiberado: isNaN(vl) ? 0 : vl,
+                    });
                   });
                   return list;
                 };
 
                 const cardLoansList = getCardLoans(b);
-                const cardLoansSum = cardLoansList.reduce((acc: number, item: any) => acc + parseFloat(item.ValorParcela || 0), 0);
+                const cardLoansSum = cardLoansList.reduce((acc: number, item: any) => acc + parseNumber(item.ValorParcela || 0), 0);
+
+                // Somar parcelas de empréstimos normais
+                let totalComprometidoEmprestimos = 0;
+                emprestimos.forEach((e: any) => {
+                  totalComprometidoEmprestimos += parseNumber(e.ValorParcela || e.Parcela || e.parcela || 0);
+                });
+
+                let totalComprometidoCartoes = 0;
+                cartoes.forEach((c: any) => {
+                  totalComprometidoCartoes += parseNumber(c.ValorParcela || c.Desconto || c.Margem || 0);
+                });
+
+                const rmcMargem = parseNumber(rmc[0]?.ValorParcela || rmc[0]?.MargemTotal || 0);
+                const rccMargem = parseNumber(rcc[0]?.ValorParcela || rcc[0]?.MargemTotal || 0);
 
                 // No SIAPE: Total Comprometido da margem consignável (35%) = Desconto Total da Folha - (Margem RMC + Margem RCC + Saques de Cartões) = 21.963,37
-                const totalComprometidoSiape = resumo.DescontoTotal > 0
-                  ? Math.round((resumo.DescontoTotal - (rmcMargem + rccMargem + cardLoansSum)) * 100) / 100
+                const totalComprometidoSiape = parseNumber(resumo.DescontoTotal) > 0
+                  ? Math.round((parseNumber(resumo.DescontoTotal) - (rmcMargem + rccMargem + cardLoansSum)) * 100) / 100
                   : 21963.37;
 
                 // Total comprometido de empréstimos (a margem de 35% é para empréstimos)
@@ -676,7 +710,7 @@ Contrato: ${e.Contrato || 'N/A'}`,
                 // Função para trancar em 2 casas decimais sem arredondar para cima
                 const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
 
-                const base = isSiape ? parseFloat(resumo.ValorBeneficio || valorBeneficio || 0) : valorBeneficio;
+                const base = isSiape ? parseNumber(resumo.ValorBeneficio || valorBeneficio || 0) : valorBeneficio;
 
                 // Divisão oficial das margens (Total 45%):
                 // 35% para Empréstimos Consignados
@@ -702,7 +736,7 @@ Contrato: ${e.Contrato || 'N/A'}`,
                 // A margem devolvida pela MultiCorban é a fonte principal.
                 // O cálculo local permanece como fallback.
                 const margemLivre = hasMargemResumo
-                  ? truncateDecimals(parseFloat(rawMargemResumo || 0))
+                  ? truncateDecimals(parseNumber(rawMargemResumo))
                   : margemCalculada;
                 const valorLiberado = margemLivre > 0
                   ? truncateDecimals(margemLivre / getMarginCoefficient())
@@ -889,11 +923,11 @@ Contrato: ${e.Contrato || 'N/A'}`,
                         {rmc.length > 0 ? (
                           rmc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
-                            const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || margemConsignavelRmc);
-                            const rmcLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RMC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
-                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
+                            const margemTotal = parseNumber(cartao.MargemTotal || cartao.ValorParcela || margemConsignavelRmc);
+                            const rmcLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RMC').reduce((acc: number, l: any) => acc + parseNumber(l.ValorParcela || 0), 0);
+                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseNumber(cartao.MargemDisponivel) : margemTotal;
                             const margemDisponivel = (rmcLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rmcLoansSum) : backendDisponivel;
-                            const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
+                            const limiteValor = parseNumber(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
 
                             return (
                               <div key={`rmc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-sky-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-sky-950/20 rounded-2xl border border-sky-200/60 dark:border-sky-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
@@ -968,11 +1002,11 @@ Contrato: ${e.Contrato || 'N/A'}`,
                         {rcc.length > 0 ? (
                           rcc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
-                            const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || margemConsignavelRcc);
-                            const rccLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RCC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
-                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
+                            const margemTotal = parseNumber(cartao.MargemTotal || cartao.ValorParcela || margemConsignavelRcc);
+                            const rccLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RCC').reduce((acc: number, l: any) => acc + parseNumber(l.ValorParcela || 0), 0);
+                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseNumber(cartao.MargemDisponivel) : margemTotal;
                             const margemDisponivel = (rccLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rccLoansSum) : backendDisponivel;
-                            const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
+                            const limiteValor = parseNumber(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
 
                             return (
                               <div key={`rcc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-amber-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-amber-950/20 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
@@ -1078,12 +1112,13 @@ Contrato: ${e.Contrato || 'N/A'}`,
                               {emprestimos.map((emp: any, idx: number) => {
                                 const prazoTotal = parseInt(emp.Prazo || emp.parcelas || 0);
                                 const parcelasRestantes = parseInt(emp.ParcelasRestantes || emp.prazo_restante || 0);
-                                const taxa = emp.Taxa || emp.taxa || 0;
-                                const valorContratoApi = parseFloat(emp.ValorContrato || emp.ValorEmprestado || emp.ValorFinanciado || emp.ValorLiberado || 0);
-                                const valorContratoCalc = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), prazoTotal, taxa);
+                                const taxa = parseNumber(emp.Taxa || emp.taxa || 0);
+                                const parcelaValor = parseNumber(emp.ValorParcela || emp.Parcela || emp.parcela || 0);
+                                const valorContratoApi = parseNumber(emp.ValorContrato || emp.ValorEmprestado || emp.ValorFinanciado || emp.ValorLiberado || 0);
+                                const valorContratoCalc = calculateSaldoDevedor(parcelaValor, prazoTotal, taxa);
                                 const valorContrato = valorContratoApi > 0 ? valorContratoApi : valorContratoCalc;
-                                const saldoDevedorApi = parseFloat(emp.SaldoDevedor || emp.saldo || 0);
-                                const saldoAtualCalc = calculateSaldoDevedor(parseFloat(emp.ValorParcela || 0), parcelasRestantes, taxa);
+                                const saldoDevedorApi = parseNumber(emp.SaldoDevedor || emp.saldo || 0);
+                                const saldoAtualCalc = calculateSaldoDevedor(parcelaValor, parcelasRestantes, taxa);
                                 const saldoAtual = saldoDevedorApi > 0 ? saldoDevedorApi : saldoAtualCalc;
                                 const isAdded = addedContractsIds?.includes(`${emp.Banco}-${emp.Contrato}`);
                                 const bancoNomeSemPrefixo = getBancoName(emp.Banco) !== String(emp.Banco || '')
@@ -1139,11 +1174,11 @@ Contrato: ${e.Contrato || 'N/A'}`,
                                         <span>{finalContrato}</span>
                                         {finalIsCalculated && <span className="ml-1 text-[8px] font-bold uppercase text-amber-500">calc.</span>}
                                       </td>
-                                      <td className="px-3 py-2.5 whitespace-nowrap font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parseFloat(emp.ValorParcela || 0))}</td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap font-bold text-rose-600 dark:text-rose-400">{formatCurrency(parcelaValor)}</td>
                                       <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">
                                         {prazoTotal > 0 ? `${parcelasRestantes}/${prazoTotal}` : `${parcelasRestantes} rest.`}
                                       </td>
-                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">{taxa ? `${parseFloat(taxa).toFixed(2).replace('.', ',')}%` : 'N/A'}</td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-400">{taxa ? `${taxa.toFixed(2).replace('.', ',')}%` : 'N/A'}</td>
                                       <td className="px-3 py-2.5 whitespace-nowrap font-bold text-slate-800 dark:text-slate-200">{valorContrato > 0 ? formatCurrency(valorContrato) : 'N/A'}</td>
                                       <td className="whitespace-nowrap bg-amber-50/30 px-3 py-2.5 font-black text-amber-600 dark:bg-amber-900/10 dark:text-amber-400">{formatCurrency(saldoAtual)}</td>
                                       <td className="px-3 py-2.5 text-right">
@@ -1300,8 +1335,8 @@ Contrato: ${e.Contrato || 'N/A'}`,
                                 const bancoCode = item.Banco || '0';
                                 const bancoNome = item.NomeBanco || getBancoName(bancoCode);
                                 const bancoExibicao = formatBancoComCodigo(bancoCode, bancoNome);
-                                const parcela = parseFloat(item.ValorParcela || item.Parcela || 0);
-                                const valorContrato = parseFloat(item.ValorLiberado || item.ValorEmprestado || item.SaldoDevedor || 0);
+                                const parcela = parseNumber(item.ValorParcela || item.Parcela || 0);
+                                const valorContrato = parseNumber(item.ValorLiberado || item.ValorEmprestado || item.SaldoDevedor || 0);
                                 const prazoTotal = parseInt(item.Prazo || 0);
                                 const parcelasRestantes = parseInt(item.ParcelasRestantes || 0);
 
