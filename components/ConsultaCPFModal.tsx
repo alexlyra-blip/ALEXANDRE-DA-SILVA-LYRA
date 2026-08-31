@@ -270,15 +270,13 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
     const empList = activeBen.Emprestimos || [];
     const rmcList = activeBen.Rmc || [];
     const rccList = activeBen.RCC || [];
-    const allCards = [...rmcList, ...rccList];
 
-    let totalComp = 0;
-    empList.forEach((e: any) => totalComp += parseFloat(e.ValorParcela || 0));
-    allCards.forEach((c: any) => totalComp += parseFloat(c.ValorParcela || 0));
+    let totalEmpComp = 0;
+    empList.forEach((e: any) => totalEmpComp += parseFloat(e.ValorParcela || 0));
 
     const valBen = parseFloat(resFin.ValorBeneficio || 0);
-    const margemCons = valBen * (isSiape ? 0.35 : 0.40);
-    const margemCalculadaPdf = Math.floor((margemCons - totalComp) * 100) / 100;
+    const margemEmprestimoCons = Math.floor(valBen * 0.35 * 100) / 100;
+    const margemCalculadaPdf = Math.floor((margemEmprestimoCons - totalEmpComp) * 100) / 100;
     const rawMargemPdf = resFin.MargemDisponivelEmprestimo;
     const hasMargemPdf = rawMargemPdf !== undefined
       && rawMargemPdf !== null
@@ -297,15 +295,15 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
     const finRows = [
       [
         `Valor Benefício/Bruto: ${formatCurrency(valBen)}`,
-        `Margem Consignável: ${formatCurrency(margemCons)}`,
+        `Margem Empréstimo (35%): ${formatCurrency(margemEmprestimoCons)}`,
         {
-          content: `Total Comprometido: ${formatCurrency(totalComp)}`,
+          content: `Total Comprometido: ${formatCurrency(totalEmpComp)}`,
           styles: { textColor: [220, 38, 38], fontStyle: 'bold' }
         }
       ],
       [
         {
-          content: `Margem Livre: ${formatCurrency(margemLivreVal)}`,
+          content: `Margem Livre Empréstimo: ${formatCurrency(margemLivreVal)}`,
           styles: margemLivrePdfStyles
         },
         {
@@ -670,27 +668,36 @@ Contrato: ${e.Contrato || 'N/A'}`,
                   ? Math.round((resumo.DescontoTotal - (rmcMargem + rccMargem + cardLoansSum)) * 100) / 100
                   : 21963.37;
 
+                // Total comprometido de empréstimos (a margem de 35% é para empréstimos)
                 const totalComprometido = isSiape
-                  ? (totalComprometidoSiape > 0 ? totalComprometidoSiape : 21963.37)
-                  : (totalComprometidoEmprestimos + totalComprometidoCartoes);
+                  ? (totalComprometidoSiape > 0 ? totalComprometidoSiape : totalComprometidoEmprestimos)
+                  : totalComprometidoEmprestimos;
 
                 // Função para trancar em 2 casas decimais sem arredondar para cima
                 const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
 
                 const base = isSiape ? parseFloat(resumo.ValorBeneficio || valorBeneficio || 0) : valorBeneficio;
 
-                // Exceção LOAS 87 e 88 (35%), demais 40% (ou 35% para SIAPE)
-                const especie = (beneficiario.Especie || '').toString();
-                const isLoas = especie.includes('87') || especie.includes('88');
-                const percentualMargem = isSiape ? 0.35 : (isLoas ? 0.35 : 0.40);
+                // Divisão oficial das margens (Total 45%):
+                // 35% para Empréstimos Consignados
+                // 5% para Cartão RMC
+                // 5% para Cartão RCC
+                const percentualMargemEmprestimo = 0.35;
+                const percentualMargemRmc = 0.05;
+                const percentualMargemRcc = 0.05;
+                const percentualMargemTotal = 0.45;
 
-                const margemConsignavel = truncateDecimals(base * percentualMargem);
+                const margemConsignavelEmprestimo = truncateDecimals(base * percentualMargemEmprestimo);
+                const margemConsignavelRmc = truncateDecimals(base * percentualMargemRmc);
+                const margemConsignavelRcc = truncateDecimals(base * percentualMargemRcc);
+                const margemConsignavelTotal = truncateDecimals(base * percentualMargemTotal);
+
                 const rawMargemResumo = resumo.MargemDisponivelEmprestimo;
                 const hasMargemResumo = rawMargemResumo !== undefined
                   && rawMargemResumo !== null
                   && String(rawMargemResumo).trim() !== '';
                 const margemCalculada = truncateDecimals(
-                  margemConsignavel - totalComprometido,
+                  margemConsignavelEmprestimo - totalComprometido,
                 );
                 // A margem devolvida pela MultiCorban é a fonte principal.
                 // O cálculo local permanece como fallback.
@@ -785,18 +792,16 @@ Contrato: ${e.Contrato || 'N/A'}`,
                       </div>
                     </div>
 
-                    {/* Margens - resumo compacto */}
+                    {/* Margens - resumo compacto (Divisão 35% Empréstimo, 5% RMC, 5% RCC) */}
                     <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
                         <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
                           <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                          Margem Consignável
+                          Margem Empréstimo (35%)
                         </p>
-                        <p className="mt-0.5 text-lg font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavel)}</p>
+                        <p className="mt-0.5 text-lg font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavelEmprestimo)}</p>
                         <p className="mt-0.5 truncate text-[8px] text-slate-400">
-                          {isSiape
-                            ? `40% da Base ${formatCurrency(base)}`
-                            : `${isLoas ? '35%' : '40%'} do Benefício ${formatCurrency(valorBeneficio)}`}
+                          35% de {formatCurrency(base)} • Total: {formatCurrency(margemConsignavelTotal)} (45%)
                         </p>
                       </div>
 
@@ -807,20 +812,20 @@ Contrato: ${e.Contrato || 'N/A'}`,
                         </p>
                         <p className="mt-0.5 text-lg font-black text-rose-600 dark:text-rose-400">{formatCurrency(totalComprometido)}</p>
                         <p className="mt-0.5 text-[8px] font-semibold text-rose-500/80 dark:text-rose-300/80">
-                          {formatPercentual(percentualComprometido)} da margem comprometida
+                          {formatPercentual(percentualComprometido)} da base comprometida
                         </p>
                       </div>
 
                       <div className={`${margemLivre < 0 ? 'border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10' : 'border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'} rounded-xl border px-3 py-2.5`}>
                         <p className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600/80'}`}>
                           <TrendingUp className="h-3.5 w-3.5" />
-                          Margem Livre
+                          Margem Livre Empréstimo
                         </p>
                         <p className={`mt-0.5 text-lg font-black ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
                         <p className={`mt-0.5 text-[8px] font-semibold ${margemLivre < 0 ? 'text-rose-600/80 dark:text-rose-300/80' : 'text-emerald-600/80 dark:text-emerald-300/80'}`}>
                           {margemLivre < 0
                             ? `${formatPercentual(percentualMargemLivre)} de margem excedida`
-                            : `${formatPercentual(percentualMargemLivre)} de margem livre`}
+                            : `${formatPercentual(percentualMargemLivre)} disponível para empréstimo`}
                         </p>
                       </div>
 
@@ -859,6 +864,184 @@ Contrato: ${e.Contrato || 'N/A'}`,
                             </>
                           )}
                         </select>
+                      </div>
+                    </div>
+
+                    {/* Cartões Ativos e Margens de Cartão (RMC & RCC - 5% cada) - NA PARTE DE CIMA */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-amber-500" />
+                          Cartões e Margens de Cartão (RMC & RCC • 5% cada)
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20">
+                            Margem RMC: {formatCurrency(margemConsignavelRmc)} (5%)
+                          </span>
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+                            Margem RCC: {formatCurrency(margemConsignavelRcc)} (5%)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* RMC Section */}
+                        {rmc.length > 0 ? (
+                          rmc.map((cartao: any, idx: number) => {
+                            const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
+                            const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || margemConsignavelRmc);
+                            const rmcLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RMC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
+                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
+                            const margemDisponivel = (rmcLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rmcLoansSum) : backendDisponivel;
+                            const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
+
+                            return (
+                              <div key={`rmc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-sky-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-sky-950/20 rounded-2xl border border-sky-200/60 dark:border-sky-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-2xl"></div>
+
+                                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400 font-black text-xs shrink-0">
+                                      <CreditCard className="w-4.5 h-4.5" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Consignado (RMC)</h4>
+                                      <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
+                                    </div>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 uppercase tracking-wider shrink-0">
+                                    Ativo em Folha
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
+                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemTotal)}</p>
+                                  </div>
+
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30 text-center bg-emerald-50/20">
+                                    <p className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold mb-0.5">Disponível</p>
+                                    <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(margemDisponivel)}</p>
+                                  </div>
+
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Limite do Cartão</p>
+                                    <p className="text-sm font-black text-sky-600 dark:text-sky-400">{formatCurrency(limiteValor)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="bg-gradient-to-br from-white via-slate-50/50 to-sky-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-sky-950/20 rounded-2xl border border-dashed border-sky-300/80 dark:border-sky-700/60 shadow-sm p-5 relative overflow-hidden flex flex-col justify-between">
+                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400 font-black text-xs shrink-0">
+                                  <CreditCard className="w-4.5 h-4.5" />
+                                </div>
+                                <div>
+                                  <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Consignado (RMC)</h4>
+                                  <p className="text-[10px] text-emerald-600 font-semibold">Margem Livre para Contratação</p>
+                                </div>
+                              </div>
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 uppercase tracking-wider shrink-0">
+                                Disponível (5%)
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30 text-center bg-emerald-50/20">
+                                <p className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold mb-0.5">Margem Disponível</p>
+                                <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(margemConsignavelRmc)}</p>
+                              </div>
+
+                              <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Status</p>
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mt-0.5">Não Utilizado</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* RCC Section */}
+                        {rcc.length > 0 ? (
+                          rcc.map((cartao: any, idx: number) => {
+                            const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
+                            const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || margemConsignavelRcc);
+                            const rccLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RCC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
+                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
+                            const margemDisponivel = (rccLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rccLoansSum) : backendDisponivel;
+                            const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
+
+                            return (
+                              <div key={`rcc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-amber-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-amber-950/20 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl"></div>
+
+                                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-black text-xs shrink-0">
+                                      <Wallet className="w-4.5 h-4.5" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Benefício (RCC)</h4>
+                                      <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
+                                    </div>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 uppercase tracking-wider shrink-0">
+                                    Ativo em Folha
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
+                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemTotal)}</p>
+                                  </div>
+
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-amber-100 dark:border-amber-900/30 text-center bg-amber-50/20">
+                                    <p className="text-[9px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-bold mb-0.5">Disponível</p>
+                                    <p className="text-sm font-black text-amber-600 dark:text-amber-400">{formatCurrency(margemDisponivel)}</p>
+                                  </div>
+
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Limite do Cartão</p>
+                                    <p className="text-sm font-black text-amber-600 dark:text-amber-400">{formatCurrency(limiteValor)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="bg-gradient-to-br from-white via-slate-50/50 to-amber-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-amber-950/20 rounded-2xl border border-dashed border-amber-300/80 dark:border-amber-700/60 shadow-sm p-5 relative overflow-hidden flex flex-col justify-between">
+                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-black text-xs shrink-0">
+                                  <Wallet className="w-4.5 h-4.5" />
+                                </div>
+                                <div>
+                                  <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Benefício (RCC)</h4>
+                                  <p className="text-[10px] text-emerald-600 font-semibold">Margem Livre para Contratação</p>
+                                </div>
+                              </div>
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 uppercase tracking-wider shrink-0">
+                                Disponível (5%)
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30 text-center bg-emerald-50/20">
+                                <p className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold mb-0.5">Margem Disponível</p>
+                                <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(margemConsignavelRcc)}</p>
+                              </div>
+
+                              <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
+                                <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Status</p>
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mt-0.5">Não Utilizado</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1086,195 +1269,73 @@ Contrato: ${e.Contrato || 'N/A'}`,
                       </div>
                     )}
 
-                    {/* Cartões Ativos Grid Premium */}
-                    {cartoes.length > 0 && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                    {/* Tabela de Empréstimos e Saques de Cartões Averbados (RMC / RCC) - No final após os empréstimos ativos */}
+                    {cardLoansList.length > 0 && (
+                      <div className="bg-white dark:bg-slate-950 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-amber-50/30 dark:bg-amber-950/20 flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
                             <CreditCard className="w-4 h-4 text-amber-500" />
-                            Cartões Ativos (RMC & RCC)
-                          </h3>
-                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-amber-500" />
-                            {cartoes.length} {cartoes.length === 1 ? 'Cartão Registrado' : 'Cartões Registrados'}
+                            Empréstimos e Saques Averbados nos Cartões (RMC / RCC)
+                          </h4>
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 uppercase">
+                            {cardLoansList.length} {cardLoansList.length === 1 ? 'Contrato Averbado' : 'Contratos Averbados'}
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                          {rmc.map((cartao: any, idx: number) => {
-                            const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
-                            const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || 0);
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs text-left">
+                            <thead className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                              <tr>
+                                <th className="px-4 py-2.5 font-bold">Tipo</th>
+                                <th className="px-4 py-2.5 font-bold">Banco</th>
+                                <th className="px-4 py-2.5 font-bold">Nº do Contrato</th>
+                                <th className="px-4 py-2.5 font-bold">Parcela</th>
+                                <th className="px-4 py-2.5 font-bold">Qtd. Parcelas</th>
+                                <th className="px-4 py-2.5 font-bold">Qtd. Restante</th>
+                                <th className="px-4 py-2.5 font-bold">Valor do Contrato</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cardLoansList.map((item: any, idx: number) => {
+                                const bancoCode = item.Banco || '0';
+                                const bancoNome = item.NomeBanco || getBancoName(bancoCode);
+                                const bancoExibicao = formatBancoComCodigo(bancoCode, bancoNome);
+                                const parcela = parseFloat(item.ValorParcela || item.Parcela || 0);
+                                const valorContrato = parseFloat(item.ValorLiberado || item.ValorEmprestado || item.SaldoDevedor || 0);
+                                const prazoTotal = parseInt(item.Prazo || 0);
+                                const parcelasRestantes = parseInt(item.ParcelasRestantes || 0);
 
-                            // Calcula utilizado no frontend como fallback absoluto
-                            const rmcLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RMC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
-                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
-                            const margemDisponivel = (rmcLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rmcLoansSum) : backendDisponivel;
-
-                            const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
-                            const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
-
-                            return (
-                              <div key={`rmc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-sky-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-sky-950/20 rounded-2xl border border-sky-200/60 dark:border-sky-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-2xl"></div>
-
-                                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400 font-black text-xs shrink-0">
-                                      <CreditCard className="w-4.5 h-4.5" />
-                                    </div>
-                                    <div>
-                                      <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Consignado (RMC)</h4>
-                                      <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
-                                    </div>
-                                  </div>
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 uppercase tracking-wider shrink-0">
-                                    Desconto em Folha
-                                  </span>
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-2">
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
-                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
-                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemTotal)}</p>
-                                  </div>
-
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30 text-center bg-emerald-50/20">
-                                    <p className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold mb-0.5">Disponível</p>
-                                    <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(margemDisponivel)}</p>
-                                  </div>
-
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
-                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Limite do Cartão</p>
-                                    <p className="text-sm font-black text-sky-600 dark:text-sky-400">{formatCurrency(limiteValor)}</p>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                          {rcc.map((cartao: any, idx: number) => {
-                            const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
-                            const margemTotal = parseFloat(cartao.MargemTotal || cartao.ValorParcela || 0);
-
-                            // Calcula utilizado no frontend como fallback absoluto
-                            const rccLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RCC').reduce((acc: number, l: any) => acc + parseFloat(l.ValorParcela || 0), 0);
-                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseFloat(cartao.MargemDisponivel) : margemTotal;
-                            const margemDisponivel = (rccLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rccLoansSum) : backendDisponivel;
-
-                            const limiteValor = parseFloat(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
-                            const numeroContrato = String(cartao.Contrato || cartao.contrato || '').trim();
-
-                            return (
-                              <div key={`rcc-${idx}`} className="bg-gradient-to-br from-white via-slate-50/50 to-amber-50/20 dark:from-slate-900 dark:via-slate-900/90 dark:to-amber-950/20 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 shadow-md p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl"></div>
-
-                                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-black text-xs shrink-0">
-                                      <Wallet className="w-4.5 h-4.5" />
-                                    </div>
-                                    <div>
-                                      <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase">Cartão Benefício (RCC)</h4>
-                                      <p className="text-[10px] text-slate-500 font-semibold">{bancoExibicao}</p>
-                                    </div>
-                                  </div>
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 uppercase tracking-wider shrink-0">
-                                    Cartão Benefício
-                                  </span>
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-2">
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
-                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
-                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemTotal)}</p>
-                                  </div>
-
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-amber-100 dark:border-amber-900/30 text-center bg-amber-50/20">
-                                    <p className="text-[9px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-bold mb-0.5">Disponível</p>
-                                    <p className="text-sm font-black text-amber-600 dark:text-amber-400">{formatCurrency(margemDisponivel)}</p>
-                                  </div>
-
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
-                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Limite do Cartão</p>
-                                    <p className="text-sm font-black text-amber-600 dark:text-amber-400">{formatCurrency(limiteValor)}</p>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Tabela de Empréstimos e Saques de Cartões Averbados */}
-                        {cardLoansList.length > 0 && (
-                          <div className="bg-white dark:bg-slate-950 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 shadow-sm overflow-hidden mt-4">
-                            <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-amber-50/30 dark:bg-amber-950/20 flex items-center justify-between">
-                              <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                                <CreditCard className="w-4 h-4 text-amber-500" />
-                                Empréstimos e Saques Averbados nos Cartões (RMC / RCC)
-                              </h4>
-                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 uppercase">
-                                {cardLoansList.length} {cardLoansList.length === 1 ? 'Contrato Averbado' : 'Contratos Averbados'}
-                              </span>
-                              {/* DEBUG */}
-                              <div className="text-xs text-rose-500 mt-2 font-mono">DEBUG INFO: {cardLoansList.length} linhas</div>
-                            </div>
-
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-xs text-left">
-                                <thead className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-                                  <tr>
-                                    <th className="px-4 py-2.5 font-bold">Tipo</th>
-                                    <th className="px-4 py-2.5 font-bold">Banco</th>
-                                    <th className="px-4 py-2.5 font-bold">Nº do Contrato</th>
-                                    <th className="px-4 py-2.5 font-bold">Parcela</th>
-                                    <th className="px-4 py-2.5 font-bold">Qtd. Parcelas</th>
-                                    <th className="px-4 py-2.5 font-bold">Qtd. Restante</th>
-                                    <th className="px-4 py-2.5 font-bold">Valor do Contrato</th>
+                                return (
+                                  <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                                    <td className="px-4 py-2.5 font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 uppercase">
+                                        {item.TipoCartao || 'RCC'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                      {bancoExibicao}
+                                    </td>
+                                    <td className="px-4 py-2.5 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                      {item.Contrato || 'N/A'}
+                                    </td>
+                                    <td className="px-4 py-2.5 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                                      {formatCurrency(parcela)}
+                                    </td>
+                                    <td className="px-4 py-2.5 font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                      {prazoTotal > 0 ? `${prazoTotal}x` : 'N/A'}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                      {parcelasRestantes > 0 ? `${parcelasRestantes} rest.` : 'N/A'}
+                                    </td>
+                                    <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                      {valorContrato > 0 ? formatCurrency(valorContrato) : 'N/A'}
+                                    </td>
                                   </tr>
-                                </thead>
-                                <tbody>
-                                  {cardLoansList.map((item: any, idx: number) => {
-                                    const bancoCode = item.Banco || '0';
-                                    const bancoNome = item.NomeBanco || getBancoName(bancoCode);
-                                    const bancoExibicao = formatBancoComCodigo(bancoCode, bancoNome);
-                                    const parcela = parseFloat(item.ValorParcela || item.Parcela || 0);
-                                    const valorContrato = parseFloat(item.ValorLiberado || item.ValorEmprestado || item.SaldoDevedor || 0);
-                                    const prazoTotal = parseInt(item.Prazo || 0);
-                                    const parcelasRestantes = parseInt(item.ParcelasRestantes || 0);
-
-                                    return (
-                                      <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                        <td className="px-4 py-2.5 font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
-                                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 uppercase">
-                                            {item.TipoCartao || 'RCC'}
-                                          </span>
-                                        </td>
-                                        <td className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
-                                          {bancoExibicao}
-                                        </td>
-                                        <td className="px-4 py-2.5 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                                          {item.Contrato || 'N/A'}
-                                        </td>
-                                        <td className="px-4 py-2.5 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
-                                          {formatCurrency(parcela)}
-                                        </td>
-                                        <td className="px-4 py-2.5 font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                                          {prazoTotal > 0 ? `${prazoTotal}x` : 'N/A'}
-                                        </td>
-                                        <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                                          {parcelasRestantes > 0 ? `${parcelasRestantes} rest.` : 'N/A'}
-                                        </td>
-                                        <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
-                                          {valorContrato > 0 ? formatCurrency(valorContrato) : 'N/A'}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>

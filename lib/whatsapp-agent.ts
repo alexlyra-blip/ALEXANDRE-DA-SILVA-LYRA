@@ -841,20 +841,18 @@ function getBenefitMarginSummary(rawBenefit: any, dailyCoefficient: number) {
     const benefitValue = parseAutomaticNumber(
         summary?.ValorBeneficio ?? summary?.BaseCalculo ?? summary?.Bruto ?? summary?.ValorLiquido,
     );
-    let committed = 0;
-    for (const loan of loans) committed += parseAutomaticNumber(loan?.ValorParcela ?? loan?.Parcela);
-    for (const card of [...rmc, ...rcc]) committed += parseAutomaticNumber(card?.ValorParcela ?? card?.Desconto);
+    let loanCommitted = 0;
+    for (const loan of loans) loanCommitted += parseAutomaticNumber(loan?.ValorParcela ?? loan?.Parcela);
 
     const rawSpecies = String(beneficiary?.Especie || '').trim();
     const speciesMatch = rawSpecies.match(/\d{1,2}/);
     const speciesCode = speciesMatch ? speciesMatch[0].padStart(2, '0') : rawSpecies;
-    const isLoas = speciesCode === '87' || speciesCode === '88';
-    const marginPercentage = isLoas ? 0.35 : 0.40;
+    const marginPercentage = 0.35; // 35% para empréstimos consignados (5% RMC e 5% RCC separados)
     const consignable = truncateAutomatic(benefitValue * marginPercentage);
-    const calculatedMargin = truncateAutomatic(consignable - committed);
+    const calculatedMargin = truncateAutomatic(consignable - loanCommitted);
     const rawApiMargin = summary?.MargemDisponivelEmprestimo;
     const hasApiMargin = rawApiMargin !== undefined && rawApiMargin !== null && String(rawApiMargin).trim() !== '';
-    // Prioriza a margem explicitamente retornada pelo Multicorban. Se não vier, usa a mesma regra de cálculo da Consulta CPF.
+    // Prioriza a margem explicitamente retornada pelo Multicorban. Se não vier, usa a mesma regra de cálculo da Consulta CPF (35% empréstimos).
     const availableMargin = hasApiMargin ? truncateAutomatic(parseAutomaticNumber(rawApiMargin)) : calculatedMargin;
     const releasedAmount = availableMargin > 0 && dailyCoefficient > 0
         ? truncateAutomatic(availableMargin / dailyCoefficient)
@@ -1108,7 +1106,17 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
             response += `📊 MARGEM DISPONÍVEL: R$ ${fmt(margin.availableMargin)} (LIBERA *R$ ${fmt(margin.releasedAmount)}*)`;
 
             const benefitSimulationBlocks: string[] = [];
-            let displayedContractNumber = 0;
+            const benefitSimulationResults: Array<{
+                item: any;
+                params: any;
+                offers: any[];
+                top: any;
+                sortedOffers: any[];
+                c6Refin: any;
+                rendered: { text: string; displayedOffer: any | null };
+                isRefin: boolean;
+                released: number;
+            }> = [];
 
             if (benefitContracts.length > 0) {
                 for (let contractIndex = 0; contractIndex < benefitContracts.length; contractIndex++) {
@@ -1140,74 +1148,105 @@ async function simulateInssByCpf(cpf: string, userProfile: any, sessionData: any
                     const { top, sortedOffers } = getTopOfferForAutomaticCpf(offers, pp);
                     const rendered = buildAutomaticContractBlock(
                         item,
-                        displayedContractNumber + 1,
+                        1, // placeholder
                         offers,
                         top,
                         c6Refin,
                     );
 
-                    // O Gutto mostra somente contratos com uma simulação realmente disponível.
                     if (rendered.displayedOffer && rendered.text) {
-                        displayedContractNumber++;
-                        benefitSimulationBlocks.push(rendered.text);
-
+                        const isRefin = rendered.displayedOffer?.source === 'c6-refin' || Boolean(c6Refin.available && c6Refin.summary && getC6ReleasedAmount(c6Refin.summary) > 0);
                         const released = Math.max(0, parseAutomaticNumber(rendered.displayedOffer?.valorTroco));
-                        if (released > 0) {
-                            if (rendered.displayedOffer?.source === 'c6-refin' || c6Refin.available) {
-                                c6RefinCount++;
-                                totalC6RefinReleased += released;
-                            } else {
-                                portabilityCount++;
-                                totalPortabilityReleased += released;
-                            }
-                        }
-                    }
-
-                    if (!firstSuccessful && (top || rendered.displayedOffer)) {
-                        firstSuccessful = {
+                        benefitSimulationResults.push({
                             item,
                             params,
-                            top: top || rendered.displayedOffer,
                             offers,
+                            top,
                             sortedOffers,
-                            displayedOffer: rendered.displayedOffer,
-                            c6RefinAvailable: Boolean(c6Refin.available),
-                        };
+                            c6Refin,
+                            rendered,
+                            isRefin,
+                            released,
+                        });
                     }
+                }
+            }
 
-                    if (rendered.displayedOffer) {
-                        try {
-                            const displayed = rendered.displayedOffer;
-                            await db.collection('simulations').doc(generateUUID()).set({
-                                userId: userProfile.uid || userProfile.id || 'bot',
-                                userName: userProfile.name || 'WhatsApp',
-                                userAvatar: userProfile.logoUrl || userProfile.avatarUrl || userProfile.photoUrl || userProfile.photoURL || '',
-                                nomeCliente: item.nomeCliente,
-                                cpfCliente: item.cpf,
-                                numeroBeneficio: item.beneficio,
-                                numeroContrato: item.contrato,
-                                convenio: 'INSS',
-                                bancoAtual: params.bancoAtual,
-                                valorParcela: params.valorParcela,
-                                saldoDevedor: params.saldoDevedor,
-                                selectedOffer: displayed,
-                                topOffer: displayed?.name || '',
-                                topOfferContrato: displayed?.valorContrato || 0,
-                                topOfferTroco: displayed?.valorTroco || 0,
-                                topOfferTaxa: displayed?.novaTaxaPortabilidade || displayed?.taxaBase || 0,
-                                topOfferTabela: displayed?.tabela || '',
-                                simData: params,
-                                source: c6Refin.available ? 'multicorban-cpf-c6-refin' : 'multicorban-cpf',
-                                c6Refin: c6Refin.summary || null,
-                                c6RefinPrazo: c6Refin.available ? 108 : null,
-                                dailyMarginCoefficient,
-                                createdAt: new Date(),
-                                timestamp: Date.now(),
-                                origin: 'whatsapp',
-                            });
-                        } catch (saveError) {
-                            console.error('[Gutto CPF] Erro ao salvar simulação:', saveError);
-                        }
+            // REGRA: Ofertas de Refinanciamento vêm PRIMEIRO que as ofertas de Portabilidade!
+            benefitSimulationResults.sort((a, b) => {
+                if (a.isRefin !== b.isRefin) {
+                    return a.isRefin ? -1 : 1;
+                }
+                return b.released - a.released;
+            });
+
+            let displayedContractNumber = 0;
+            for (let i = 0; i < benefitSimulationResults.length; i++) {
+                const res = benefitSimulationResults[i];
+                displayedContractNumber++;
+                const finalRendered = buildAutomaticContractBlock(
+                    res.item,
+                    displayedContractNumber,
+                    res.offers,
+                    res.top,
+                    res.c6Refin,
+                );
+                benefitSimulationBlocks.push(finalRendered.text);
+
+                if (res.released > 0) {
+                    if (res.isRefin) {
+                        c6RefinCount++;
+                        totalC6RefinReleased += res.released;
+                    } else {
+                        portabilityCount++;
+                        totalPortabilityReleased += res.released;
+                    }
+                }
+
+                if (!firstSuccessful) {
+                    firstSuccessful = {
+                        item: res.item,
+                        params: res.params,
+                        top: res.top || res.rendered.displayedOffer,
+                        offers: res.offers,
+                        sortedOffers: res.sortedOffers,
+                        displayedOffer: res.rendered.displayedOffer,
+                        c6RefinAvailable: Boolean(res.c6Refin.available),
+                    };
+                }
+
+                if (finalRendered.displayedOffer) {
+                    try {
+                        const displayed = finalRendered.displayedOffer;
+                        await db.collection('simulations').doc(generateUUID()).set({
+                            userId: userProfile.uid || userProfile.id || 'bot',
+                            userName: userProfile.name || 'WhatsApp',
+                            userAvatar: userProfile.logoUrl || userProfile.avatarUrl || userProfile.photoUrl || userProfile.photoURL || '',
+                            nomeCliente: res.item.nomeCliente,
+                            cpfCliente: res.item.cpf,
+                            numeroBeneficio: res.item.beneficio,
+                            numeroContrato: res.item.contrato,
+                            convenio: 'INSS',
+                            bancoAtual: res.params.bancoAtual,
+                            valorParcela: res.params.valorParcela,
+                            saldoDevedor: res.params.saldoDevedor,
+                            selectedOffer: displayed,
+                            topOffer: displayed?.name || '',
+                            topOfferContrato: displayed?.valorContrato || 0,
+                            topOfferTroco: displayed?.valorTroco || 0,
+                            topOfferTaxa: displayed?.novaTaxaPortabilidade || displayed?.taxaBase || 0,
+                            topOfferTabela: displayed?.tabela || '',
+                            simData: res.params,
+                            source: res.isRefin ? 'multicorban-cpf-c6-refin' : 'multicorban-cpf',
+                            c6Refin: res.c6Refin?.summary || null,
+                            c6RefinPrazo: res.isRefin ? 108 : null,
+                            dailyMarginCoefficient,
+                            createdAt: new Date(),
+                            timestamp: Date.now(),
+                            origin: 'whatsapp',
+                        });
+                    } catch (saveError) {
+                        console.error('[Gutto CPF] Erro ao salvar simulação:', saveError);
                     }
                 }
             }
