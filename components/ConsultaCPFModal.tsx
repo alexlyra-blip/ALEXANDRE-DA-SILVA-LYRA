@@ -308,21 +308,21 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
     const allCards = [...rmcList, ...rccList];
 
     const valBen = parseNumber(resFin.ValorBeneficio || resFin.BaseCalculo || resFin.Bruto || 0);
-    const margemTotalPdf = Math.floor(valBen * 0.45 * 100) / 100;
-    const margemRmcPdf = Math.floor(valBen * 0.05 * 100) / 100;
-    const margemRccPdf = Math.floor(valBen * 0.05 * 100) / 100;
+    const margemTotalPdf = Math.floor((valBen * 0.45 + 0.000001) * 100) / 100;
+    const margemRmcPdf = Math.floor((valBen * 0.05 + 0.000001) * 100) / 100;
+    const margemRccPdf = Math.floor((valBen * 0.05 + 0.000001) * 100) / 100;
 
     let totalEmpComp = 0;
     empList.forEach((e: any) => totalEmpComp += parseNumber(e.ValorParcela || e.Parcela || e.parcela || 0));
-    totalEmpComp = Math.floor(totalEmpComp * 100) / 100;
+    totalEmpComp = Math.floor((totalEmpComp + 0.000001) * 100) / 100;
 
     const comprometidoRmcPdf = rmcList.length > 0 ? margemRmcPdf : 0;
     const comprometidoRccPdf = rccList.length > 0 ? margemRccPdf : 0;
-    const totalComprometidoPdf = Math.floor((totalEmpComp + comprometidoRmcPdf + comprometidoRccPdf) * 100) / 100;
+    const totalComprometidoPdf = Math.floor((totalEmpComp + comprometidoRmcPdf + comprometidoRccPdf + 0.000001) * 100) / 100;
 
-    const margemLivreVal = Math.floor((margemTotalPdf - totalComprometidoPdf) * 100) / 100;
+    const margemLivreVal = Math.floor((margemTotalPdf - totalComprometidoPdf + 0.000001) * 100) / 100;
     const valLiberadoVal = margemLivreVal > 0
-      ? Math.floor((margemLivreVal / getMarginCoefficient()) * 100) / 100
+      ? Math.floor(((margemLivreVal / getMarginCoefficient()) + 0.000001) * 100) / 100
       : 0;
 
     const margemLivrePdfStyles = margemLivreVal < 0
@@ -696,8 +696,11 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                 const cardLoansList = getCardLoans(b);
                 const cardLoansSum = cardLoansList.reduce((acc: number, item: any) => acc + parseNumber(item.ValorParcela || 0), 0);
 
-                // Função para trancar em 2 casas decimais sem arredondar para cima
-                const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
+                // Função para trancar em 2 casas decimais sem perda por precisão de ponto flutuante
+                const truncateDecimals = (num: number) => {
+                  if (!Number.isFinite(num)) return 0;
+                  return Math.floor((num + 0.000001) * 100) / 100;
+                };
 
                 const base = isSiape ? parseNumber(resumo.ValorBeneficio || valorBeneficio || 0) : valorBeneficio;
 

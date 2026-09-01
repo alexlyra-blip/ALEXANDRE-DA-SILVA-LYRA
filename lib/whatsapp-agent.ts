@@ -748,7 +748,7 @@ function parseAutomaticNumber(value: any): number {
 
 function truncateAutomatic(value: number): number {
     if (!Number.isFinite(value)) return 0;
-    return Math.floor(value * 100) / 100;
+    return Math.floor((value + 0.000001) * 100) / 100;
 }
 
 function normalizeBenefitKey(value: any): string {
