@@ -186,21 +186,18 @@ export function normalizeCPFConsultaItem(item: any, isSiapeParam = false): any {
 
   rawEmprestimos.forEach((emp: any) => {
     if (!emp || typeof emp !== 'object') return;
+    const cleanBancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).replace(/\D/g, '').padStart(3, '0');
     const rubricaUpper = String(emp.Rubrica || emp.NomeBanco || emp.bancoNome || emp.rubrica || '').toUpperCase();
-    const tipoUpper = String(emp.Tipo || emp.tipo || emp.TipoEmprestimo || '').toUpperCase();
-    const bancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).trim();
+    const tipoUpper = String(emp.Tipo || emp.tipo || emp.TipoEmprestimo || emp.TipoCartao || '').toUpperCase();
     const combinedStr = `${rubricaUpper} ${tipoUpper}`;
 
-    if (combinedStr.includes('RMC') || combinedStr.includes('RESERVA DE MARGEM') || combinedStr.includes('CARTAO CONSIGNADO') || combinedStr.includes('CARTÃO CONSIGNADO')) {
+    // Contratos do PicPay (079) ou Original são empréstimos consignados normais
+    const isPicPay = cleanBancoCode === '079' || rubricaUpper.includes('PICPAY');
+
+    if (!isPicPay && (tipoUpper === 'RMC' || combinedStr.includes('RESERVA DE MARGEM') || combinedStr.includes('RMC') || combinedStr.includes('CARTAO CONSIGNADO') || combinedStr.includes('CARTÃO CONSIGNADO'))) {
       extraRmcFromEmp.push({ ...emp, TipoCartao: 'RMC' });
-    } else if (combinedStr.includes('RCC') || combinedStr.includes('CARTAO BENEFICIO') || combinedStr.includes('CARTÃO BENEFÍCIO') || combinedStr.includes('CARTAO BENEF')) {
+    } else if (!isPicPay && (tipoUpper === 'RCC' || combinedStr.includes('RCC') || combinedStr.includes('CARTAO BENEFICIO') || combinedStr.includes('CARTÃO BENEFÍCIO') || combinedStr.includes('CARTAO BENEF'))) {
       extraRccFromEmp.push({ ...emp, TipoCartao: 'RCC' });
-    } else if (bancoCode === '0' || bancoCode === '' || !rubricaUpper || rubricaUpper === 'NULL') {
-      if (isSiape) {
-        extraRccFromEmp.push({ ...emp, TipoCartao: 'RCC' });
-      } else {
-        extraRmcFromEmp.push({ ...emp, TipoCartao: 'RMC' });
-      }
     } else {
       cleanEmprestimosList.push(emp);
     }

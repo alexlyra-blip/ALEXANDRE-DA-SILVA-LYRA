@@ -49,6 +49,7 @@ export const BANCOS_BRASIL: Record<string, string> = {
   '341': 'ITAÚ UNIBANCO S.A.',
   '041': 'BANCO DO ESTADO DO RIO GRANDE DO SUL S.A.',
   '077': 'BANCO INTER S.A.',
+  '079': 'BANCO PICPAY / ORIGINAL',
   '212': 'BANCO ORIGINAL S.A.',
   '389': 'BANCO MERCANTIL DO BRASIL S.A.',
   '422': 'BANCO SAFRA S.A.',

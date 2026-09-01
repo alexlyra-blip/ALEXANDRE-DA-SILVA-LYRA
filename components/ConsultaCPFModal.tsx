@@ -114,17 +114,24 @@ const parseNumber = (value: any): number => {
 
 const isCardContract = (emp: any): boolean => {
   if (!emp || typeof emp !== 'object') return false;
+  const cleanBancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).replace(/\D/g, '').padStart(3, '0');
   const rubricaUpper = String(emp.NomeBanco || emp.Rubrica || emp.rubrica || emp.TipoContrato || '').toUpperCase();
   const tipoUpper = String(emp.TipoCartao || emp.Tipo || '').toUpperCase();
-  return (
-    tipoUpper === 'RMC' ||
-    tipoUpper === 'RCC' ||
-    rubricaUpper.includes('RMC') ||
-    rubricaUpper.includes('RCC') ||
-    rubricaUpper.includes('CARTAO') ||
-    rubricaUpper.includes('CARTÃO') ||
-    rubricaUpper.includes('SAQUE')
-  );
+
+  // Contratos do Banco 079 PICPAY ou Original são empréstimos consignados normais
+  if (cleanBancoCode === '079' || rubricaUpper.includes('PICPAY')) {
+    return false;
+  }
+
+  if (tipoUpper === 'RMC' || tipoUpper === 'RCC') {
+    return true;
+  }
+
+  if (rubricaUpper.includes('RMC') || rubricaUpper.includes('RCC') || rubricaUpper.includes('RESERVA DE MARGEM')) {
+    return true;
+  }
+
+  return false;
 };
 
 const normalizeConsultaDataForModal = (source: any) => {

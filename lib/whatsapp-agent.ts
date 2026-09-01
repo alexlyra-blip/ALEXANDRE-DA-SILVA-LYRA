@@ -829,12 +829,34 @@ function getDailyMarginCoefficient(settings: any): number {
     return 0.02270;
 }
 
+function isCardContract(emp: any): boolean {
+    if (!emp || typeof emp !== 'object') return false;
+    const cleanBancoCode = String(emp.Banco !== undefined && emp.Banco !== null ? emp.Banco : (emp.IdBanco !== undefined && emp.IdBanco !== null ? emp.IdBanco : '')).replace(/\D/g, '').padStart(3, '0');
+    const rubricaUpper = String(emp.NomeBanco || emp.Rubrica || emp.rubrica || emp.TipoContrato || '').toUpperCase();
+    const tipoUpper = String(emp.TipoCartao || emp.Tipo || '').toUpperCase();
+
+    if (cleanBancoCode === '079' || rubricaUpper.includes('PICPAY')) {
+        return false;
+    }
+
+    if (tipoUpper === 'RMC' || tipoUpper === 'RCC') {
+        return true;
+    }
+
+    if (rubricaUpper.includes('RMC') || rubricaUpper.includes('RCC') || rubricaUpper.includes('RESERVA DE MARGEM')) {
+        return true;
+    }
+
+    return false;
+}
+
 function getBenefitMarginSummary(rawBenefit: any, dailyCoefficient: number) {
     const beneficiary = rawBenefit?.Beneficiario || {};
     const summary = rawBenefit?.ResumoFinanceiro || {};
-    const loans = Array.isArray(rawBenefit?.Emprestimos)
+    const rawLoans = Array.isArray(rawBenefit?.Emprestimos)
         ? rawBenefit.Emprestimos
         : (rawBenefit?.Emprestimos ? [rawBenefit.Emprestimos] : []);
+    const loans = rawLoans.filter((loan: any) => !isCardContract(loan));
     const rmc = Array.isArray(rawBenefit?.Rmc) ? rawBenefit.Rmc : (rawBenefit?.Rmc ? [rawBenefit.Rmc] : []);
     const rcc = Array.isArray(rawBenefit?.RCC) ? rawBenefit.RCC : (rawBenefit?.RCC ? [rawBenefit.RCC] : []);
 
