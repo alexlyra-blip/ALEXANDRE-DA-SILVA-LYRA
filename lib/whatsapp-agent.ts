@@ -869,13 +869,12 @@ function getBenefitMarginSummary(rawBenefit: any, dailyCoefficient: number) {
     const rawSpecies = String(beneficiary?.Especie || '').trim();
     const speciesMatch = rawSpecies.match(/\d{1,2}/);
     const speciesCode = speciesMatch ? speciesMatch[0].padStart(2, '0') : rawSpecies;
-    const marginPercentage = 0.35; // 35% para empréstimos consignados (5% RMC e 5% RCC separados)
+    const marginPercentage = 0.45; // 45% margem consignável total (35% empréstimos + 5% RMC + 5% RCC)
     const consignable = truncateAutomatic(benefitValue * marginPercentage);
-    const calculatedMargin = truncateAutomatic(consignable - loanCommitted);
-    const rawApiMargin = summary?.MargemDisponivelEmprestimo;
-    const hasApiMargin = rawApiMargin !== undefined && rawApiMargin !== null && String(rawApiMargin).trim() !== '';
-    // Prioriza a margem explicitamente retornada pelo Multicorban. Se não vier, usa a mesma regra de cálculo da Consulta CPF (35% empréstimos).
-    const availableMargin = hasApiMargin ? truncateAutomatic(parseAutomaticNumber(rawApiMargin)) : calculatedMargin;
+    const cardRmcCommitted = rmc.length > 0 ? truncateAutomatic(benefitValue * 0.05) : 0;
+    const cardRccCommitted = rcc.length > 0 ? truncateAutomatic(benefitValue * 0.05) : 0;
+    const totalCommitted = truncateAutomatic(loanCommitted + cardRmcCommitted + cardRccCommitted);
+    const availableMargin = truncateAutomatic(consignable - totalCommitted);
     const releasedAmount = availableMargin > 0 && dailyCoefficient > 0
         ? truncateAutomatic(availableMargin / dailyCoefficient)
         : 0;

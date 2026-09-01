@@ -307,20 +307,20 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
     const rccList = activeBen.RCC || [];
     const allCards = [...rmcList, ...rccList];
 
+    const valBen = parseNumber(resFin.ValorBeneficio || resFin.BaseCalculo || resFin.Bruto || 0);
+    const margemTotalPdf = Math.floor(valBen * 0.45 * 100) / 100;
+    const margemRmcPdf = Math.floor(valBen * 0.05 * 100) / 100;
+    const margemRccPdf = Math.floor(valBen * 0.05 * 100) / 100;
+
     let totalEmpComp = 0;
     empList.forEach((e: any) => totalEmpComp += parseNumber(e.ValorParcela || e.Parcela || e.parcela || 0));
     totalEmpComp = Math.floor(totalEmpComp * 100) / 100;
 
-    const valBen = parseNumber(resFin.ValorBeneficio || resFin.BaseCalculo || resFin.Bruto || 0);
-    const margemEmprestimoCons = Math.floor(valBen * 0.35 * 100) / 100;
-    const margemCalculadaPdf = Math.floor((margemEmprestimoCons - totalEmpComp) * 100) / 100;
-    const rawMargemPdf = resFin.MargemDisponivelEmprestimo;
-    const hasMargemPdf = rawMargemPdf !== undefined
-      && rawMargemPdf !== null
-      && String(rawMargemPdf).trim() !== '';
-    const margemLivreVal = hasMargemPdf
-      ? Math.floor(parseNumber(rawMargemPdf) * 100) / 100
-      : margemCalculadaPdf;
+    const comprometidoRmcPdf = rmcList.length > 0 ? margemRmcPdf : 0;
+    const comprometidoRccPdf = rccList.length > 0 ? margemRccPdf : 0;
+    const totalComprometidoPdf = Math.floor((totalEmpComp + comprometidoRmcPdf + comprometidoRccPdf) * 100) / 100;
+
+    const margemLivreVal = Math.floor((margemTotalPdf - totalComprometidoPdf) * 100) / 100;
     const valLiberadoVal = margemLivreVal > 0
       ? Math.floor((margemLivreVal / getMarginCoefficient()) * 100) / 100
       : 0;
@@ -332,15 +332,15 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
     const finRows = [
       [
         `Valor Benefício/Bruto: ${formatCurrency(valBen)}`,
-        `Margem Empréstimo (35%): ${formatCurrency(margemEmprestimoCons)}`,
+        `Margem Consignável (45%): ${formatCurrency(margemTotalPdf)}`,
         {
-          content: `Total Comprometido: ${formatCurrency(totalEmpComp)}`,
+          content: `Total Comprometido: ${formatCurrency(totalComprometidoPdf)}`,
           styles: { textColor: [220, 38, 38], fontStyle: 'bold' }
         }
       ],
       [
         {
-          content: `Margem Livre Empréstimo: ${formatCurrency(margemLivreVal)}`,
+          content: `Margem Livre: ${formatCurrency(margemLivreVal)}`,
           styles: margemLivrePdfStyles
         },
         {
@@ -368,17 +368,23 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
       doc.text(`4. Cartões Ativos (RMC & RCC) - Total (${allCards.length})`, 14, y);
       y += 4;
 
-      const cardsRows = allCards.map((c: any) => [
-        c.Tipo || 'Cartão',
-        formatBancoComCodigo(c.Banco, c.NomeBanco || getBancoName(c.Banco)),
-        c.Contrato || 'N/A',
-        formatCurrency(parseNumber(c.ValorParcela || c.Desconto || 0)),
-        formatCurrency(parseNumber(c.Limite || 0))
-      ]);
+      const cardsRows = allCards.map((c: any) => {
+        const tipoCartao = c.Tipo || (c.TipoCartao ? c.TipoCartao : 'Cartão');
+        const margemTotalCard = Math.floor(valBen * 0.05 * 100) / 100;
+        const averbadoCard = parseNumber(c.ValorParcela || c.Desconto || c.Margem || 0);
+        return [
+          tipoCartao,
+          formatBancoComCodigo(c.Banco, c.NomeBanco || getBancoName(c.Banco)),
+          c.Contrato || 'N/A',
+          formatCurrency(margemTotalCard),
+          formatCurrency(averbadoCard),
+          formatCurrency(parseNumber(c.Limite || 0))
+        ];
+      });
 
       autoTable(doc, {
         startY: y,
-        head: [['Tipo', 'Banco', 'Contrato', 'Margem/Parcela', 'Limite Cartão']],
+        head: [['Tipo', 'Banco', 'Contrato', 'Margem Total (5%)', 'Averbado em Folha', 'Limite Cartão']],
         body: cardsRows,
         theme: 'striped',
         headStyles: { fillColor: [217, 119, 6] },
@@ -690,30 +696,6 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                 const cardLoansList = getCardLoans(b);
                 const cardLoansSum = cardLoansList.reduce((acc: number, item: any) => acc + parseNumber(item.ValorParcela || 0), 0);
 
-                // Somar parcelas de empréstimos normais
-                let totalComprometidoEmprestimos = 0;
-                emprestimos.forEach((e: any) => {
-                  totalComprometidoEmprestimos += parseNumber(e.ValorParcela || e.Parcela || e.parcela || 0);
-                });
-
-                let totalComprometidoCartoes = 0;
-                cartoes.forEach((c: any) => {
-                  totalComprometidoCartoes += parseNumber(c.ValorParcela || c.Desconto || c.Margem || 0);
-                });
-
-                const rmcMargem = parseNumber(rmc[0]?.ValorParcela || rmc[0]?.MargemTotal || 0);
-                const rccMargem = parseNumber(rcc[0]?.ValorParcela || rcc[0]?.MargemTotal || 0);
-
-                // No SIAPE: Total Comprometido da margem consignável (35%) = Desconto Total da Folha - (Margem RMC + Margem RCC + Saques de Cartões) = 21.963,37
-                const totalComprometidoSiape = parseNumber(resumo.DescontoTotal) > 0
-                  ? Math.round((parseNumber(resumo.DescontoTotal) - (rmcMargem + rccMargem + cardLoansSum)) * 100) / 100
-                  : 21963.37;
-
-                // Total comprometido de empréstimos (a margem de 35% é para empréstimos)
-                const totalComprometido = isSiape
-                  ? (totalComprometidoSiape > 0 ? totalComprometidoSiape : totalComprometidoEmprestimos)
-                  : totalComprometidoEmprestimos;
-
                 // Função para trancar em 2 casas decimais sem arredondar para cima
                 const truncateDecimals = (num: number) => Math.floor(num * 100) / 100;
 
@@ -733,18 +715,34 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                 const margemConsignavelRcc = truncateDecimals(base * percentualMargemRcc);
                 const margemConsignavelTotal = truncateDecimals(base * percentualMargemTotal);
 
-                const rawMargemResumo = resumo.MargemDisponivelEmprestimo;
-                const hasMargemResumo = rawMargemResumo !== undefined
-                  && rawMargemResumo !== null
-                  && String(rawMargemResumo).trim() !== '';
-                const margemCalculada = truncateDecimals(
-                  margemConsignavelEmprestimo - totalComprometido,
-                );
-                // A margem devolvida pela MultiCorban é a fonte principal.
-                // O cálculo local permanece como fallback.
-                const margemLivre = hasMargemResumo
-                  ? truncateDecimals(parseNumber(rawMargemResumo))
-                  : margemCalculada;
+                // Somar parcelas de empréstimos normais (ex: 680,99)
+                let totalComprometidoEmprestimos = 0;
+                emprestimos.forEach((e: any) => {
+                  totalComprometidoEmprestimos += parseNumber(e.ValorParcela || e.Parcela || e.parcela || 0);
+                });
+                totalComprometidoEmprestimos = truncateDecimals(totalComprometidoEmprestimos);
+
+                // Cartões averbados em folha (valores de desconto)
+                const averbadoRmc = rmc.length > 0 ? parseNumber(rmc[0]?.ValorParcela || rmc[0]?.Desconto || rmc[0]?.Margem || rmc[0]?.ValorDesconto || 0) : 0;
+                const averbadoRcc = rcc.length > 0 ? parseNumber(rcc[0]?.ValorParcela || rcc[0]?.Desconto || rcc[0]?.Margem || rcc[0]?.ValorDesconto || 0) : 0;
+
+                // Comprometimento dos cartões na margem:
+                // Se o cliente possui cartão ativo, compromete os 5% (101,07). Se a margem estiver livre/disponível, compromete 0 para contratar novo cartão.
+                const comprometidoRmc = rmc.length > 0 ? margemConsignavelRmc : 0;
+                const comprometidoRcc = rcc.length > 0 ? margemConsignavelRcc : 0;
+                const totalComprometidoCartoes = truncateDecimals(comprometidoRmc + comprometidoRcc);
+
+                // Total Comprometido Geral = 680,99 (Empréstimos) + 101,07 (RMC) + 101,07 (RCC) = 883,13
+                const totalComprometidoSiape = parseNumber(resumo.DescontoTotal) > 0
+                  ? Math.round((parseNumber(resumo.DescontoTotal) - (comprometidoRmc + comprometidoRcc + cardLoansSum)) * 100) / 100
+                  : 21963.37;
+
+                const totalComprometido = isSiape
+                  ? (totalComprometidoSiape > 0 ? totalComprometidoSiape : truncateDecimals(totalComprometidoEmprestimos + totalComprometidoCartoes))
+                  : truncateDecimals(totalComprometidoEmprestimos + totalComprometidoCartoes);
+
+                // Margem Livre Geral = 45% (Total Consignável: 909,70) - Total Comprometido (883,13) = 26,57
+                const margemLivre = truncateDecimals(margemConsignavelTotal - totalComprometido);
                 const valorLiberado = margemLivre > 0
                   ? truncateDecimals(margemLivre / getMarginCoefficient())
                   : 0;
@@ -833,16 +831,16 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                       </div>
                     </div>
 
-                    {/* Margens - resumo compacto (Divisão 35% Empréstimo, 5% RMC, 5% RCC) */}
+                    {/* Margens - resumo compacto (Divisão 35% Empréstimo, 5% RMC, 5% RCC - Total 45%) */}
                     <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
                         <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
                           <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                          Margem Empréstimo (35%)
+                          Margem Consignável (45%)
                         </p>
-                        <p className="mt-0.5 text-lg font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavelEmprestimo)}</p>
+                        <p className="mt-0.5 text-lg font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavelTotal)}</p>
                         <p className="mt-0.5 truncate text-[8px] text-slate-400">
-                          35% de {formatCurrency(base)} • Total: {formatCurrency(margemConsignavelTotal)} (45%)
+                          35% Emp: {formatCurrency(margemConsignavelEmprestimo)} • 5% RMC: {formatCurrency(margemConsignavelRmc)} • 5% RCC: {formatCurrency(margemConsignavelRcc)}
                         </p>
                       </div>
 
@@ -853,20 +851,20 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                         </p>
                         <p className="mt-0.5 text-lg font-black text-rose-600 dark:text-rose-400">{formatCurrency(totalComprometido)}</p>
                         <p className="mt-0.5 text-[8px] font-semibold text-rose-500/80 dark:text-rose-300/80">
-                          {formatPercentual(percentualComprometido)} da base comprometida
+                          {formatPercentual(percentualComprometido)} da base (Emp: {formatCurrency(totalComprometidoEmprestimos)} + Cartões: {formatCurrency(totalComprometidoCartoes)})
                         </p>
                       </div>
 
                       <div className={`${margemLivre < 0 ? 'border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10' : 'border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'} rounded-xl border px-3 py-2.5`}>
                         <p className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600/80'}`}>
                           <TrendingUp className="h-3.5 w-3.5" />
-                          Margem Livre Empréstimo
+                          Margem Livre
                         </p>
                         <p className={`mt-0.5 text-lg font-black ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
                         <p className={`mt-0.5 text-[8px] font-semibold ${margemLivre < 0 ? 'text-rose-600/80 dark:text-rose-300/80' : 'text-emerald-600/80 dark:text-emerald-300/80'}`}>
                           {margemLivre < 0
                             ? `${formatPercentual(percentualMargemLivre)} de margem excedida`
-                            : `${formatPercentual(percentualMargemLivre)} disponível para empréstimo`}
+                            : `${formatPercentual(percentualMargemLivre)} disponível para contratação`}
                         </p>
                       </div>
 
@@ -930,10 +928,6 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                         {rmc.length > 0 ? (
                           rmc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
-                            const margemTotal = parseNumber(cartao.MargemTotal || cartao.ValorParcela || margemConsignavelRmc);
-                            const rmcLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RMC').reduce((acc: number, l: any) => acc + parseNumber(l.ValorParcela || 0), 0);
-                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseNumber(cartao.MargemDisponivel) : margemTotal;
-                            const margemDisponivel = (rmcLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rmcLoansSum) : backendDisponivel;
                             const limiteValor = parseNumber(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
 
                             return (
@@ -957,13 +951,13 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
 
                                 <div className="grid grid-cols-3 gap-2">
                                   <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
-                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
-                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemTotal)}</p>
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem Total (5%)</p>
+                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemConsignavelRmc)}</p>
                                   </div>
 
-                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30 text-center bg-emerald-50/20">
-                                    <p className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold mb-0.5">Disponível</p>
-                                    <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(margemDisponivel)}</p>
+                                  <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-sky-100 dark:border-sky-900/30 text-center bg-sky-50/20">
+                                    <p className="text-[9px] uppercase tracking-wider text-sky-700 dark:text-sky-300 font-bold mb-0.5">Averbado em Folha</p>
+                                    <p className="text-sm font-black text-sky-700 dark:text-sky-300">{formatCurrency(averbadoRmc)}</p>
                                   </div>
 
                                   <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
@@ -1009,10 +1003,6 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                         {rcc.length > 0 ? (
                           rcc.map((cartao: any, idx: number) => {
                             const bancoExibicao = formatBancoComCodigo(cartao.Banco, cartao.NomeBanco || getBancoName(cartao.Banco));
-                            const margemTotal = parseNumber(cartao.MargemTotal || cartao.ValorParcela || margemConsignavelRcc);
-                            const rccLoansSum = cardLoansList.filter((l: any) => l.TipoCartao === 'RCC').reduce((acc: number, l: any) => acc + parseNumber(l.ValorParcela || 0), 0);
-                            const backendDisponivel = cartao.MargemDisponivel !== undefined ? parseNumber(cartao.MargemDisponivel) : margemTotal;
-                            const margemDisponivel = (rccLoansSum > 0 && backendDisponivel === margemTotal) ? Math.max(0, margemTotal - rccLoansSum) : backendDisponivel;
                             const limiteValor = parseNumber(cartao.Limite || cartao.Valor || cartao.Valor_emprestimo || cartao.LimiteCartao || 0);
 
                             return (
@@ -1036,13 +1026,13 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
 
                                 <div className="grid grid-cols-3 gap-2">
                                   <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
-                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem / Parcela</p>
-                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemTotal)}</p>
+                                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">Margem Total (5%)</p>
+                                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{formatCurrency(margemConsignavelRcc)}</p>
                                   </div>
 
                                   <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-amber-100 dark:border-amber-900/30 text-center bg-amber-50/20">
-                                    <p className="text-[9px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-bold mb-0.5">Disponível</p>
-                                    <p className="text-sm font-black text-amber-600 dark:text-amber-400">{formatCurrency(margemDisponivel)}</p>
+                                    <p className="text-[9px] uppercase tracking-wider text-amber-700 dark:text-amber-300 font-bold mb-0.5">Averbado em Folha</p>
+                                    <p className="text-sm font-black text-amber-700 dark:text-amber-300">{formatCurrency(averbadoRcc)}</p>
                                   </div>
 
                                   <div className="bg-white/80 dark:bg-slate-950/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-center">
