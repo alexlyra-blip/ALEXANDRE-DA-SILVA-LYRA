@@ -48,7 +48,7 @@ const getAI = () => {
 };
 
 function SimulationFormContent({ isEmbedded = false }: { isEmbedded?: boolean }) {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { banks: rulesBanks } = useRules();
   const { showToast, hideToast } = useToast();
   const router = useRouter();
@@ -77,6 +77,99 @@ function SimulationFormContent({ isEmbedded = false }: { isEmbedded?: boolean })
   const [consultaData, setConsultaData] = useState<any>(null);
   const [isConsultaModalOpen, setIsConsultaModalOpen] = useState(false);
   const [addedContractsIds, setAddedContractsIds] = useState<string[]>([]);
+
+  // Refin C6 Automático
+  const [c6AutoRefin, setC6AutoRefin] = useState<any>({
+    loading: false,
+    configured: false,
+    results: [],
+  });
+  const [c6CredentialStatus, setC6CredentialStatus] = useState<any>({
+    loading: true,
+    configured: false,
+  });
+
+  const getAuthHeaders = async () => {
+    if (!user) return {};
+    try {
+      const token = await user.getIdToken();
+      return { Authorization: `Bearer ${token}` };
+    } catch {
+      return {};
+    }
+  };
+
+  const loadC6CredentialStatus = async () => {
+    if (!user) {
+      setC6CredentialStatus({ loading: false, configured: false });
+      return;
+    }
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch('/api/c6/credentials', { headers: authHeaders });
+      const payload = await response.json().catch(() => ({}));
+      setC6CredentialStatus({ loading: false, ...payload });
+      setC6AutoRefin((prev: any) => ({
+        ...prev,
+        configured: Boolean(payload?.configured),
+      }));
+    } catch {
+      setC6CredentialStatus({ loading: false, configured: false });
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      loadC6CredentialStatus();
+    }
+  }, [user]);
+
+  const triggerC6Refin = async (cleanCpfTarget: string) => {
+    if (!cleanCpfTarget) return;
+    setC6AutoRefin((prev: any) => ({
+      ...prev,
+      loading: true,
+      results: [],
+    }));
+
+    try {
+      const authHeaders = await getAuthHeaders();
+      const refinResponse = await fetch('/api/c6/refin/automatico', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({ cpf: cleanCpfTarget }),
+      });
+      const refinPayload = await refinResponse.json().catch(() => ({}));
+
+      if (!refinResponse.ok) {
+        throw new Error(refinPayload?.error || 'Falha na consulta automática do refin C6');
+      }
+
+      setC6AutoRefin({
+        loading: false,
+        ...refinPayload,
+      });
+
+      if (refinPayload?.credentialNeedsUpdate) {
+        setC6CredentialStatus((prev: any) => ({
+          ...prev,
+          validationStatus: 'invalid',
+          needsUpdate: true,
+        }));
+      }
+    } catch (refinError: any) {
+      console.error('Refin C6 automático no SimulationForm:', refinError);
+      setC6AutoRefin((prev: any) => ({
+        ...prev,
+        loading: false,
+        results: [],
+        error: refinError?.message,
+      }));
+    }
+  };
   
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -175,6 +268,17 @@ function SimulationFormContent({ isEmbedded = false }: { isEmbedded?: boolean })
       
       setConsultaData(data);
       setIsConsultaModalOpen(true);
+
+      const cleanCpfDigits = String(cpfCliente || '').replace(/\D/g, '');
+      if (tipoConsulta === 'inss') {
+        triggerC6Refin(cleanCpfDigits);
+      } else {
+        setC6AutoRefin({
+          loading: false,
+          configured: false,
+          results: [],
+        });
+      }
       
       // Auto-fill some personal data if available
       const beneficios = parseConsultaResponse(data);
@@ -554,6 +658,9 @@ function SimulationFormContent({ isEmbedded = false }: { isEmbedded?: boolean })
             if (data && !data.error) {
               setConsultaData(data);
               setIsConsultaModalOpen(true);
+              if (searchType === 'inss') {
+                triggerC6Refin(cleanCpf);
+              }
               
               const beneficiosList = parseConsultaResponse(data);
               const firstBenefit = beneficiosList[0] || {};
@@ -831,7 +938,7 @@ function SimulationFormContent({ isEmbedded = false }: { isEmbedded?: boolean })
           </header>
         )}
 
-        <main className="flex-1 w-full px-4 py-6 overflow-y-auto">
+        <main className="flex-1 w-full px-4 py-6 pb-28 md:pb-6 overflow-y-auto">
           <QuotaAlert />
           <section className="mb-8">
             <div className="flex items-center gap-2 mb-4">
@@ -1297,7 +1404,7 @@ function SimulationFormContent({ isEmbedded = false }: { isEmbedded?: boolean })
           </section>
         </main>
 
-        <footer className={`sticky bottom-0 bg-white/80 dark:bg-black/80 backdrop-blur-md p-4 border-t border-primary/10 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]`}>
+        <footer className="sticky bottom-[72px] md:bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 border-t border-primary/10 shadow-[0_-10px_20px_rgba(0,0,0,0.08)]">
           <button 
             onClick={handleSimulate} 
             disabled={hasInvalidContract || isFormIncomplete || isSimulating} 
@@ -1312,7 +1419,7 @@ function SimulationFormContent({ isEmbedded = false }: { isEmbedded?: boolean })
               <Loader2 className="w-6 h-6 animate-spin" />
             ) : (
               <>
-                <span className="relative z-10 text-base">Analisar {contracts.length > 1 ? `${contracts.length} Contratos` : 'Melhores Opções'}</span>
+                <span className="relative z-10 text-base">Iniciar Análise • {contracts.length > 1 ? `${contracts.length} Contratos` : 'Melhores Opções'}</span>
                 <TrendingUp className="w-5 h-5 relative z-10 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
               </>
             )}
@@ -1341,8 +1448,18 @@ function SimulationFormContent({ isEmbedded = false }: { isEmbedded?: boolean })
         isOpen={isConsultaModalOpen}
         onClose={() => setIsConsultaModalOpen(false)}
         data={consultaData}
+        c6RefinData={c6AutoRefin}
         addedContractsIds={addedContractsIds}
         onToggleContract={handleToggleContractFromConsulta}
+        onRefreshC6Refin={(cpf) => {
+          const clean = String(cpf || cpfCliente || '').replace(/\D/g, '');
+          if (clean) triggerC6Refin(clean);
+        }}
+        onCredentialUpdated={() => {
+          loadC6CredentialStatus();
+          const clean = String(cpfCliente || '').replace(/\D/g, '');
+          if (clean) triggerC6Refin(clean);
+        }}
       />
 
       {!isEmbedded && (

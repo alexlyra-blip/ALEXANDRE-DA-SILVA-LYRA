@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState, useEffect } from 'react';
-import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap, Download, KeyRound, ChevronDown } from 'lucide-react';
+import { X, User, FileText, Landmark, CreditCard, CheckCircle2, Lock, Unlock, Crown, AlertCircle, Loader2, Phone, MapPin, Sparkles, ShieldCheck, TrendingUp, DollarSign, Wallet, Check, AlertTriangle, Zap, Download, KeyRound, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { formatCurrency, formatCPF } from '@/lib/utils';
 import { getEspecieName, getBancoName, calculateSaldoDevedor, BANCOS_BRASIL } from '@/lib/mappings';
 import { motion, AnimatePresence } from 'motion/react';
@@ -10,6 +10,8 @@ import { getLatestCoefficient, getCachedCoefficientSync, getAllActiveCoefficient
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useBranding } from '@/components/Providers';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 
 
 const hexToRgbTuple = (hex: string): [number, number, number] => {
@@ -148,16 +150,74 @@ interface ConsultaCPFModalProps {
   c6RefinData?: any;
   addedContractsIds?: string[];
   onToggleContract?: (contractData: any, action: 'add' | 'remove') => void;
+  onRefreshC6Refin?: (cpf: string) => void;
+  onCredentialUpdated?: () => void;
 }
 
-export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, addedContractsIds = [], onToggleContract }: ConsultaCPFModalProps) {
+export default function ConsultaCPFModal({
+  isOpen,
+  onClose,
+  data,
+  c6RefinData,
+  addedContractsIds = [],
+  onToggleContract,
+  onRefreshC6Refin,
+  onCredentialUpdated
+}: ConsultaCPFModalProps) {
   const { primaryColor } = useBranding();
+  const { user } = useAuth();
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState(0);
   const [bancoPriority, setBancoPriority] = useState<string>('');
   const [activeCoefs, setActiveCoefs] = useState<Record<string, number>>({});
   const [coefDate, setCoefDate] = useState<string>('');
   const [expandedC6Refins, setExpandedC6Refins] = useState<Record<string, boolean>>({});
   const [selectedC6Tables, setSelectedC6Tables] = useState<Record<string, number>>({});
+
+  // Modal para cadastrar / atualizar credenciais do C6 diretamente na consulta
+  const [isC6ModalOpen, setIsC6ModalOpen] = useState(false);
+  const [c6Username, setC6Username] = useState('');
+  const [c6Password, setC6Password] = useState('');
+  const [showC6Password, setShowC6Password] = useState(false);
+  const [isSavingC6, setIsSavingC6] = useState(false);
+  const [c6SaveError, setC6SaveError] = useState('');
+
+  const handleSaveC6Credentials = async (cpfToRefetch?: string) => {
+    if (!c6Username.trim() || !c6Password) {
+      setC6SaveError('Informe usuário e senha do C6.');
+      return;
+    }
+    setIsSavingC6(true);
+    setC6SaveError('');
+    try {
+      if (!user) throw new Error('Usuário não autenticado');
+      const token = await user.getIdToken();
+      const response = await fetch('/api/c6/credentials', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          username: c6Username.trim(),
+          password: c6Password,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Falha ao salvar credencial C6');
+      }
+      showToast('Credencial C6 cadastrada e validada com sucesso!', 'success');
+      setIsC6ModalOpen(false);
+      setC6Password('');
+      if (onCredentialUpdated) onCredentialUpdated();
+      if (onRefreshC6Refin && cpfToRefetch) onRefreshC6Refin(cpfToRefetch);
+    } catch (err: any) {
+      setC6SaveError(err?.message || 'Erro ao validar e salvar credencial.');
+    } finally {
+      setIsSavingC6(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -337,7 +397,7 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
         `Total Consignável: ${formatCurrency(margemTotalPdf)}`,
         {
           content: `Total Comprometido: ${formatCurrency(totalComprometidoPdf)}`,
-          styles: { textColor: [220, 38, 38], fontStyle: 'bold' }
+          styles: { textColor: totalComprometidoPdf < 0 ? [220, 38, 38] : [21, 128, 61], fontStyle: 'bold' }
         }
       ],
       [
@@ -851,13 +911,13 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                         </p>
                       </div>
 
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
-                        <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                          <Wallet className="h-3.5 w-3.5 text-rose-500" />
+                      <div className={`rounded-xl border px-3 py-2.5 ${totalComprometido < 0 ? 'border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10' : 'border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'}`}>
+                        <p className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider ${totalComprometido < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+                          <Wallet className={`h-3.5 w-3.5 ${totalComprometido < 0 ? 'text-rose-500' : 'text-emerald-500'}`} />
                           Total Comprometido
                         </p>
-                        <p className="mt-0.5 text-lg font-black text-rose-600 dark:text-rose-400">{formatCurrency(totalComprometido)}</p>
-                        <p className="mt-0.5 text-[8px] font-semibold text-rose-500/80 dark:text-rose-300/80">
+                        <p className={`mt-0.5 text-lg font-black ${totalComprometido < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(totalComprometido)}</p>
+                        <p className={`mt-0.5 text-[8px] font-semibold ${totalComprometido < 0 ? 'text-rose-500/80 dark:text-rose-300/80' : 'text-emerald-600/80 dark:text-emerald-300/80'}`}>
                           {formatPercentual(percentualComprometido)} da base (Emp: {formatCurrency(totalComprometidoEmprestimos)} + Cartões: {formatCurrency(totalComprometidoCartoes)})
                         </p>
                       </div>
@@ -1220,14 +1280,25 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
                                               Sem liberação C6
                                             </span>
                                           ) : (
-                                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[9px] font-black text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                if (!c6RefinData?.configured) {
+                                                  setIsC6ModalOpen(true);
+                                                } else if (onRefreshC6Refin) {
+                                                  onRefreshC6Refin(personalInfo.CPF);
+                                                }
+                                              }}
+                                              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 text-[9px] font-black text-amber-700 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20 transition-colors cursor-pointer"
+                                              title={!c6RefinData?.configured ? 'Cadastrar credencial C6 para consultar Refin' : 'Consultar Refin C6'}
+                                            >
                                               {c6RefinData?.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
                                               {c6RefinData?.loading
                                                 ? 'Consultando C6'
                                                 : c6RefinData?.configured
-                                                  ? 'Refin pendente'
+                                                  ? 'Consultar C6'
                                                   : 'Credencial C6 necessária'}
-                                            </span>
+                                            </button>
                                           )
                                         ) : (
                                           <span className="text-[9px] font-semibold text-slate-300 dark:text-slate-700">—</span>
@@ -1392,6 +1463,110 @@ export default function ConsultaCPFModal({ isOpen, onClose, data, c6RefinData, a
           )}
         </div>
       </motion.div>
+
+      {/* Modal para Adicionar / Atualizar Credencial C6 */}
+      <AnimatePresence>
+        {isC6ModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 relative"
+            >
+              <button
+                type="button"
+                onClick={() => setIsC6ModalOpen(false)}
+                className="absolute top-5 right-5 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-xs font-black text-white shadow-md dark:bg-white dark:text-slate-950">
+                  C6
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Credencial C6 Consignado</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Libere a consulta e tabelas de Refin automático</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                Informe o usuário e senha do seu correspondente bancário C6. Os dados são salvos de forma segura e criptografada.
+              </p>
+
+              {c6SaveError && (
+                <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                  {c6SaveError}
+                </div>
+              )}
+
+              <div className="space-y-3 mb-5">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Usuário C6</label>
+                  <input
+                    type="text"
+                    value={c6Username}
+                    onChange={(e) => setC6Username(e.target.value)}
+                    placeholder="Ex: CORR12345"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Senha C6</label>
+                  <div className="relative">
+                    <input
+                      type={showC6Password ? 'text' : 'password'}
+                      value={c6Password}
+                      onChange={(e) => setC6Password(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 pr-10 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowC6Password(!showC6Password)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showC6Password ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsC6ModalOpen(false)}
+                  disabled={isSavingC6}
+                  className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const list = normalizeConsultaDataForModal(data);
+                    const currentCpf = list[0]?.Beneficiario?.CPF || '';
+                    handleSaveC6Credentials(currentCpf);
+                  }}
+                  disabled={isSavingC6}
+                  className="flex-1 rounded-xl bg-primary text-white py-3 text-xs font-black uppercase tracking-wider hover:bg-primary-dark transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-primary/20"
+                >
+                  {isSavingC6 ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Validando...
+                    </>
+                  ) : (
+                    'Salvar e Consultar'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
