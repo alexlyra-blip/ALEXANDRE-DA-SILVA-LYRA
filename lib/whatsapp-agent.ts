@@ -746,9 +746,9 @@ function parseAutomaticNumber(value: any): number {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function truncateAutomatic(value: number): number {
+function roundAutomatic(value: number): number {
     if (!Number.isFinite(value)) return 0;
-    return Math.floor((value + 0.000001) * 100) / 100;
+    return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 function normalizeBenefitKey(value: any): string {
@@ -870,13 +870,13 @@ function getBenefitMarginSummary(rawBenefit: any, dailyCoefficient: number) {
     const speciesMatch = rawSpecies.match(/\d{1,2}/);
     const speciesCode = speciesMatch ? speciesMatch[0].padStart(2, '0') : rawSpecies;
     const marginPercentage = 0.45; // 45% margem consignável total (35% empréstimos + 5% RMC + 5% RCC)
-    const consignable = truncateAutomatic(benefitValue * marginPercentage);
-    const cardRmcCommitted = rmc.length > 0 ? truncateAutomatic(benefitValue * 0.05) : 0;
-    const cardRccCommitted = rcc.length > 0 ? truncateAutomatic(benefitValue * 0.05) : 0;
-    const totalCommitted = truncateAutomatic(loanCommitted + cardRmcCommitted + cardRccCommitted);
-    const availableMargin = truncateAutomatic(consignable - totalCommitted);
+    const consignable = roundAutomatic(benefitValue * marginPercentage);
+    const cardRmcCommitted = rmc.length > 0 ? roundAutomatic(benefitValue * 0.05) : 0;
+    const cardRccCommitted = rcc.length > 0 ? roundAutomatic(benefitValue * 0.05) : 0;
+    const totalCommitted = roundAutomatic(loanCommitted + cardRmcCommitted + cardRccCommitted);
+    const availableMargin = roundAutomatic(consignable - totalCommitted);
     const releasedAmount = availableMargin > 0 && dailyCoefficient > 0
-        ? truncateAutomatic(availableMargin / dailyCoefficient)
+        ? roundAutomatic(availableMargin / dailyCoefficient)
         : 0;
 
     return { benefitValue, availableMargin, releasedAmount, speciesCode };

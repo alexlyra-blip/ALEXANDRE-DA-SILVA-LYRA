@@ -368,23 +368,23 @@ export default function ConsultaCPFModal({
     const allCards = [...rmcList, ...rccList];
 
     const valBen = parseNumber(resFin.ValorBeneficio || resFin.BaseCalculo || resFin.Bruto || 0);
-    const margemTotalPdf = Math.floor((valBen * 0.45 + 0.000001) * 100) / 100;
-    const margemEmpPdf = Math.floor((valBen * 0.35 + 0.000001) * 100) / 100;
-    const margemRmcPdf = Math.floor((valBen * 0.05 + 0.000001) * 100) / 100;
-    const margemRccPdf = Math.floor((valBen * 0.05 + 0.000001) * 100) / 100;
+    const margemTotalPdf = Math.round((valBen * 0.45 + Number.EPSILON) * 100) / 100;
+    const margemEmpPdf = Math.round((valBen * 0.35 + Number.EPSILON) * 100) / 100;
+    const margemRmcPdf = Math.round((valBen * 0.05 + Number.EPSILON) * 100) / 100;
+    const margemRccPdf = Math.round((valBen * 0.05 + Number.EPSILON) * 100) / 100;
 
     let totalEmpComp = 0;
     empList.forEach((e: any) => totalEmpComp += parseNumber(e.ValorParcela || e.Parcela || e.parcela || 0));
-    totalEmpComp = Math.floor((totalEmpComp + 0.000001) * 100) / 100;
+    totalEmpComp = Math.round((totalEmpComp + Number.EPSILON) * 100) / 100;
 
     const comprometidoRmcPdf = rmcList.length > 0 ? margemRmcPdf : 0;
     const comprometidoRccPdf = rccList.length > 0 ? margemRccPdf : 0;
-    const totalComprometidoPdf = Math.floor((totalEmpComp + comprometidoRmcPdf + comprometidoRccPdf + 0.000001) * 100) / 100;
+    const totalComprometidoPdf = Math.round((totalEmpComp + comprometidoRmcPdf + comprometidoRccPdf + Number.EPSILON) * 100) / 100;
 
     // Margem Livre para empréstimos considera apenas os 35%
-    const margemLivreVal = Math.floor((margemEmpPdf - totalEmpComp + 0.000001) * 100) / 100;
+    const margemLivreVal = Math.round((margemEmpPdf - totalEmpComp + Number.EPSILON) * 100) / 100;
     const valLiberadoVal = margemLivreVal > 0
-      ? Math.floor(((margemLivreVal / getMarginCoefficient()) + 0.000001) * 100) / 100
+      ? Math.round(((margemLivreVal / getMarginCoefficient()) + Number.EPSILON) * 100) / 100
       : 0;
 
     const margemLivrePdfStyles = margemLivreVal < 0
@@ -432,7 +432,7 @@ export default function ConsultaCPFModal({
 
       const cardsRows = allCards.map((c: any) => {
         const tipoCartao = c.Tipo || (c.TipoCartao ? c.TipoCartao : 'Cartão');
-        const margemTotalCard = Math.floor(valBen * 0.05 * 100) / 100;
+        const margemTotalCard = Math.round((valBen * 0.05 + Number.EPSILON) * 100) / 100;
         const averbadoCard = parseNumber(c.ValorParcela || c.Desconto || c.Margem || 0);
         return [
           tipoCartao,
@@ -758,10 +758,10 @@ export default function ConsultaCPFModal({
                 const cardLoansList = getCardLoans(b);
                 const cardLoansSum = cardLoansList.reduce((acc: number, item: any) => acc + parseNumber(item.ValorParcela || 0), 0);
 
-                // Função para trancar em 2 casas decimais sem perda por precisão de ponto flutuante
-                const truncateDecimals = (num: number) => {
+                // Função para arredondar em 2 casas decimais sem perda por precisão de ponto flutuante
+                const roundDecimals = (num: number) => {
                   if (!Number.isFinite(num)) return 0;
-                  return Math.floor((num + 0.000001) * 100) / 100;
+                  return Math.round((num + Number.EPSILON) * 100) / 100;
                 };
 
                 const base = isSiape ? parseNumber(resumo.ValorBeneficio || valorBeneficio || 0) : valorBeneficio;
@@ -775,27 +775,27 @@ export default function ConsultaCPFModal({
                 const percentualMargemRcc = 0.05;
                 const percentualMargemTotal = 0.45;
 
-                const margemConsignavelEmprestimo = truncateDecimals(base * percentualMargemEmprestimo);
-                const margemConsignavelRmc = truncateDecimals(base * percentualMargemRmc);
-                const margemConsignavelRcc = truncateDecimals(base * percentualMargemRcc);
-                const margemConsignavelTotal = truncateDecimals(base * percentualMargemTotal);
+                const margemConsignavelEmprestimo = roundDecimals(base * percentualMargemEmprestimo);
+                const margemConsignavelRmc = roundDecimals(base * percentualMargemRmc);
+                const margemConsignavelRcc = roundDecimals(base * percentualMargemRcc);
+                const margemConsignavelTotal = roundDecimals(base * percentualMargemTotal);
 
                 // Somar parcelas de empréstimos normais (ex: 680,99)
                 let totalComprometidoEmprestimos = 0;
                 emprestimos.forEach((e: any) => {
                   totalComprometidoEmprestimos += parseNumber(e.ValorParcela || e.Parcela || e.parcela || 0);
                 });
-                totalComprometidoEmprestimos = truncateDecimals(totalComprometidoEmprestimos);
+                totalComprometidoEmprestimos = roundDecimals(totalComprometidoEmprestimos);
 
                 // Cartões averbados em folha (valores de desconto)
                 const averbadoRmc = rmc.length > 0 ? parseNumber(rmc[0]?.ValorParcela || rmc[0]?.Desconto || rmc[0]?.Margem || rmc[0]?.ValorDesconto || 0) : 0;
                 const averbadoRcc = rcc.length > 0 ? parseNumber(rcc[0]?.ValorParcela || rcc[0]?.Desconto || rcc[0]?.Margem || rcc[0]?.ValorDesconto || 0) : 0;
 
                 // Comprometimento dos cartões na margem:
-                // Se o cliente possui cartão ativo, compromete os 5% (101,07). Se a margem estiver livre/disponível, compromete 0 para contratar novo cartão.
+                // Se o cliente possui cartão ativo, compromete os 5% (arredondado). Se a margem estiver livre/disponível, compromete 0 para contratar novo cartão.
                 const comprometidoRmc = rmc.length > 0 ? margemConsignavelRmc : 0;
                 const comprometidoRcc = rcc.length > 0 ? margemConsignavelRcc : 0;
-                const totalComprometidoCartoes = truncateDecimals(comprometidoRmc + comprometidoRcc);
+                const totalComprometidoCartoes = roundDecimals(comprometidoRmc + comprometidoRcc);
 
                 // Total Comprometido Geral = Empréstimos + Cartões averbados
                 const totalComprometidoSiape = parseNumber(resumo.DescontoTotal) > 0
@@ -803,21 +803,21 @@ export default function ConsultaCPFModal({
                   : 21963.37;
 
                 const totalComprometido = isSiape
-                  ? (totalComprometidoSiape > 0 ? totalComprometidoSiape : truncateDecimals(totalComprometidoEmprestimos + totalComprometidoCartoes))
-                  : truncateDecimals(totalComprometidoEmprestimos + totalComprometidoCartoes);
+                  ? (totalComprometidoSiape > 0 ? totalComprometidoSiape : roundDecimals(totalComprometidoEmprestimos + totalComprometidoCartoes))
+                  : roundDecimals(totalComprometidoEmprestimos + totalComprometidoCartoes);
 
                 // Margem Livre para Empréstimos (35%): Considera estritamente a margem de 35% destinada a empréstimos,
                 // deduzindo apenas os comprometimentos de empréstimos. Os outros 10% já são divididos entre os cartões (5% RMC e 5% RCC).
                 const comprometidoEmprestimosCalc = isSiape && totalComprometidoSiape > 0 ? totalComprometidoSiape : totalComprometidoEmprestimos;
-                const margemLivre = truncateDecimals(margemConsignavelEmprestimo - comprometidoEmprestimosCalc);
+                const margemLivre = roundDecimals(margemConsignavelEmprestimo - comprometidoEmprestimosCalc);
                 const valorLiberado = margemLivre > 0
-                  ? truncateDecimals(margemLivre / getMarginCoefficient())
+                  ? roundDecimals(margemLivre / getMarginCoefficient())
                   : 0;
                 const percentualComprometido = base > 0
-                  ? truncateDecimals((totalComprometido / base) * 100)
+                  ? roundDecimals((totalComprometido / base) * 100)
                   : 0;
                 const percentualMargemLivre = base > 0
-                  ? truncateDecimals((margemLivre / base) * 100)
+                  ? roundDecimals((margemLivre / base) * 100)
                   : 0;
                 const formatPercentual = (value: number) =>
                   `${Math.abs(value).toFixed(2).replace('.', ',')}%`;
