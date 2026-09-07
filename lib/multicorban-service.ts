@@ -221,6 +221,106 @@ export async function consultarCpfMulticorban(
   return data;
 }
 
+export async function consultarBeneficioMulticorban(
+  beneficioInput: string,
+  searchType: SearchType = 'inss',
+  options: { forceRefresh?: boolean } = {},
+): Promise<any> {
+  const beneficio = (beneficioInput || '').replace(/\D/g, '');
+  if (!beneficio || beneficio.length < 5) throw new Error('Número de benefício inválido');
+
+  const apiToken = (process.env.MULTICORBAN_API_TOKEN || process.env.BANCODATAHUB_API_TOKEN || '').trim();
+  if (!apiToken) {
+    const error: any = new Error('MULTICORBAN_API_TOKEN não configurado no servidor');
+    error.status = 503;
+    throw error;
+  }
+
+  const type: SearchType = searchType === 'siape' ? 'siape' : 'inss';
+  const docId = `ben_${beneficio}_${type}`;
+  const db = getAdminDb();
+  const docRef = db ? db.collection('consultas_multicorban').doc(docId) : null;
+
+  if (docRef && !options.forceRefresh) {
+    try {
+      const docSnap = await docRef.get();
+      if (docSnap.exists) {
+        const cachedData = docSnap.data();
+        if (cachedData?.createdAt) {
+          const diffDays = (Date.now() - Number(cachedData.createdAt)) / (1000 * 60 * 60 * 24);
+          if (diffDays < CACHE_DAYS && cachedData.data) return cachedData.data;
+        }
+      }
+    } catch (cacheError) {
+      console.error('[Multicorban] Falha ao ler cache benefício:', cacheError);
+    }
+  }
+
+  if (options.forceRefresh) {
+    console.log(`[Multicorban] Consulta forçada sem cache para Benefício ${beneficio}`);
+  }
+
+  const url = type === 'siape'
+    ? 'https://api.bancodatahub.com/siape'
+    : 'https://api.bancodatahub.com/beneficio';
+
+  const body = type === 'siape'
+    ? { matricula: beneficio, cpf: beneficio }
+    : { beneficio, nb: beneficio };
+
+  let response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: apiToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+
+  // Se o endpoint /beneficio falhar (404/500) no INSS, tentar fallback para /nb
+  if (!response.ok && type === 'inss') {
+    const fallbackUrl = 'https://api.bancodatahub.com/nb';
+    try {
+      const fallbackResponse = await fetch(fallbackUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: apiToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ nb: beneficio, beneficio }),
+        cache: 'no-store',
+      });
+      if (fallbackResponse.ok) {
+        response = fallbackResponse;
+      }
+    } catch (fallbackErr) {
+      console.warn('[Multicorban] Fallback /nb falhou:', fallbackErr);
+    }
+  }
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => '');
+    console.error(`[Multicorban Benefício] HTTP ${response.status}:`, details.slice(0, 500));
+    const error: any = new Error('Falha ao consultar a API da MultiCorban por benefício');
+    error.status = response.status;
+    throw error;
+  }
+
+  let data = await response.json();
+  if (type === 'siape') data = normalizeSiape(data);
+
+  if (docRef) {
+    try {
+      await docRef.set({ beneficio, type, searchMode: 'beneficio', createdAt: Date.now(), data });
+    } catch (cacheError) {
+      console.error('[Multicorban] Falha ao salvar cache benefício:', cacheError);
+    }
+  }
+
+  return data;
+}
+
 export function getBenefitArray(data: any): any[] {
   const dataArray = Array.isArray(data)
     ? data

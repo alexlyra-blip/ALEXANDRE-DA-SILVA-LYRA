@@ -397,7 +397,7 @@ export default function ConsultaCPFModal({
         `Total Consignável: ${formatCurrency(margemTotalPdf)}`,
         {
           content: `Total Comprometido: ${formatCurrency(totalComprometidoPdf)}`,
-          styles: { textColor: totalComprometidoPdf < 0 ? [220, 38, 38] : [21, 128, 61], fontStyle: 'bold' }
+          styles: { textColor: [220, 38, 38], fontStyle: 'bold' }
         }
       ],
       [
@@ -898,41 +898,73 @@ export default function ConsultaCPFModal({
                       </div>
                     </div>
 
-                    {/* Margens - resumo compacto (Divisão 35% Empréstimo, 5% RMC, 5% RCC - Total 45%) */}
-                    <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
-                        <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                          <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                          Total Consignável
-                        </p>
-                        <p className="mt-0.5 text-lg font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavelTotal)}</p>
-                        <p className="mt-0.5 truncate text-[8px] text-slate-400">
-                          Total 45% • 35% Emp: {formatCurrency(margemConsignavelEmprestimo)} • 5% RMC: {formatCurrency(margemConsignavelRmc)} • 5% RCC: {formatCurrency(margemConsignavelRcc)}
-                        </p>
+                    {/* Margens - resumo detalhado e visível (Divisão 35% Empréstimo, 5% RMC, 5% RCC - Total 45%) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-800/40 flex flex-col justify-between shadow-sm">
+                        <div>
+                          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            <ShieldCheck className="h-4 w-4 text-primary" />
+                            Total Consignável (45%)
+                          </p>
+                          <p className="mt-1 text-xl font-black text-slate-800 dark:text-white">{formatCurrency(margemConsignavelTotal)}</p>
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-slate-200/80 dark:border-slate-700/80 text-[11px] font-semibold text-slate-600 dark:text-slate-300 space-y-1">
+                          <p className="flex items-center justify-between">
+                            <span className="text-slate-500">35% Empréstimo:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{formatCurrency(margemConsignavelEmprestimo)}</span>
+                          </p>
+                          <p className="flex items-center justify-between">
+                            <span className="text-sky-600 dark:text-sky-400">5% Cartão RMC:</span>
+                            <span className="font-bold text-sky-700 dark:text-sky-300">{formatCurrency(margemConsignavelRmc)}</span>
+                          </p>
+                          <p className="flex items-center justify-between">
+                            <span className="text-amber-600 dark:text-amber-400">5% Cartão RCC:</span>
+                            <span className="font-bold text-amber-700 dark:text-amber-300">{formatCurrency(margemConsignavelRcc)}</span>
+                          </p>
+                        </div>
                       </div>
 
-                      <div className={`rounded-xl border px-3 py-2.5 ${totalComprometido < 0 ? 'border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10' : 'border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'}`}>
-                        <p className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider ${totalComprometido < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
-                          <Wallet className={`h-3.5 w-3.5 ${totalComprometido < 0 ? 'text-rose-500' : 'text-emerald-500'}`} />
-                          Total Comprometido
-                        </p>
-                        <p className={`mt-0.5 text-lg font-black ${totalComprometido < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(totalComprometido)}</p>
-                        <p className={`mt-0.5 text-[8px] font-semibold ${totalComprometido < 0 ? 'text-rose-500/80 dark:text-rose-300/80' : 'text-emerald-600/80 dark:text-emerald-300/80'}`}>
-                          {formatPercentual(percentualComprometido)} da base (Emp: {formatCurrency(totalComprometidoEmprestimos)} + Cartões: {formatCurrency(totalComprometidoCartoes)})
-                        </p>
+                      <div className="rounded-xl border border-rose-200 bg-rose-50/90 p-3.5 dark:border-rose-500/30 dark:bg-rose-500/10 flex flex-col justify-between shadow-sm">
+                        <div>
+                          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300">
+                            <Wallet className="h-4 w-4 text-rose-500" />
+                            Total Comprometido
+                          </p>
+                          <p className="mt-1 text-xl font-black text-rose-600 dark:text-rose-400">{formatCurrency(totalComprometido)}</p>
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-rose-200 dark:border-rose-500/20 text-[11px] font-semibold text-rose-700 dark:text-rose-300 space-y-1">
+                          <p className="font-bold text-rose-800 dark:text-rose-200">
+                            {formatPercentual(percentualComprometido)} da base do benefício
+                          </p>
+                          <p className="flex items-center justify-between">
+                            <span>Empréstimos:</span>
+                            <span className="font-bold">{formatCurrency(totalComprometidoEmprestimos)}</span>
+                          </p>
+                          <p className="flex items-center justify-between">
+                            <span>Cartões averbados:</span>
+                            <span className="font-bold">{formatCurrency(totalComprometidoCartoes)}</span>
+                          </p>
+                        </div>
                       </div>
 
-                      <div className={`${margemLivre < 0 ? 'border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10' : 'border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'} rounded-xl border px-3 py-2.5`}>
-                        <p className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600/80'}`}>
-                          <TrendingUp className="h-3.5 w-3.5" />
-                          Margem Livre (35%)
-                        </p>
-                        <p className={`mt-0.5 text-lg font-black ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
-                        <p className={`mt-0.5 text-[8px] font-semibold ${margemLivre < 0 ? 'text-rose-600/80 dark:text-rose-300/80' : 'text-emerald-600/80 dark:text-emerald-300/80'}`}>
-                          {margemLivre < 0
-                            ? `${formatPercentual(percentualMargemLivre)} de margem excedida`
-                            : `${formatPercentual(percentualMargemLivre)} disponível para empréstimos`}
-                        </p>
+                      <div className={`${margemLivre < 0 ? 'border-rose-200 bg-rose-50/90 dark:border-rose-500/30 dark:bg-rose-500/10' : 'border-emerald-200 bg-emerald-50/90 dark:border-emerald-500/30 dark:bg-emerald-500/10'} rounded-xl border p-3.5 flex flex-col justify-between shadow-sm`}>
+                        <div>
+                          <p className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+                            <TrendingUp className="h-4 w-4" />
+                            Margem Livre (35%)
+                          </p>
+                          <p className={`mt-1 text-xl font-black ${margemLivre < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(margemLivre)}</p>
+                        </div>
+                        <div className={`mt-2.5 pt-2 border-t ${margemLivre < 0 ? 'border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-300' : 'border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300'} text-[11px] font-semibold space-y-1`}>
+                          <p className="font-bold">
+                            {formatPercentual(percentualMargemLivre)} {margemLivre < 0 ? 'de margem excedida' : 'disponível na base'}
+                          </p>
+                          <p className="text-[10px] leading-tight opacity-90">
+                            {margemLivre < 0
+                              ? 'Excesso de comprometimento em empréstimos'
+                              : 'Margem disponível exclusiva para contratação'}
+                          </p>
+                        </div>
                       </div>
 
                       <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-primary to-primary-dark px-3 py-2.5 text-white shadow-md">
@@ -1164,7 +1196,7 @@ export default function ConsultaCPFModal({
                                 <th className="px-3 py-2.5 font-bold">Início</th>
                                 <th className="px-3 py-2.5 font-bold">Final</th>
                                 <th className="px-3 py-2.5 font-bold">Parcela</th>
-                                <th className="px-3 py-2.5 font-bold">Prazo Rest./Total</th>
+                                <th className="px-3 py-2.5 font-bold">Prazo Restante</th>
                                 <th className="px-3 py-2.5 font-bold">Taxa</th>
                                 <th className="px-3 py-2.5 font-bold">Valor do Contrato</th>
                                 <th className="px-3 py-2.5 font-bold">Saldo Atual</th>
@@ -1223,7 +1255,9 @@ export default function ConsultaCPFModal({
                                           <Landmark className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary" />
                                           <div>
                                             <p className="font-bold text-slate-800 dark:text-slate-200">{bancoExibicao}</p>
-                                            <p className="mt-0.5 text-[9px] font-semibold text-slate-400">Contrato: {emp.Contrato || 'N/A'}</p>
+                                            <p className="mt-0.5 text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
+                                              Contrato: <span className="text-slate-900 dark:text-white font-black text-xs">{emp.Contrato || 'N/A'}</span>
+                                            </p>
                                             {dataAverbacao !== 'N/A' && (
                                               <p className="mt-0.5 text-[9px] font-semibold text-slate-400">Averb.: {dataAverbacao}</p>
                                             )}

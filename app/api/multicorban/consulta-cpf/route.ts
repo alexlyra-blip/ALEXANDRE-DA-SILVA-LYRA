@@ -4,6 +4,7 @@ import { parseConsultaResponse } from '@/lib/multicorban';
 import {
   cleanCpf,
   consultarCpfMulticorban,
+  consultarBeneficioMulticorban,
   isValidCpf,
 } from '@/lib/multicorban-service';
 
@@ -159,8 +160,6 @@ function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): 
         loan?.saldo,
       );
       // Valor do contrato deve vir dos campos de valor original da MultiCorban.
-      // Nao usamos SaldoDevedor como fallback, pois isso fazia o valor do contrato
-      // repetir incorretamente o saldo atual na Consulta CPF.
       const valorContrato = getFirstPositiveNumber(
         rawLoan?.ValorContrato,
         rawLoan?.valor_contrato,
@@ -180,9 +179,6 @@ function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): 
       let inicioCalculado = false;
       let finalCalculado = false;
 
-      // A MultiCorban normalmente devolve InicioDesconto e FinalDesconto.
-      // Se algum contrato vier sem esses campos, mas houver DataAverbacao,
-      // a primeira parcela é considerada no mês seguinte à averbação.
       if (!inicioDesconto && dataAverbacao) {
         const averbacao = parseApiDate(dataAverbacao);
         if (averbacao) {
@@ -191,8 +187,6 @@ function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): 
         }
       }
 
-      // A última parcela corresponde ao mês inicial + (prazo total - 1) meses.
-      // Ex.: averbação 18/11/2022, prazo 84 -> início 12/2022 e fim 11/2029.
       if (!finalDesconto && inicioDesconto && prazoTotal > 0) {
         const inicio = parseApiDate(inicioDesconto);
         if (inicio) {
@@ -201,7 +195,6 @@ function preserveMulticorbanContractDates(rawData: any, normalizedData: any[]): 
         }
       }
 
-      // Caso raro: API traz apenas FinalDesconto. Recupera o início pelo prazo.
       if (!inicioDesconto && finalDesconto && prazoTotal > 0) {
         const final = parseApiDate(finalDesconto);
         if (final) {
@@ -247,7 +240,7 @@ export async function GET() {
 
     snapshot.forEach(doc => {
       const data = doc.data();
-      if (!data?.cpf) return;
+      if (!data?.cpf && !data?.beneficio) return;
 
       const createdAt = Number(data.createdAt || 0);
       const diffMs = Math.max(0, now - createdAt);
@@ -257,6 +250,8 @@ export async function GET() {
 
       let nome = data.nome || 'Cliente';
       let beneficio = data.beneficio || '';
+      let cpf = data.cpf || '';
+      let searchMode: 'cpf' | 'beneficio' = data.searchMode || (doc.id.startsWith('ben_') ? 'beneficio' : 'cpf');
 
       if (data.data) {
         const normalized = parseConsultaResponse(
@@ -266,13 +261,15 @@ export async function GET() {
         if (normalized.length > 0 && normalized[0]?.Beneficiario) {
           nome = normalized[0].Beneficiario.Nome || nome;
           beneficio = normalized[0].Beneficiario.Beneficio || beneficio;
+          if (!cpf) cpf = normalized[0].Beneficiario.CPF || '';
         }
       }
 
       history.push({
         id: doc.id,
-        cpf: data.cpf,
-        formattedCpf: data.formattedCpf || data.cpf,
+        cpf,
+        formattedCpf: data.formattedCpf || cpf,
+        searchMode,
         type: data.type || 'inss',
         nome,
         beneficio,
@@ -304,29 +301,47 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const cpf = cleanCpf(body?.cpf || '');
+    const searchMode: 'cpf' | 'beneficio' = body?.searchMode === 'beneficio' ? 'beneficio' : 'cpf';
     const type = body?.type === 'siape' ? 'siape' : 'inss';
     const forceRefresh = body?.forceRefresh === true;
 
-    if (!cpf) {
-      return NextResponse.json(
-        { error: 'CPF é obrigatório' },
-        { status: 400 },
+    let rawData: any;
+    const rawCpf = cleanCpf(body?.cpf || '');
+    const rawBeneficio = String(body?.beneficio || '').replace(/\D/g, '');
+
+    // Consulta por Benefício
+    if (searchMode === 'beneficio' || (!rawCpf && rawBeneficio) || (rawCpf.length === 10 && !isValidCpf(rawCpf))) {
+      const ben = rawBeneficio || rawCpf;
+      if (!ben || ben.length < 5) {
+        return NextResponse.json(
+          { error: 'Número de benefício é obrigatório e deve ter 10 dígitos' },
+          { status: 400 },
+        );
+      }
+      rawData = await consultarBeneficioMulticorban(ben, type, { forceRefresh });
+    } else {
+      // Consulta por CPF
+      if (!rawCpf) {
+        return NextResponse.json(
+          { error: 'CPF é obrigatório' },
+          { status: 400 },
+        );
+      }
+
+      if (!isValidCpf(rawCpf)) {
+        return NextResponse.json(
+          { error: 'CPF inválido' },
+          { status: 400 },
+        );
+      }
+
+      rawData = await consultarCpfMulticorban(
+        rawCpf,
+        type,
+        { forceRefresh },
       );
     }
 
-    if (!isValidCpf(cpf)) {
-      return NextResponse.json(
-        { error: 'CPF inválido' },
-        { status: 400 },
-      );
-    }
-
-    const rawData = await consultarCpfMulticorban(
-      cpf,
-      type,
-      { forceRefresh },
-    );
     let normalizedData = parseConsultaResponse(
       rawData,
       type === 'siape',
@@ -355,21 +370,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // Mantém os metadados usados pelo histórico atual da main.
+    // Salva metadados do histórico
     try {
       const db = getAdminDb();
       if (db) {
         const firstBenefit = normalizedData[0]?.Beneficiario;
+        const resolvedCpf = firstBenefit?.CPF ? cleanCpf(firstBenefit.CPF) : rawCpf;
+        const resolvedBeneficio = firstBenefit?.Beneficio ? String(firstBenefit.Beneficio).replace(/\D/g, '') : rawBeneficio;
+        const docKey = searchMode === 'beneficio'
+          ? `ben_${rawBeneficio || resolvedBeneficio}_${type}`
+          : `${resolvedCpf || rawCpf}_${type}`;
+
         await db
           .collection('consultas_multicorban')
-          .doc(`${cpf}_${type}`)
+          .doc(docKey)
           .set(
             {
-              cpf,
-              formattedCpf: body?.cpf || cpf,
+              cpf: resolvedCpf || rawCpf,
+              formattedCpf: firstBenefit?.CPF || body?.cpf || rawCpf,
+              beneficio: resolvedBeneficio || firstBenefit?.Beneficio || '',
+              searchMode,
               type,
               nome: firstBenefit?.Nome || 'Cliente',
-              beneficio: firstBenefit?.Beneficio || '',
               updatedAtIso: new Date().toISOString(),
             },
             { merge: true },
@@ -384,7 +406,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(normalizedData);
   } catch (error: any) {
-    console.error('MultiCorban CPF Route Error:', error);
+    console.error('MultiCorban CPF/Beneficio Route Error:', error);
     const status = Number(error?.status) || 500;
     return NextResponse.json(
       { error: error?.message || 'Erro interno no servidor' },

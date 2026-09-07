@@ -22,6 +22,8 @@ import {
   ShieldCheck,
   Trash2,
   ChevronDown,
+  FileText,
+  Hash,
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
@@ -33,6 +35,7 @@ interface CpfHistoryItem {
   id: string;
   cpf: string;
   formattedCpf: string;
+  searchMode?: 'cpf' | 'beneficio';
   type: 'inss' | 'siape';
   nome: string;
   beneficio: string;
@@ -46,7 +49,8 @@ export default function ConsultaCPFPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const { user } = useAuth();
-  const [cpfCliente, setCpfCliente] = useState('');
+  const [searchMode, setSearchMode] = useState<'cpf' | 'beneficio'>('cpf');
+  const [inputValue, setInputValue] = useState('');
   const [tipoConsulta, setTipoConsulta] = useState<'inss' | 'siape'>('inss');
   const [isConsulting, setIsConsulting] = useState(false);
   const [consultaData, setConsultaData] = useState<any>(null);
@@ -295,10 +299,19 @@ export default function ConsultaCPFPage() {
     if (!value) return '';
     return String(value)
       .replace(/\D/g, '')
+      .slice(0, 11)
       .replace(/(\d{3})(\d)/, '$1.$2')
       .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
-      .replace(/(-\d{2})\d+?$/, '$1');
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2');
+  };
+
+  const formatBeneficio = (value: any) => {
+    if (!value) return '';
+    const digits = String(value).replace(/\D/g, '').slice(0, 10);
+    if (digits.length <= 9) {
+      return digits.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+    }
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{1})/, '$1.$2.$3-$4');
   };
 
   const validateCPF = (cpf: any) => {
@@ -322,27 +335,71 @@ export default function ConsultaCPFPage() {
     return true;
   };
 
-  const isCpfValid = validateCPF(cpfCliente);
+  const cleanDigits = inputValue.replace(/\D/g, '');
+  const isCpfValid = validateCPF(cleanDigits);
+  const isBeneficioValid = cleanDigits.length >= 9 && cleanDigits.length <= 10;
+  const isQueryValid = searchMode === 'cpf' ? isCpfValid : isBeneficioValid;
 
-  const handleConsultaCPF = async (e?: React.FormEvent, forceRefresh = false, targetCpf?: string, targetType?: 'inss' | 'siape') => {
+  const handleInputChange = (rawVal: string) => {
+    const digits = rawVal.replace(/\D/g, '').slice(0, 11);
+
+    // Seletor automático inteligente:
+    // Se atinge 11 dígitos, muda automaticamente para modo CPF
+    if (digits.length === 11) {
+      setSearchMode('cpf');
+      setInputValue(formatCPF(digits));
+    } else if (searchMode === 'beneficio') {
+      setInputValue(formatBeneficio(digits));
+    } else {
+      setInputValue(formatCPF(digits));
+    }
+  };
+
+  const handleModeSwitch = (newMode: 'cpf' | 'beneficio') => {
+    setSearchMode(newMode);
+    const digits = inputValue.replace(/\D/g, '');
+    if (newMode === 'cpf') {
+      setInputValue(formatCPF(digits.slice(0, 11)));
+    } else {
+      setInputValue(formatBeneficio(digits.slice(0, 10)));
+    }
+  };
+
+  const handleConsulta = async (
+    e?: React.FormEvent,
+    forceRefresh = false,
+    targetValue?: string,
+    targetType?: 'inss' | 'siape',
+    targetMode?: 'cpf' | 'beneficio',
+  ) => {
     if (e) e.preventDefault();
-    const queryCpf = targetCpf || cpfCliente;
+    const currentMode = targetMode || searchMode;
+    const rawQuery = targetValue || inputValue;
     const queryType = targetType || tipoConsulta;
+    const digits = rawQuery.replace(/\D/g, '');
 
-    const cleanCpf = queryCpf.replace(/\D/g, '');
-    if (cleanCpf.length !== 11) {
-      showToast("Digite um CPF válido primeiro", "error");
+    if (currentMode === 'cpf' && digits.length !== 11) {
+      showToast("Digite um CPF válido de 11 dígitos", "error");
+      return;
+    }
+
+    if (currentMode === 'beneficio' && (digits.length < 9 || digits.length > 10)) {
+      showToast("Digite um número de benefício válido (10 dígitos)", "error");
       return;
     }
 
     setIsConsulting(true);
     try {
+      const payloadBody = currentMode === 'beneficio'
+        ? { beneficio: digits, searchMode: 'beneficio', type: queryType, forceRefresh }
+        : { cpf: digits, searchMode: 'cpf', type: queryType, forceRefresh };
+
       const response = await fetch('/api/multicorban/consulta-cpf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ cpf: cleanCpf, type: queryType, forceRefresh })
+        body: JSON.stringify(payloadBody)
       });
 
       const data = await response.json();
@@ -355,10 +412,12 @@ export default function ConsultaCPFPage() {
       setIsConsultaModalOpen(true);
       fetchHistory();
 
-      // INSS: consulta automaticamente o Refin C6 nos contratos 626.
-      // Se a credencial não estiver configurada ou o C6 não liberar valor,
-      // a consulta normal permanece disponível sem bloquear a tela.
-      if (queryType === 'inss') {
+      // INSS: consulta automaticamente o Refin C6 nos contratos 626 quando houver CPF
+      const clientCpf = currentMode === 'cpf'
+        ? digits
+        : (data[0]?.Beneficiario?.CPF ? String(data[0].Beneficiario.CPF).replace(/\D/g, '') : '');
+
+      if (queryType === 'inss' && clientCpf && clientCpf.length === 11) {
         setC6AutoRefin({
           loading: true,
           configured: c6CredentialStatus.configured,
@@ -376,7 +435,7 @@ export default function ConsultaCPFPage() {
                 ...authHeaders,
               },
               body: JSON.stringify({
-                cpf: cleanCpf,
+                cpf: clientCpf,
               }),
             },
           );
@@ -428,8 +487,8 @@ export default function ConsultaCPFPage() {
       }
 
     } catch (error: any) {
-      console.error("Consulta CPF Error:", error);
-      showToast(error.message || "Erro ao consultar CPF. Verifique sua conexão.", "error");
+      console.error("Consulta CPF/Benefício Error:", error);
+      showToast(error.message || "Erro ao consultar. Verifique sua conexão.", "error");
     } finally {
       setIsConsulting(false);
     }
@@ -438,7 +497,10 @@ export default function ConsultaCPFPage() {
   const handleToggleContract = (contractData: any, action: 'add' | 'remove') => {
     setIsConsultaModalOpen(false);
     showToast("Redirecionando para simulação...", "success");
-    router.push(`/simulacao/nova?cpf=${cpfCliente}&type=${tipoConsulta}`);
+    const redirectCpf = consultaData?.[0]?.Beneficiario?.CPF
+      ? String(consultaData[0].Beneficiario.CPF).replace(/\D/g, '')
+      : (searchMode === 'cpf' ? cleanDigits : '');
+    router.push(`/simulacao/nova?cpf=${redirectCpf}&type=${tipoConsulta}`);
   };
 
   return (
@@ -455,7 +517,7 @@ export default function ConsultaCPFPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-slate-800 dark:text-white">Consulta de Cliente</h1>
-                <p className="text-slate-500 text-sm">Pesquise os dados do benefício direto na base nacional.</p>
+                <p className="text-slate-500 text-sm">Pesquise os dados por CPF ou Número de Benefício direto na base nacional.</p>
               </div>
             </div>
 
@@ -596,21 +658,66 @@ export default function ConsultaCPFPage() {
               )}
             </div>
 
-            <form onSubmit={(e) => handleConsultaCPF(e, false)} className="space-y-6">
+            <form onSubmit={(e) => handleConsulta(e, false)} className="space-y-6">
+              {/* Seletor de Modo: CPF ou Benefício */}
               <div className="flex flex-col gap-2 max-w-md">
-                <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">CPF do Cliente</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">
+                    Consultar Por
+                  </label>
+                  <span className="text-[10px] font-bold text-primary dark:text-sky-400">
+                    {searchMode === 'cpf' ? '11 Dígitos (CPF)' : '10 Dígitos (Benefício)'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('cpf')}
+                    className={`py-2.5 px-3 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-2 ${
+                      searchMode === 'cpf'
+                        ? 'bg-white dark:bg-slate-900 text-primary shadow-sm border border-slate-200/60 dark:border-slate-700'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>CPF (11 dígitos)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('beneficio')}
+                    className={`py-2.5 px-3 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-2 ${
+                      searchMode === 'beneficio'
+                        ? 'bg-white dark:bg-slate-900 text-primary shadow-sm border border-slate-200/60 dark:border-slate-700'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>Benefício (10 dígitos)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Input com detecção automática */}
+              <div className="flex flex-col gap-2 max-w-md">
+                <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">
+                  {searchMode === 'cpf' ? 'CPF do Cliente' : 'Número do Benefício (NB)'}
+                </label>
                 <div className="relative">
-                  <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
+                  {searchMode === 'cpf' ? (
+                    <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
+                  ) : (
+                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
+                  )}
                   <input
-                    className={`w-full rounded-xl border ${cpfCliente && !isCpfValid ? 'border-rose-300 bg-rose-50/10' : 'border-primary/20'} bg-white dark:bg-slate-950 h-14 pl-12 pr-12 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm`}
+                    className={`w-full rounded-xl border ${inputValue && !isQueryValid ? 'border-rose-300 bg-rose-50/10' : 'border-primary/20'} bg-white dark:bg-slate-950 h-14 pl-12 pr-12 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm`}
                     type="text"
-                    value={cpfCliente}
-                    onChange={(e) => setCpfCliente(formatCPF(e.target.value))}
-                    placeholder="000.000.000-00"
+                    value={inputValue}
+                    onChange={(e) => handleInputChange(e.target.value)}
+                    placeholder={searchMode === 'cpf' ? '000.000.000-00 (ou digite 10 dígitos p/ benefício)' : '000.000.000-0 (10 dígitos)'}
                   />
-                  {cpfCliente && (
+                  {inputValue && (
                     <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                      {isCpfValid ? (
+                      {isQueryValid ? (
                         <Check className="text-emerald-500 w-5 h-5 anim-bounce-in" />
                       ) : (
                         <AlertCircle className="text-rose-500 w-5 h-5 anim-shake" />
@@ -621,7 +728,7 @@ export default function ConsultaCPFPage() {
               </div>
 
               <div className="flex flex-col gap-2 max-w-md">
-                <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">Tipo de Consulta</label>
+                <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">Tipo de Convênio</label>
                 <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-1 border border-slate-200 dark:border-slate-700">
                   <button
                     type="button"
@@ -643,7 +750,7 @@ export default function ConsultaCPFPage() {
               <div className="pt-4 max-w-md">
                 <button
                   type="submit"
-                  disabled={isConsulting || !isCpfValid}
+                  disabled={isConsulting || !isQueryValid}
                   className="w-full h-14 bg-gradient-to-r from-primary to-primary-dark hover:from-primary-light hover:to-primary text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isConsulting ? (
@@ -651,7 +758,11 @@ export default function ConsultaCPFPage() {
                   ) : (
                     <Search className="w-6 h-6" />
                   )}
-                  {isConsulting ? 'Consultando...' : 'Consultar Base Nacional'}
+                  {isConsulting
+                    ? 'Consultando...'
+                    : searchMode === 'cpf'
+                      ? 'Consultar por CPF'
+                      : 'Consultar por Benefício'}
                 </button>
                 <p className="text-xs text-slate-500 text-center mt-3 flex items-center justify-center gap-1">
                   <Crown className="w-3 h-3 text-amber-500" /> Cache de 30 Dias Ativo (Economia de Créditos)
@@ -669,7 +780,7 @@ export default function ConsultaCPFPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-                    Histórico de CPFs Consultados
+                    Histórico de Consultas
                   </h2>
                   <p className="text-xs text-slate-500 font-medium">
                     Consultas anteriores salvas por até 30 dias (não consomem novos créditos ao consultar novamente).
@@ -690,75 +801,89 @@ export default function ConsultaCPFPage() {
               </div>
             ) : history.length === 0 ? (
               <div className="text-center py-10 text-slate-400 text-xs font-medium">
-                Nenhum CPF consultado recentemente no banco.
+                Nenhuma consulta recente salva no banco.
               </div>
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[500px] overflow-y-auto custom-scrollbar">
-                {history.map(item => (
-                  <div key={item.id} className="py-3.5 px-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-950/40 rounded-xl transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs">
-                        <User className="w-4 h-4 text-primary" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight">
-                            {item.nome}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
-                            item.type === 'siape' ? 'bg-sky-500/10 text-sky-600 border border-sky-500/20' : 'bg-primary/10 text-primary border border-primary/20'
-                          }`}>
-                            {item.type.toUpperCase()}
-                          </span>
-                          {!item.isExpired ? (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                              Cache {item.cacheDaysLeft}d
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20">
-                              Expirado
-                            </span>
-                          )}
+                {history.map(item => {
+                  const isBeneficioItem = item.searchMode === 'beneficio' || (!item.cpf && !!item.beneficio);
+                  const displayQuery = isBeneficioItem ? (item.beneficio ? formatBeneficio(item.beneficio) : item.beneficio) : item.formattedCpf;
+
+                  return (
+                    <div key={item.id} className="py-3.5 px-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-950/40 rounded-xl transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs">
+                          <User className="w-4 h-4 text-primary" />
                         </div>
-                        <p className="text-[11px] font-mono text-slate-500 mt-0.5">
-                          CPF: <span className="font-bold text-slate-700 dark:text-slate-300">{item.formattedCpf}</span>
-                          {item.beneficio ? ` • Ben: ${item.beneficio}` : ''}
-                          {` • Consultado há ${item.diffDays} dia(s)`}
-                        </p>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight">
+                              {item.nome}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
+                              isBeneficioItem ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20' : 'bg-primary/10 text-primary border border-primary/20'
+                            }`}>
+                              {isBeneficioItem ? 'BENEFÍCIO' : 'CPF'}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
+                              item.type === 'siape' ? 'bg-sky-500/10 text-sky-600 border border-sky-500/20' : 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
+                            }`}>
+                              {item.type.toUpperCase()}
+                            </span>
+                            {!item.isExpired ? (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                Cache {item.cacheDaysLeft}d
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                                Expirado
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] font-mono text-slate-500 mt-0.5">
+                            {item.formattedCpf ? <>CPF: <span className="font-bold text-slate-700 dark:text-slate-300">{item.formattedCpf}</span></> : ''}
+                            {item.beneficio ? `${item.formattedCpf ? ' • ' : ''}Ben: ${formatBeneficio(item.beneficio)}` : ''}
+                            {` • Consultado há ${item.diffDays} dia(s)`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <button
+                          onClick={() => {
+                            const mode = isBeneficioItem ? 'beneficio' : 'cpf';
+                            setSearchMode(mode);
+                            setInputValue(isBeneficioItem ? formatBeneficio(item.beneficio) : item.formattedCpf);
+                            setTipoConsulta(item.type);
+                            handleConsulta(undefined, false, isBeneficioItem ? item.beneficio : item.formattedCpf, item.type, mode);
+                          }}
+                          disabled={isConsulting}
+                          className="px-3 py-1.5 bg-primary text-white hover:bg-primary/90 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                          title="Ver Dados sem gastar créditos"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Ver Dados</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            const mode = isBeneficioItem ? 'beneficio' : 'cpf';
+                            setSearchMode(mode);
+                            setInputValue(isBeneficioItem ? formatBeneficio(item.beneficio) : item.formattedCpf);
+                            setTipoConsulta(item.type);
+                            handleConsulta(undefined, true, isBeneficioItem ? item.beneficio : item.formattedCpf, item.type, mode);
+                          }}
+                          disabled={isConsulting}
+                          className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 border border-slate-200 dark:border-slate-700"
+                          title="Forçar Nova Consulta na API"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span className="hidden md:inline">Reconsultar API</span>
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                      <button
-                        onClick={() => {
-                          setCpfCliente(item.formattedCpf);
-                          setTipoConsulta(item.type);
-                          handleConsultaCPF(undefined, false, item.formattedCpf, item.type);
-                        }}
-                        disabled={isConsulting}
-                        className="px-3 py-1.5 bg-primary text-white hover:bg-primary/90 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
-                        title="Ver Dados sem gastar créditos"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Ver Dados</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setCpfCliente(item.formattedCpf);
-                          setTipoConsulta(item.type);
-                          handleConsultaCPF(undefined, true, item.formattedCpf, item.type);
-                        }}
-                        disabled={isConsulting}
-                        className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 border border-slate-200 dark:border-slate-700"
-                        title="Forçar Nova Consulta na API"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span className="hidden md:inline">Reconsultar API</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -777,3 +902,4 @@ export default function ConsultaCPFPage() {
     </div>
   );
 }
+
