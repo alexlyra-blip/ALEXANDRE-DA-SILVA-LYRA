@@ -23,7 +23,6 @@ import {
   Trash2,
   ChevronDown,
   FileText,
-  Hash,
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
@@ -661,14 +660,9 @@ export default function ConsultaCPFPage() {
             <form onSubmit={(e) => handleConsulta(e, false)} className="space-y-6">
               {/* Seletor de Modo: CPF ou Benefício */}
               <div className="flex flex-col gap-2 max-w-md">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">
-                    Consultar Por
-                  </label>
-                  <span className="text-[10px] font-bold text-primary dark:text-sky-400">
-                    {searchMode === 'cpf' ? '11 Dígitos (CPF)' : '10 Dígitos (Benefício)'}
-                  </span>
-                </div>
+                <label className="text-sm font-semibold text-slate-600 dark:text-white uppercase tracking-wider text-[10px]">
+                  Consultar Por
+                </label>
                 <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
                   <button
                     type="button"
@@ -680,7 +674,7 @@ export default function ConsultaCPFPage() {
                     }`}
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>CPF (11 dígitos)</span>
+                    <span>CPF</span>
                   </button>
                   <button
                     type="button"
@@ -692,7 +686,7 @@ export default function ConsultaCPFPage() {
                     }`}
                   >
                     <FileText className="w-4 h-4" />
-                    <span>Benefício (10 dígitos)</span>
+                    <span>Benefício</span>
                   </button>
                 </div>
               </div>
@@ -706,14 +700,14 @@ export default function ConsultaCPFPage() {
                   {searchMode === 'cpf' ? (
                     <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
                   ) : (
-                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
+                    <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-5 h-5" />
                   )}
                   <input
                     className={`w-full rounded-xl border ${inputValue && !isQueryValid ? 'border-rose-300 bg-rose-50/10' : 'border-primary/20'} bg-white dark:bg-slate-950 h-14 pl-12 pr-12 text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm`}
                     type="text"
                     value={inputValue}
                     onChange={(e) => handleInputChange(e.target.value)}
-                    placeholder={searchMode === 'cpf' ? '000.000.000-00 (ou digite 10 dígitos p/ benefício)' : '000.000.000-0 (10 dígitos)'}
+                    placeholder={searchMode === 'cpf' ? '000.000.000-00' : '000.000.000-0'}
                   />
                   {inputValue && (
                     <div className="absolute right-4 top-1/2 -translate-y-1/2">
