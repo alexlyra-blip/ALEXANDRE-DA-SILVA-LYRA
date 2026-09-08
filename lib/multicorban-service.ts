@@ -247,14 +247,30 @@ export async function consultarBeneficioMulticorban(
   const db = getAdminDb();
   const docRef = db ? db.collection('consultas_multicorban').doc(docId) : null;
 
-  if (docRef && !options.forceRefresh) {
+  if (db && !options.forceRefresh) {
     try {
-      const docSnap = await docRef.get();
-      if (docSnap.exists) {
-        const cachedData = docSnap.data();
-        if (cachedData?.createdAt) {
-          const diffDays = (Date.now() - Number(cachedData.createdAt)) / (1000 * 60 * 60 * 24);
-          if (diffDays < CACHE_DAYS && cachedData.data) return cachedData.data;
+      if (docRef) {
+        const docSnap = await docRef.get();
+        if (docSnap.exists) {
+          const cachedData = docSnap.data();
+          if (cachedData?.createdAt) {
+            const diffDays = (Date.now() - Number(cachedData.createdAt)) / (1000 * 60 * 60 * 24);
+            if (diffDays < CACHE_DAYS && cachedData.data) return cachedData.data;
+          }
+        }
+      }
+
+      // Procura em consultas_multicorban se já existe algum documento salvo com este benefício
+      const querySnap = await db.collection('consultas_multicorban')
+        .where('beneficio', '==', beneficio)
+        .limit(1)
+        .get();
+
+      if (!querySnap.empty) {
+        const cachedDoc = querySnap.docs[0].data();
+        if (cachedDoc?.createdAt) {
+          const diffDays = (Date.now() - Number(cachedDoc.createdAt)) / (1000 * 60 * 60 * 24);
+          if (diffDays < CACHE_DAYS && cachedDoc.data) return cachedDoc.data;
         }
       }
     } catch (cacheError) {
