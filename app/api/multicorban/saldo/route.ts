@@ -19,8 +19,14 @@ export async function GET() {
     if (!response.ok) {
       const errorData = await response.text();
       console.error('MultiCorban Saldo API Error:', errorData);
+      const isMaintenance = response.status === 503 || errorData.includes('oscilações temporárias');
       return NextResponse.json(
-        { error: 'Falha ao consultar saldo da MultiCorban' },
+        { 
+          error: isMaintenance 
+            ? 'API MultiCorban em manutenção (503)' 
+            : 'Falha ao consultar saldo',
+          details: errorData 
+        },
         { status: response.status }
       );
     }

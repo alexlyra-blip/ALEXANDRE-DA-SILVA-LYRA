@@ -792,17 +792,21 @@ export default function Dashboard() {
                     <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
                     <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
                   </div>
-                ) : saldoMulticorban && !saldoMulticorban.raw ? (
+                ) : saldoMulticorban && !saldoMulticorban.raw && !saldoMulticorban.error ? (
                   <>
-                    <p className="text-xl font-black text-foreground">{saldoMulticorban.offline || 0}</p>
+                    <p className="text-xl font-black text-foreground">{saldoMulticorban.offline ?? 0}</p>
                     <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">
-                      Online: {saldoMulticorban.online || 0} | IN100: {saldoMulticorban.in100 || 0}
+                      Online: {saldoMulticorban.online ?? 0} | IN100: {saldoMulticorban.in100 ?? 0}
                     </p>
                   </>
                 ) : (
                   <>
-                    <p className="text-sm font-bold text-rose-500">{saldoMulticorban?.message || 'Licença expirada ou inválida'}</p>
-                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">Verifique seu Token</p>
+                    <p className="text-sm font-bold text-rose-500">
+                      {saldoMulticorban?.error || saldoMulticorban?.message || 'Licença expirada ou indisponível'}
+                    </p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">
+                      {saldoMulticorban?.error ? 'Status da Conexão' : 'Verifique seu Token'}
+                    </p>
                   </>
                 )}
               </div>

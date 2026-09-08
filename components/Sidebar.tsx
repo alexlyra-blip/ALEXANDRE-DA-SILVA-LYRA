@@ -62,6 +62,7 @@ export default function Sidebar() {
   // Admin and Promotora menus
   if (profile?.role === 'admin' || profile?.role === 'promotora') {
     menuItems.push({ name: 'Regras e Bancos', icon: Landmark, path: '/regras/banco' });
+    menuItems.push({ name: 'Coeficientes Diários', icon: Calendar, path: '/admin/coeficientes' });
     menuItems.push({ name: 'Usuários', icon: Users, path: '/admin/usuarios' });
     menuItems.push({ name: 'Logs WhatsApp', icon: Clock, path: '/admin/whatsapp-logs' });
   }
