@@ -202,7 +202,13 @@ export async function consultarCpfMulticorban(
   if (!response.ok) {
     const details = await response.text().catch(() => '');
     console.error(`[Multicorban] HTTP ${response.status}:`, details.slice(0, 500));
-    const error: any = new Error('Falha ao consultar a API da MultiCorban');
+    let errorMsg = 'Falha ao consultar a API da MultiCorban';
+    if (response.status === 503 || details.includes('oscilações temporárias') || details.includes('atualização em andamento')) {
+      errorMsg = 'A API da MultiCorban/BancoDataHub está temporariamente instável ou em manutenção no momento (HTTP 503). Tente novamente em instantes.';
+    } else if (details && details.length < 250 && !details.includes('<html')) {
+      errorMsg = details;
+    }
+    const error: any = new Error(errorMsg);
     error.status = response.status;
     throw error;
   }
@@ -281,9 +287,12 @@ export async function consultarBeneficioMulticorban(
   if (!response.ok) {
     const details = await response.text().catch(() => '');
     console.error(`[Multicorban Benefício] HTTP ${response.status}:`, details.slice(0, 500));
-    const errorMsg = details && details.length < 300
-      ? details
-      : 'Falha ao consultar a API da MultiCorban por benefício';
+    let errorMsg = 'Falha ao consultar a API da MultiCorban por benefício';
+    if (response.status === 503 || details.includes('oscilações temporárias') || details.includes('atualização em andamento')) {
+      errorMsg = 'A API da MultiCorban/BancoDataHub está temporariamente instável ou em manutenção no momento (HTTP 503). Tente novamente em instantes.';
+    } else if (details && details.length < 250 && !details.includes('<html')) {
+      errorMsg = details;
+    }
     const error: any = new Error(errorMsg);
     error.status = response.status;
     throw error;
