@@ -343,8 +343,12 @@ export default function ConsultaCPFPage() {
     const digits = rawVal.replace(/\D/g, '').slice(0, 11);
 
     // Seletor automático inteligente:
-    // Se atinge 11 dígitos, muda automaticamente para modo CPF
-    if (digits.length === 11) {
+    // 10 dígitos -> seleciona automaticamente BENEFÍCIO
+    // 11 dígitos -> seleciona automaticamente CPF
+    if (digits.length === 10) {
+      setSearchMode('beneficio');
+      setInputValue(formatBeneficio(digits));
+    } else if (digits.length === 11) {
       setSearchMode('cpf');
       setInputValue(formatCPF(digits));
     } else if (searchMode === 'beneficio') {

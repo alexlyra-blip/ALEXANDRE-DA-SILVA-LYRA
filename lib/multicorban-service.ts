@@ -262,11 +262,11 @@ export async function consultarBeneficioMulticorban(
 
   const url = type === 'siape'
     ? 'https://api.bancodatahub.com/siape'
-    : 'https://api.bancodatahub.com/beneficio';
+    : 'https://api.bancodatahub.com/offline';
 
   const body = type === 'siape'
     ? { matricula: beneficio, cpf: beneficio }
-    : { beneficio, nb: beneficio };
+    : { beneficio: isNaN(Number(beneficio)) ? beneficio : Number(beneficio) };
 
   let response = await fetch(url, {
     method: 'POST',
@@ -278,31 +278,13 @@ export async function consultarBeneficioMulticorban(
     cache: 'no-store',
   });
 
-  // Se o endpoint /beneficio falhar (404/500) no INSS, tentar fallback para /nb
-  if (!response.ok && type === 'inss') {
-    const fallbackUrl = 'https://api.bancodatahub.com/nb';
-    try {
-      const fallbackResponse = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: apiToken,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ nb: beneficio, beneficio }),
-        cache: 'no-store',
-      });
-      if (fallbackResponse.ok) {
-        response = fallbackResponse;
-      }
-    } catch (fallbackErr) {
-      console.warn('[Multicorban] Fallback /nb falhou:', fallbackErr);
-    }
-  }
-
   if (!response.ok) {
     const details = await response.text().catch(() => '');
     console.error(`[Multicorban Benefício] HTTP ${response.status}:`, details.slice(0, 500));
-    const error: any = new Error('Falha ao consultar a API da MultiCorban por benefício');
+    const errorMsg = details && details.length < 300
+      ? details
+      : 'Falha ao consultar a API da MultiCorban por benefício';
+    const error: any = new Error(errorMsg);
     error.status = response.status;
     throw error;
   }
