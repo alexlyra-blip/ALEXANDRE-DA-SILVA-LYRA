@@ -5,6 +5,7 @@ import {
 import { consultarCpfMulticorban } from '@/lib/multicorban-service';
 import {
   isValidCpfPortabilidadeMultipla,
+  normalizeBancoDestinoPortabilidadeMultipla,
   normalizeCpfPortabilidadeMultipla,
 } from './api';
 import { normalizePortabilidadeMultiplaConsulta } from './normalizer';
@@ -18,8 +19,10 @@ import type {
 import {
   PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
   PORTABILIDADE_MULTIPLA_MAX_CONTRATOS,
+  maxContratosPortabilidadeMultipla,
   classificarContratoPortabilidadeMultipla,
   normalizarBancoPortabilidadeMultipla,
+  type PortabilidadeMultiplaBancoDestino,
   type PortabilidadeMultiplaBloqueio,
 } from './rules';
 import {
@@ -29,6 +32,7 @@ import {
 } from './consolidated-simulation';
 
 export interface PortabilidadeMultiplaValidarOrigensInput {
+  banco_destino?: PortabilidadeMultiplaBancoDestino | string;
   cpf: string;
   beneficio: string;
   contrato_ids: string[];
@@ -48,6 +52,8 @@ export interface PortabilidadeMultiplaElegibilidadeContrato {
 }
 
 export interface PortabilidadeMultiplaElegibilidadeResponse {
+  banco_destino: PortabilidadeMultiplaBancoDestino;
+  banco_configurado: boolean;
   beneficio: string;
   facta_configurada: boolean;
   contratos: PortabilidadeMultiplaElegibilidadeContrato[];
@@ -60,6 +66,8 @@ export interface PortabilidadeMultiplaValidarOrigensResponse {
    */
   elegivel: boolean;
 
+  banco_destino: PortabilidadeMultiplaBancoDestino;
+  banco_configurado: boolean;
   facta_configurada: boolean;
   beneficio: string;
   quantidade_contratos: number;
@@ -106,17 +114,30 @@ function normalizeBenefitKey(value: unknown): string {
   return digits || raw.toUpperCase();
 }
 
-function isFactaBankRule(bank: any): boolean {
-  const value = [
+function isTargetBankRule(
+  bank: any,
+  bancoDestino: PortabilidadeMultiplaBancoDestino,
+): boolean {
+  const values = [
     bank?.name,
     bank?.nome,
     bank?.bankName,
     bank?.id,
-  ]
-    .map(item => String(item ?? '').toUpperCase())
-    .join(' ');
+  ].map(item => String(item ?? '').trim().toUpperCase());
 
-  return value.includes('FACTA');
+  if (bancoDestino === 'DAYCOVAL') {
+    return values.some(value => (
+      value.includes('DAYCOVAL')
+      || value === '707'
+      || value.startsWith('707 ')
+    ));
+  }
+
+  return values.some(value => value.includes('FACTA'));
+}
+
+function isFactaBankRule(bank: any): boolean {
+  return isTargetBankRule(bank, 'FACTA');
 }
 
 function deduplicateBanks(banks: any[]): any[] {
@@ -266,21 +287,27 @@ function bankRuleMatchesContract(
     && ruleNormalized === contractNormalized;
 }
 
-function factaOriginRules(context: any): any[] {
-  return context.banks.filter(isFactaBankRule);
+function targetOriginRules(
+  context: any,
+  bancoDestino: PortabilidadeMultiplaBancoDestino,
+): any[] {
+  return context.banks.filter(
+    (bank: any) => isTargetBankRule(bank, bancoDestino),
+  );
 }
 
 function requiredPaidInstallmentsForOrigin(
   contract: any,
   context: any,
+  bancoDestino: PortabilidadeMultiplaBancoDestino,
 ): number {
   const requirements: number[] = [];
 
-  for (const facta of factaOriginRules(context)) {
+  for (const targetBank of targetOriginRules(context, bancoDestino)) {
     let required = 0;
 
-    const specificRule = Array.isArray(facta?.specificInstallmentRules)
-      ? facta.specificInstallmentRules.find(
+    const specificRule = Array.isArray(targetBank?.specificInstallmentRules)
+      ? targetBank.specificInstallmentRules.find(
           (rule: any) => bankRuleMatchesContract(rule?.bank, contract),
         )
       : null;
@@ -314,8 +341,8 @@ function requiredPaidInstallmentsForOrigin(
       required,
       Math.trunc(
         Number(
-          facta?.minPaidInstallments
-          ?? facta?.min_paid_installments
+          targetBank?.minPaidInstallments
+          ?? targetBank?.min_paid_installments
           ?? 0,
         ) || 0,
       ),
@@ -330,7 +357,14 @@ function requiredPaidInstallmentsForOrigin(
 function avaliarRegraBasicaOrigem(
   contract: any,
   context: any,
+  bancoDestino: PortabilidadeMultiplaBancoDestino,
 ): { elegivel: boolean; motivo: string; parcelas_minimas: number } {
+  const required = requiredPaidInstallmentsForOrigin(
+    contract,
+    context,
+    bancoDestino,
+  );
+
   const nonPortable = (context.nonPortableBanks || []).find(
     (bank: string) => bankRuleMatchesContract(bank, contract),
   );
@@ -339,14 +373,14 @@ function avaliarRegraBasicaOrigem(
     return {
       elegivel: false,
       motivo: 'Banco de origem marcado como não portável nas regras atuais.',
-      parcelas_minimas: requiredPaidInstallmentsForOrigin(contract, context),
+      parcelas_minimas: required,
     };
   }
 
-  const factaBanks = factaOriginRules(context);
-  const nonAccepted = factaBanks.some((facta: any) =>
-    Array.isArray(facta?.nonAcceptedBanks)
-    && facta.nonAcceptedBanks.some(
+  const targetBanks = targetOriginRules(context, bancoDestino);
+  const nonAccepted = targetBanks.some((targetBank: any) =>
+    Array.isArray(targetBank?.nonAcceptedBanks)
+    && targetBank.nonAcceptedBanks.some(
       (bank: string) => bankRuleMatchesContract(bank, contract),
     ),
   );
@@ -354,12 +388,26 @@ function avaliarRegraBasicaOrigem(
   if (nonAccepted) {
     return {
       elegivel: false,
-      motivo: 'Banco de origem não aceito para portabilidade pela FACTA.',
-      parcelas_minimas: requiredPaidInstallmentsForOrigin(contract, context),
+      motivo: `Banco de origem não aceito para portabilidade pelo ${bancoDestino}.`,
+      parcelas_minimas: required,
     };
   }
 
-  const required = requiredPaidInstallmentsForOrigin(contract, context);
+  const sameTargetBank = targetBanks.some(
+    (targetBank: any) => bankRuleMatchesContract(
+      targetBank?.name || targetBank?.nome || targetBank?.id,
+      contract,
+    ),
+  );
+
+  if (sameTargetBank) {
+    return {
+      elegivel: false,
+      motivo: `Contrato já pertence ao ${bancoDestino} e não pode ser portado para o mesmo banco.`,
+      parcelas_minimas: required,
+    };
+  }
+
   const paid = Math.max(0, Math.trunc(Number(contract.parcelas_pagas) || 0));
 
   if (required > 0 && paid < required) {
@@ -373,17 +421,24 @@ function avaliarRegraBasicaOrigem(
   return {
     elegivel: true,
     motivo: required > 0
-      ? `Elegível para seleção. Parcelas pagas: ${paid}/${required}.`
-      : 'Elegível para seleção pelas regras do banco de origem.',
+      ? `Elegível para seleção no ${bancoDestino}. Parcelas pagas: ${paid}/${required}.`
+      : `Elegível para seleção pelas regras de origem do ${bancoDestino}.`,
     parcelas_minimas: required,
   };
 }
 
 export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
-  input: { cpf: string; beneficio: string },
+  input: {
+    cpf: string;
+    beneficio: string;
+    banco_destino?: PortabilidadeMultiplaBancoDestino | string;
+  },
   authUser: { uid: string; email?: string },
 ): Promise<PortabilidadeMultiplaElegibilidadeResponse> {
   const cpf = normalizeCpfPortabilidadeMultipla(input.cpf);
+  const bancoDestino = normalizeBancoDestinoPortabilidadeMultipla(
+    input.banco_destino,
+  );
 
   if (!isValidCpfPortabilidadeMultipla(cpf)) {
     throw new PortabilidadeMultiplaOrigemError('CPF inválido.', 400);
@@ -412,6 +467,9 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
   }
 
   const motorContext = await loadMotorContext(profile);
+  const targetConfigured = motorContext.banks.some(
+    (bank: any) => isTargetBankRule(bank, bancoDestino),
+  );
   const factaConfigured = motorContext.banks.some(isFactaBankRule);
 
   const contratos: PortabilidadeMultiplaElegibilidadeContrato[] = [];
@@ -419,7 +477,7 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
   for (const contract of benefit.contratos) {
     const classified = classificarContratoPortabilidadeMultipla(contract);
     const paid = Math.max(0, Math.trunc(contract.parcelas_pagas || 0));
-    const required = requiredPaidInstallmentsForOrigin(contract, motorContext);
+    const required = requiredPaidInstallmentsForOrigin(contract, motorContext, bancoDestino);
 
     if (classified.grupo === 'SEM_BANCO') {
       contratos.push({
@@ -437,7 +495,7 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
       continue;
     }
 
-    if (!factaConfigured) {
+    if (!targetConfigured) {
       contratos.push({
         contrato_id: contract.id,
         contrato: contract.contrato,
@@ -446,7 +504,7 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
         beneficio: contract.beneficio,
         grupo: classified.grupo,
         selecionavel: false,
-        motivo: 'Nenhuma regra/tabela FACTA ativa foi encontrada.',
+        motivo: `Nenhuma regra/tabela ${bancoDestino} ativa foi encontrada.`,
         parcelas_pagas: paid,
         parcelas_minimas: required,
       });
@@ -456,6 +514,7 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
     const basicEligibility = avaliarRegraBasicaOrigem(
       contract,
       motorContext,
+      bancoDestino,
     );
 
     contratos.push({
@@ -473,6 +532,8 @@ export async function avaliarElegibilidadeBeneficioPortabilidadeMultiplaServer(
   }
 
   return {
+    banco_destino: bancoDestino,
+    banco_configurado: targetConfigured,
     beneficio: benefit.numero,
     facta_configurada: factaConfigured,
     contratos,
@@ -494,6 +555,10 @@ export async function validarOrigensPortabilidadeMultiplaServer(
   authUser: { uid: string; email?: string },
 ): Promise<PortabilidadeMultiplaValidarOrigensResponse> {
   const cpf = normalizeCpfPortabilidadeMultipla(input.cpf);
+  const bancoDestino = normalizeBancoDestinoPortabilidadeMultipla(
+    input.banco_destino,
+  );
+  const maxContratos = maxContratosPortabilidadeMultipla(bancoDestino);
 
   if (!isValidCpfPortabilidadeMultipla(cpf)) {
     throw new PortabilidadeMultiplaOrigemError('CPF inválido.', 400);
@@ -530,9 +595,9 @@ export async function validarOrigensPortabilidadeMultiplaServer(
     );
   }
 
-  if (ids.length > PORTABILIDADE_MULTIPLA_MAX_CONTRATOS) {
+  if (ids.length > maxContratos) {
     throw new PortabilidadeMultiplaOrigemError(
-      `A Portabilidade Múltipla permite no máximo ${PORTABILIDADE_MULTIPLA_MAX_CONTRATOS} contratos.`,
+      `A Portabilidade Múltipla ${bancoDestino} permite no máximo ${maxContratos} contratos.`,
       400,
     );
   }
@@ -570,11 +635,15 @@ export async function validarOrigensPortabilidadeMultiplaServer(
   const preValidation = validarPreviamentePortabilidadeMultipla(
     selectedContracts,
     benefit.margens.margem_livre,
+    {},
+    bancoDestino,
   );
 
   if (!preValidation.elegivel_previo) {
     return {
       elegivel: false,
+      banco_destino: bancoDestino,
+      banco_configurado: false,
       facta_configurada: false,
       beneficio: benefit.numero,
       quantidade_contratos: selectedContracts.length,
@@ -594,17 +663,24 @@ export async function validarOrigensPortabilidadeMultiplaServer(
   }
 
   const motorContext = await loadMotorContext(profile);
+  const targetConfigured = motorContext.banks.some(
+    (bank: any) => isTargetBankRule(bank, bancoDestino),
+  );
   const factaConfigured = motorContext.banks.some(isFactaBankRule);
 
-  if (!factaConfigured) {
+  if (!targetConfigured) {
     const block: PortabilidadeMultiplaBloqueio = {
-      codigo: 'SEM_TABELA_FACTA',
+      codigo: bancoDestino === 'DAYCOVAL'
+        ? 'SEM_TABELA_DAYCOVAL'
+        : 'SEM_TABELA_FACTA',
       mensagem:
-        'Nenhuma regra/tabela FACTA ativa foi encontrada no Motor para o convênio INSS.',
+        `Nenhuma regra/tabela ${bancoDestino} ativa foi encontrada no Motor para o convênio INSS.`,
     };
 
     return {
       elegivel: false,
+      banco_destino: bancoDestino,
+      banco_configurado: false,
       facta_configurada: false,
       beneficio: benefit.numero,
       quantidade_contratos: selectedContracts.length,
@@ -630,6 +706,7 @@ export async function validarOrigensPortabilidadeMultiplaServer(
     const basicEligibility = avaliarRegraBasicaOrigem(
       contract,
       motorContext,
+      bancoDestino,
     );
 
     resultadosContratos.push({
@@ -657,7 +734,9 @@ export async function validarOrigensPortabilidadeMultiplaServer(
   if (bloqueiosContratos.length) {
     return {
       elegivel: false,
-      facta_configurada: true,
+      banco_destino: bancoDestino,
+      banco_configurado: true,
+      facta_configurada: factaConfigured,
       beneficio: benefit.numero,
       quantidade_contratos: selectedContracts.length,
       pre_validacao: preValidation,
@@ -687,6 +766,7 @@ export async function validarOrigensPortabilidadeMultiplaServer(
     selectedContracts,
     preValidation,
     intersecao,
+    bancoDestino,
     motorContext,
     calculateOffers,
   );
@@ -694,7 +774,9 @@ export async function validarOrigensPortabilidadeMultiplaServer(
   return {
     // As origens passaram nas regras prévias de banco/parcelas pagas.
     elegivel: true,
-    facta_configurada: true,
+    banco_destino: bancoDestino,
+    banco_configurado: true,
+    facta_configurada: factaConfigured,
     beneficio: benefit.numero,
     quantidade_contratos: selectedContracts.length,
     pre_validacao: preValidation,

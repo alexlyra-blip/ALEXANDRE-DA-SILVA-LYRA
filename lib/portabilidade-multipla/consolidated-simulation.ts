@@ -7,9 +7,11 @@ import type {
   PortabilidadeMultiplaPreValidacaoCompleta,
 } from './financial';
 import {
+  configFinanceiraPortabilidadeMultiplaPorDestino,
   validarOfertaRefinPortabilidadeMultipla,
 } from './financial';
 import type {
+  PortabilidadeMultiplaBancoDestino,
   PortabilidadeMultiplaBloqueio,
 } from './rules';
 import type {
@@ -82,15 +84,26 @@ function toNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function isFactaBankRule(bank: any): boolean {
-  return [
+function isTargetBankRule(
+  bank: any,
+  bancoDestino: PortabilidadeMultiplaBancoDestino,
+): boolean {
+  const values = [
     bank?.name,
     bank?.nome,
     bank?.bankName,
     bank?.id,
-  ]
-    .map(normalizeText)
-    .some(value => value.includes('FACTA'));
+  ].map(normalizeText);
+
+  if (bancoDestino === 'DAYCOVAL') {
+    return values.some(value => (
+      value.includes('DAYCOVAL')
+      || value === '707'
+      || value.startsWith('707 ')
+    ));
+  }
+
+  return values.some(value => value.includes('FACTA'));
 }
 
 function minPaidInstallments(
@@ -120,6 +133,7 @@ export function buildMotorParamsConsolidadosPortabilidadeMultipla(
   benefit: PortabilidadeMultiplaBeneficio,
   contracts: PortabilidadeMultiplaContrato[],
   preValidation: PortabilidadeMultiplaPreValidacaoCompleta,
+  bancoDestino: PortabilidadeMultiplaBancoDestino = 'FACTA',
 ): any {
   const idade = Math.max(0, Math.trunc(consulta.cliente.idade || 0));
 
@@ -128,14 +142,21 @@ export function buildMotorParamsConsolidadosPortabilidadeMultipla(
     convenio: 'INSS',
     codigoBeneficio: benefit.especie,
     dataConcessao: benefit.data_concessao,
-    bancoAtual: 'PORTABILIDADE MULTIPLA',
-    valorParcela: preValidation.parcela_refin,
+    bancoAtual: `PORTABILIDADE MULTIPLA ${bancoDestino}`,
+    // FACTA recebe a parcela já ajustada pela regra própria da Múltipla.
+    // DAYCOVAL recebe a soma bruta e a margem negativa separadamente para
+    // que o Motor aplique o mesmo tratamento usado na simulação comum.
+    valorParcela: bancoDestino === 'DAYCOVAL'
+      ? preValidation.soma_parcelas
+      : preValidation.parcela_refin,
     saldoDevedor: preValidation.saldo_total,
     prazoTotal: 0,
     parcelasRestantes: 0,
     parcelasPagas: minPaidInstallments(contracts),
     taxaJurosMensal: 0,
-    negativeCardValue: 0,
+    negativeCardValue: bancoDestino === 'DAYCOVAL'
+      ? preValidation.margem_negativa
+      : 0,
     isCliente60Mais: idade >= 60,
     isAnalfabeto: benefit.analfabeto,
     estado: consulta.cliente.uf,
@@ -146,12 +167,13 @@ export function buildMotorParamsConsolidadosPortabilidadeMultipla(
 function mapOffer(
   offer: any,
   preValidation: PortabilidadeMultiplaPreValidacaoCompleta,
+  bancoDestino: PortabilidadeMultiplaBancoDestino,
 ): PortabilidadeMultiplaOfertaConsolidada {
   return {
     id: String(offer?.id || ''),
-    banco: String(offer?.name || offer?.banco || 'FACTA'),
+    banco: String(offer?.name || offer?.banco || bancoDestino),
     logo: String(offer?.logo || ''),
-    tabela: String(offer?.tabela || 'FACTA'),
+    tabela: String(offer?.tabela || bancoDestino),
     prazo: Math.max(0, Math.trunc(toNumber(offer?.prazoRefinPort))),
     taxa_portabilidade: toNumber(
       offer?.novaTaxaPortabilidade ?? offer?.novaTaxaPortTarget,
@@ -205,18 +227,19 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
   contracts: PortabilidadeMultiplaContrato[],
   preValidation: PortabilidadeMultiplaPreValidacaoCompleta,
   _intersecao: PortabilidadeMultiplaIntersecaoFacta,
+  bancoDestino: PortabilidadeMultiplaBancoDestino,
   context: PortabilidadeMultiplaMotorContext,
   calculateOffers: PortabilidadeMultiplaCalculateOffers,
 ): PortabilidadeMultiplaSimulacaoConsolidada {
   const bloqueios: PortabilidadeMultiplaBloqueio[] = [];
 
-  const factaBanks = context.banks.filter(isFactaBankRule);
+  const targetBanks = context.banks.filter(bank => isTargetBankRule(bank, bancoDestino));
 
-  if (!factaBanks.length) {
+  if (!targetBanks.length) {
     bloqueios.push({
-      codigo: 'SEM_TABELA_FACTA',
+      codigo: bancoDestino === 'DAYCOVAL' ? 'SEM_TABELA_DAYCOVAL' : 'SEM_TABELA_FACTA',
       mensagem:
-        'Nenhuma regra/tabela FACTA ativa foi localizada para executar a operação unificada.',
+        `Nenhuma regra/tabela ${bancoDestino} ativa foi localizada para executar a operação unificada.`,
     });
 
     return {
@@ -234,12 +257,13 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
     benefit,
     contracts,
     preValidation,
+    bancoDestino,
   );
 
   // ÚNICA chamada financeira consolidada ao Motor.
   const offers = calculateOffers(
     params,
-    factaBanks,
+    targetBanks,
     context.generalRules,
     context.promotoraPriorities,
     context.promotoraInstallments,
@@ -252,11 +276,14 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
 
   for (const offer of offers || []) {
     const valorLiberado = toNumber(offer?.valorTroco);
-    const offerValidation = validarOfertaRefinPortabilidadeMultipla({
-      saldo_total: preValidation.saldo_total,
-      valor_liberado: valorLiberado,
-      parcela_refin: preValidation.parcela_refin,
-    });
+    const offerValidation = validarOfertaRefinPortabilidadeMultipla(
+      {
+        saldo_total: preValidation.saldo_total,
+        valor_liberado: valorLiberado,
+        parcela_refin: preValidation.parcela_refin,
+      },
+      configFinanceiraPortabilidadeMultiplaPorDestino(bancoDestino),
+    );
 
     if (!offerValidation.elegivel) {
       for (const block of offerValidation.bloqueios) {
@@ -267,7 +294,7 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
       continue;
     }
 
-    finalOffers.push(mapOffer(offer, preValidation));
+    finalOffers.push(mapOffer(offer, preValidation, bancoDestino));
   }
 
   // IMPORTANTE: preserva exatamente a ordem das tabelas devolvida pelo Motor.
@@ -276,9 +303,9 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
 
   if (!finalOffers.length && bloqueios.length === 0) {
     bloqueios.push({
-      codigo: 'SEM_TABELA_FACTA',
+      codigo: bancoDestino === 'DAYCOVAL' ? 'SEM_TABELA_DAYCOVAL' : 'SEM_TABELA_FACTA',
       mensagem:
-        'O Motor FACTA não retornou oferta válida para a parcela e o saldo consolidados desta seleção.',
+        `O Motor ${bancoDestino} não retornou oferta válida para a parcela e o saldo consolidados desta seleção.`,
     });
   }
 

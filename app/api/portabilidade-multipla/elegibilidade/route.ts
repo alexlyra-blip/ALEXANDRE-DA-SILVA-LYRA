@@ -23,6 +23,7 @@ export async function POST(request: Request) {
       {
         cpf: body?.cpf,
         beneficio: body?.beneficio,
+        banco_destino: body?.banco_destino,
       },
       authUser,
     );
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        error: candidate?.message || 'Erro ao avaliar elegibilidade FACTA.',
+        error: candidate?.message || 'Erro ao avaliar elegibilidade da Portabilidade Múltipla.',
       },
       { status: status >= 400 && status <= 599 ? status : 500 },
     );

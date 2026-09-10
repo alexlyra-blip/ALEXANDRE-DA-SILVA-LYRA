@@ -3,6 +3,8 @@ import {
   PORTABILIDADE_MULTIPLA_GRUPOS,
   PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
   PORTABILIDADE_MULTIPLA_MAX_CONTRATOS,
+  PORTABILIDADE_MULTIPLA_MAX_CONTRATOS_DAYCOVAL,
+  type PortabilidadeMultiplaBancoDestino,
   type PortabilidadeMultiplaBloqueio,
 } from './rules';
 import {
@@ -15,6 +17,21 @@ import {
 
 export const PORTABILIDADE_MULTIPLA_API_CONFIG = {
   banco_destino: 'FACTA',
+  bancos_destino: {
+    FACTA: {
+      nome: 'FACTA',
+      min_contratos: PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
+      max_contratos: PORTABILIDADE_MULTIPLA_MAX_CONTRATOS,
+      usa_grupos: true,
+    },
+    DAYCOVAL: {
+      nome: 'DAYCOVAL',
+      codigo: '707',
+      min_contratos: PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
+      max_contratos: PORTABILIDADE_MULTIPLA_MAX_CONTRATOS_DAYCOVAL,
+      usa_grupos: false,
+    },
+  },
   convenio: 'INSS',
   min_contratos: PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
   max_contratos: PORTABILIDADE_MULTIPLA_MAX_CONTRATOS,
@@ -33,6 +50,7 @@ export const PORTABILIDADE_MULTIPLA_API_CONFIG = {
 } as const;
 
 export interface PortabilidadeMultiplaValidarPayload {
+  banco_destino: PortabilidadeMultiplaBancoDestino;
   cpf: string;
   beneficio?: string;
   margem_livre: number;
@@ -114,6 +132,13 @@ function nullablePositiveMoney(value: unknown): number | null {
 function nonNegativeInteger(value: unknown): number {
   const parsed = Math.trunc(optionalFiniteNumber(value));
   return parsed > 0 ? parsed : 0;
+}
+
+export function normalizeBancoDestinoPortabilidadeMultipla(
+  value: unknown,
+): PortabilidadeMultiplaBancoDestino {
+  const normalized = text(value).toUpperCase();
+  return normalized === 'DAYCOVAL' ? 'DAYCOVAL' : 'FACTA';
 }
 
 export function normalizeCpfPortabilidadeMultipla(value: unknown): string {
@@ -200,6 +225,9 @@ export function parsePortabilidadeMultiplaValidarPayload(
   }
 
   return {
+    banco_destino: normalizeBancoDestinoPortabilidadeMultipla(
+      payload.banco_destino,
+    ),
     cpf: normalizeCpfPortabilidadeMultipla(payload.cpf),
     beneficio: text(payload.beneficio) || undefined,
     margem_livre: finiteNumber(payload.margem_livre, 'margem_livre'),
@@ -235,6 +263,8 @@ export function executarPreValidacaoApiPortabilidadeMultipla(
   const result = validarPreviamentePortabilidadeMultipla(
     payload.contratos,
     payload.margem_livre,
+    {},
+    payload.banco_destino,
   );
 
   const bloqueios = [...result.bloqueios];
