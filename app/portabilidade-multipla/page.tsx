@@ -27,8 +27,14 @@ import {
   type PortabilidadeMultiplaContrato,
 } from '@/lib/portabilidade-multipla';
 
+type BancoDestinoMultipla = 'FACTA' | 'DAYCOVAL';
+
 type ConfigMultipla = {
   banco_destino: string;
+  bancos_destino?: {
+    FACTA?: { nome: string; min_contratos: number; max_contratos: number; usa_grupos: boolean };
+    DAYCOVAL?: { nome: string; codigo?: string; min_contratos: number; max_contratos: number; usa_grupos: boolean };
+  };
   convenio: string;
   min_contratos: number;
   max_contratos: number;
@@ -146,6 +152,8 @@ type SimulacaoConsolidada = {
 
 type ValidacaoOrigens = {
   elegivel: boolean;
+  banco_destino?: BancoDestinoMultipla;
+  banco_configurado?: boolean;
   facta_configurada: boolean;
   beneficio: string;
   quantidade_contratos: number;
@@ -211,12 +219,13 @@ function benefitLabel(benefit: PortabilidadeMultiplaBeneficio): string {
 function contractSelectionReason(
   selected: PortabilidadeMultiplaContrato[],
   contract: PortabilidadeMultiplaContrato,
+  bancoDestino: BancoDestinoMultipla,
   eligibility?: ElegibilidadeContrato,
 ): { allowed: boolean; reason: string } {
   if (eligibility && !eligibility.selecionavel) {
     return {
       allowed: false,
-      reason: eligibility.motivo || 'Contrato bloqueado pelas regras FACTA.',
+      reason: eligibility.motivo || `Contrato bloqueado pelas regras ${bancoDestino}.`,
     };
   }
 
@@ -237,6 +246,7 @@ function contractSelectionReason(
   const validation = validarInclusaoContratoPortabilidadeMultipla(
     selected,
     contract,
+    bancoDestino,
   );
 
   return {
@@ -265,6 +275,7 @@ export default function PortabilidadeMultiplaPage() {
 
   const [cpf, setCpf] = useState('');
   const [config, setConfig] = useState<ConfigMultipla | null>(null);
+  const [bancoDestino, setBancoDestino] = useState<BancoDestinoMultipla>('FACTA');
   const [consulta, setConsulta] = useState<PortabilidadeMultiplaConsulta | null>(null);
   const [selectedBenefitNumber, setSelectedBenefitNumber] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -355,8 +366,20 @@ export default function PortabilidadeMultiplaPage() {
     );
   }, [selectedBenefit, selectedIds]);
 
+  const maxContracts = bancoDestino === 'DAYCOVAL'
+    ? config?.bancos_destino?.DAYCOVAL?.max_contratos || 3
+    : config?.bancos_destino?.FACTA?.max_contratos || config?.max_contratos || 6;
+
+  const minContracts = bancoDestino === 'DAYCOVAL'
+    ? config?.bancos_destino?.DAYCOVAL?.min_contratos || 2
+    : config?.bancos_destino?.FACTA?.min_contratos || config?.min_contratos || 2;
+
   const orderedContracts = useMemo(() => {
     if (!selectedBenefit) return [];
+
+    if (bancoDestino === 'DAYCOVAL') {
+      return [...selectedBenefit.contratos];
+    }
 
     const order: Record<string, number> = { A: 0, B: 1, C: 2, SEM_BANCO: 3 };
 
@@ -365,7 +388,7 @@ export default function PortabilidadeMultiplaPage() {
       const groupB = classificarContratoPortabilidadeMultipla(b).grupo;
       return (order[groupA] ?? 9) - (order[groupB] ?? 9);
     });
-  }, [selectedBenefit]);
+  }, [selectedBenefit, bancoDestino]);
 
   const availableOfferTerms = useMemo(() => {
     const offers = originValidation?.simulacao_consolidada.ofertas || [];
@@ -412,6 +435,7 @@ export default function PortabilidadeMultiplaPage() {
   }, [originValidation, selectedOfferTerm]);
 
   const selectedGroup = useMemo(() => {
+    if (bancoDestino === 'DAYCOVAL') return 'Sem grupos';
     if (!selectedContracts.length) return null;
 
     const group = classificarContratoPortabilidadeMultipla(
@@ -433,7 +457,7 @@ export default function PortabilidadeMultiplaPage() {
       return bank ? `Grupo C • ${bank}` : 'Grupo C';
     }
     return null;
-  }, [selectedContracts]);
+  }, [selectedContracts, bancoDestino]);
 
   const resetOperation = () => {
     setConsulta(null);
@@ -456,6 +480,7 @@ export default function PortabilidadeMultiplaPage() {
   const loadBenefitEligibility = async (
     benefitNumber: string,
     cpfValue: string,
+    target: BancoDestinoMultipla = bancoDestino,
   ) => {
     setLoadingEligibility(true);
     setElegibilidadeContratos(null);
@@ -467,6 +492,7 @@ export default function PortabilidadeMultiplaPage() {
           method: 'POST',
           headers: await getAuthHeaders(true),
           body: JSON.stringify({
+            banco_destino: target,
             cpf: onlyDigits(cpfValue),
             beneficio: benefitNumber,
           }),
@@ -486,10 +512,25 @@ export default function PortabilidadeMultiplaPage() {
       setError(
         eligibilityError instanceof Error
           ? eligibilityError.message
-          : 'Falha ao validar elegibilidade FACTA dos contratos.',
+          : `Falha ao validar elegibilidade ${target} dos contratos.`,
       );
     } finally {
       setLoadingEligibility(false);
+    }
+  };
+
+  const handleBancoDestinoChange = (target: BancoDestinoMultipla) => {
+    if (target === bancoDestino) return;
+
+    setBancoDestino(target);
+    setSelectedIds([]);
+    setValidation(null);
+    setOriginValidation(null);
+    setElegibilidadeContratos(null);
+    setError('');
+
+    if (selectedBenefitNumber) {
+      void loadBenefitEligibility(selectedBenefitNumber, cpf, target);
     }
   };
 
@@ -577,6 +618,7 @@ export default function PortabilidadeMultiplaPage() {
     const check = contractSelectionReason(
       selectedContracts,
       contract,
+      bancoDestino,
       eligibilidadeContratos?.[contract.id],
     );
 
@@ -596,8 +638,6 @@ export default function PortabilidadeMultiplaPage() {
       setError('Selecione um benefício/NB.');
       return;
     }
-
-    const minContracts = config?.min_contratos || 2;
 
     if (selectedContracts.length < minContracts) {
       setError(
@@ -619,6 +659,7 @@ export default function PortabilidadeMultiplaPage() {
           method: 'POST',
           headers: await getAuthHeaders(true),
           body: JSON.stringify({
+            banco_destino: bancoDestino,
             cpf: onlyDigits(cpf),
             beneficio: selectedBenefit.numero,
             margem_livre: selectedBenefit.margens.margem_livre,
@@ -643,6 +684,7 @@ export default function PortabilidadeMultiplaPage() {
           method: 'POST',
           headers: await getAuthHeaders(true),
           body: JSON.stringify({
+            banco_destino: bancoDestino,
             cpf: onlyDigits(cpf),
             beneficio: selectedBenefit.numero,
             contrato_ids: selectedContracts.map(
@@ -686,10 +728,10 @@ export default function PortabilidadeMultiplaPage() {
                   <div>
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-primary dark:bg-primary/10">
-                        FACTA • INSS
+                        {bancoDestino} • INSS
                       </span>
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:bg-white/5 dark:text-slate-300">
-                        Até {config?.max_contratos || 6} contratos
+                        Até {maxContracts} contratos
                       </span>
                     </div>
 
@@ -698,7 +740,7 @@ export default function PortabilidadeMultiplaPage() {
                     </h1>
 
                     <p className="mt-1 max-w-3xl text-sm font-medium text-slate-500 dark:text-slate-400">
-                      Consulte o CPF, escolha um único benefício/NB, selecione os contratos compatíveis e simule a portabilidade + refinanciamento unificados na FACTA.
+                      Consulte o CPF, escolha um único benefício/NB, selecione os contratos compatíveis e simule a portabilidade + refinanciamento unificados no banco selecionado.
                     </p>
                   </div>
                 </div>
@@ -706,7 +748,7 @@ export default function PortabilidadeMultiplaPage() {
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-white/5">
                     <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                      Grupo
+                      Regra
                     </p>
                     <p className="mt-1 text-lg font-black text-slate-800 dark:text-white">
                       {selectedGroup || '—'}
@@ -717,7 +759,7 @@ export default function PortabilidadeMultiplaPage() {
                       Selecionados
                     </p>
                     <p className="mt-1 text-lg font-black text-slate-800 dark:text-white">
-                      {selectedContracts.length}/{config?.max_contratos || 6}
+                      {selectedContracts.length}/{maxContracts}
                     </p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-white/5">
@@ -725,11 +767,38 @@ export default function PortabilidadeMultiplaPage() {
                       Refin mín.
                     </p>
                     <p className="mt-1 text-sm font-black text-slate-800 dark:text-white">
-                      {formatMoney(config?.parcela_minima_refin || 50)}
+                      {bancoDestino === 'DAYCOVAL' ? 'Motor' : formatMoney(config?.parcela_minima_refin || 50)}
                     </p>
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className="px-6 pt-5 md:px-8">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Banco destino da Portabilidade Múltipla
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(['FACTA', 'DAYCOVAL'] as BancoDestinoMultipla[]).map(target => (
+                  <button
+                    key={target}
+                    type="button"
+                    onClick={() => handleBancoDestinoChange(target)}
+                    className={`rounded-xl border px-5 py-2.5 text-xs font-black transition ${
+                      bancoDestino === target
+                        ? 'border-primary bg-primary text-white shadow-md shadow-primary/15'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-primary/40 hover:text-primary dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300'
+                    }`}
+                  >
+                    {target}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                {bancoDestino === 'DAYCOVAL'
+                  ? 'Daycoval: até 3 contratos do mesmo NB, sem grupos. Bancos de origem podem ser combinados quando elegíveis pelas regras Daycoval.'
+                  : 'FACTA: mantém as regras atuais de Grupo A, Grupo B e Grupo C.'}
+              </p>
             </div>
 
             <div className="px-6 py-5 md:px-8">
@@ -835,7 +904,7 @@ export default function PortabilidadeMultiplaPage() {
                     />
                     <InfoTile
                       label="Operação"
-                      value="FACTA"
+                      value={bancoDestino}
                     />
                   </div>
                 </div>
@@ -926,7 +995,9 @@ export default function PortabilidadeMultiplaPage() {
                         </h2>
                       </div>
                       <p className="mt-1 text-xs font-semibold text-slate-400">
-                        Selecione de 2 a 6 contratos do mesmo NB. Grupo A somente com A, Grupo B somente com B e Grupo C somente com contratos do mesmo banco.
+                        {bancoDestino === 'DAYCOVAL'
+                          ? 'Selecione de 2 a 3 contratos do mesmo NB. Não há grupos; bancos de origem diferentes podem ser combinados quando passam nas regras Daycoval.'
+                          : 'Selecione de 2 a 6 contratos do mesmo NB. Grupo A somente com A, Grupo B somente com B e Grupo C somente com contratos do mesmo banco.'}
                       </p>
                     </div>
 
@@ -934,7 +1005,7 @@ export default function PortabilidadeMultiplaPage() {
                       <Badge text={`NB ${selectedBenefit.numero || '—'}`} />
                       <Badge text={`Margem ${formatMoney(selectedBenefit.margens.margem_livre)}`} />
                       <Badge
-                        text={`${selectedContracts.length}/${config?.max_contratos || 6} selecionados`}
+                        text={`${selectedContracts.length}/${maxContracts} selecionados`}
                       />
                     </div>
                   </div>
@@ -949,10 +1020,11 @@ export default function PortabilidadeMultiplaPage() {
                         const selection = selected
                           ? { allowed: true, reason: '' }
                           : loadingEligibility
-                            ? { allowed: false, reason: 'Validando regras FACTA...' }
+                            ? { allowed: false, reason: `Validando regras ${bancoDestino}...` }
                             : contractSelectionReason(
                                 selectedContracts,
                                 contract,
+                                bancoDestino,
                                 eligibility,
                               );
                         const disabled = !selected && !selection.allowed;
@@ -981,19 +1053,21 @@ export default function PortabilidadeMultiplaPage() {
                                       || 'Banco não identificado'}
                                   </span>
 
-                                  <span
-                                    className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
-                                      classified.grupo === 'A'
-                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-                                        : classified.grupo === 'B'
-                                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
-                                          : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
-                                    }`}
-                                  >
-                                    {classified.grupo === 'SEM_BANCO'
-                                      ? 'Banco não identificado'
-                                      : `Grupo ${classified.grupo}`}
-                                  </span>
+                                  {bancoDestino === 'FACTA' && (
+                                    <span
+                                      className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
+                                        classified.grupo === 'A'
+                                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                          : classified.grupo === 'B'
+                                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
+                                            : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+                                      }`}
+                                    >
+                                      {classified.grupo === 'SEM_BANCO'
+                                        ? 'Banco não identificado'
+                                        : `Grupo ${classified.grupo}`}
+                                    </span>
+                                  )}
                                 </div>
 
                                 <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -1214,11 +1288,11 @@ export default function PortabilidadeMultiplaPage() {
                 />
                 <SummaryCard
                   label="Parcela mín. refin"
-                  value={formatMoney(validation.parcela_minima_refin)}
+                  value={bancoDestino === 'DAYCOVAL' ? 'Regra do motor' : formatMoney(validation.parcela_minima_refin)}
                 />
                 <SummaryCard
                   label="Novo contrato mín."
-                  value={formatMoney(validation.valor_minimo_contrato_refin)}
+                  value={bancoDestino === 'DAYCOVAL' ? 'Regra do motor' : formatMoney(validation.valor_minimo_contrato_refin)}
                 />
                 <SummaryCard
                   label="NB"
@@ -1226,16 +1300,18 @@ export default function PortabilidadeMultiplaPage() {
                 />
               </div>
 
-              <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-4 dark:border-white/10 dark:bg-white/5">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Regra dos R$ 3.000,00
-                </p>
-                <p className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">
-                  O mínimo do novo refinanciamento será validado somente quando a oferta FACTA existir:
-                  {' '}
-                  <strong>saldo total portado + valor liberado da nova oferta ≥ R$ 3.000,00</strong>.
-                </p>
-              </div>
+              {bancoDestino === 'FACTA' && (
+                <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-4 dark:border-white/10 dark:bg-white/5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Regra dos R$ 3.000,00
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">
+                    O mínimo do novo refinanciamento será validado somente quando a oferta FACTA existir:
+                    {' '}
+                    <strong>saldo total portado + valor liberado da nova oferta ≥ R$ 3.000,00</strong>.
+                  </p>
+                </div>
+              )}
 
               {!!validation.bloqueios.length && (
                 <div className="mt-5 space-y-2">
@@ -1266,7 +1342,7 @@ export default function PortabilidadeMultiplaPage() {
           {loadingOrigins && (
             <section className="flex items-center justify-center gap-3 rounded-[2rem] border border-slate-200 bg-white py-8 text-sm font-bold text-slate-500 shadow-sm dark:border-white/10 dark:bg-slate-900">
               <Loader2 size={20} className="animate-spin" />
-              Validando origens e simulando a operação unificada na FACTA...
+              Validando origens e simulando a operação unificada no {bancoDestino}...
             </section>
           )}
 
@@ -1296,17 +1372,17 @@ export default function PortabilidadeMultiplaPage() {
 
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-                      Portabilidade + Refin • FACTA
+                      Portabilidade + Refin • {bancoDestino}
                     </p>
                     <h2 className="mt-1 text-xl font-black text-slate-900 dark:text-white">
                       {originValidation.simulacao_consolidada.elegivel
                         ? 'Simulação unificada concluída'
                         : originValidation.elegivel
                           ? 'Seleção sem oferta consolidada válida'
-                          : 'Existe contrato bloqueado pela regra FACTA'}
+                          : `Existe contrato bloqueado pela regra ${bancoDestino}`}
                     </h2>
                     <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">
-                      As origens são verificadas antes da seleção somente pelas regras do banco de origem e quantidade mínima de parcelas pagas. Depois, o sistema soma parcelas e saldos do mesmo NB e aplica troco mínimo e demais regras do refin apenas na única simulação consolidada.
+                      As origens são verificadas antes da seleção somente pelas regras do banco de origem e quantidade mínima de parcelas pagas. Depois, o sistema soma parcelas e saldos do mesmo NB e aplica troco mínimo e demais regras do refin apenas na única simulação consolidada do banco destino.
                     </p>
                   </div>
                 </div>
@@ -1348,7 +1424,7 @@ export default function PortabilidadeMultiplaPage() {
                 />
                 <SummaryCard
                   icon={<CircleDollarSign size={18} />}
-                  label="Ofertas FACTA"
+                  label={`Ofertas ${bancoDestino}`}
                   value={String(originValidation.simulacao_consolidada.quantidade_ofertas)}
                 />
               </div>
@@ -1361,7 +1437,7 @@ export default function PortabilidadeMultiplaPage() {
                         Resultado da operação unificada
                       </p>
                       <h3 className="mt-1 text-lg font-black text-slate-900 dark:text-white">
-                        Melhor oferta FACTA
+                        Melhor oferta {bancoDestino}
                       </h3>
                     </div>
                     <span className="rounded-full bg-primary/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-primary">
@@ -1397,7 +1473,7 @@ export default function PortabilidadeMultiplaPage() {
                               ))}
                             </div>
                             <p className="mt-3 text-[11px] font-semibold text-slate-500">
-                              As tabelas são exibidas na ordem comercial devolvida pelo Motor FACTA.
+                              As tabelas são exibidas na ordem comercial devolvida pelo Motor {bancoDestino}.
                               A primeira tabela do prazo selecionado é sempre a Melhor Oferta.
                             </p>
                           </div>
@@ -1411,10 +1487,10 @@ export default function PortabilidadeMultiplaPage() {
                           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                             <div>
                               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">
-                                {primaryOffer.banco || 'FACTA'} • Portabilidade + Refin
+                                {primaryOffer.banco || bancoDestino} • Portabilidade + Refin
                               </p>
                               <h4 className="mt-1 text-xl font-black text-slate-900 dark:text-white">
-                                {primaryOffer.tabela || 'Tabela FACTA'}
+                                {primaryOffer.tabela || `Tabela ${bancoDestino}`}
                               </h4>
                               <p className="mt-1 text-xs font-semibold text-slate-500">
                                 Primeira tabela disponível para o prazo {primaryOffer.prazo || selectedOfferTerm}X.
@@ -1437,7 +1513,7 @@ export default function PortabilidadeMultiplaPage() {
                                 || primaryOffer.taxa_ponderada
                               )}
                             />
-                            <InfoTile label="Tabela" value={primaryOffer.tabela || 'FACTA'} />
+                            <InfoTile label="Tabela" value={primaryOffer.tabela || bancoDestino} />
                           </div>
                         </div>
 
@@ -1459,10 +1535,10 @@ export default function PortabilidadeMultiplaPage() {
                                       </span>
                                       <div>
                                         <p className="text-[9px] font-black uppercase tracking-widest text-primary">
-                                          {offer.banco || 'FACTA'}
+                                          {offer.banco || bancoDestino}
                                         </p>
                                         <h4 className="mt-1 text-sm font-black text-slate-900 dark:text-white">
-                                          {offer.tabela || 'Tabela FACTA'}
+                                          {offer.tabela || `Tabela ${bancoDestino}`}
                                         </h4>
                                       </div>
                                     </div>
@@ -1578,12 +1654,14 @@ export default function PortabilidadeMultiplaPage() {
               <FeatureCard
                 icon={<Layers3 size={21} />}
                 title="2. Selecionar"
-                text="Escolha um único NB e de 2 a 6 contratos. Grupo A somente com A, Grupo B somente com B e Grupo C somente com o mesmo banco."
+                text={bancoDestino === 'DAYCOVAL'
+                  ? 'Escolha um único NB e de 2 a 3 contratos. Não há grupos para o Daycoval.'
+                  : 'Escolha um único NB e de 2 a 6 contratos. Grupo A somente com A, Grupo B somente com B e Grupo C somente com o mesmo banco.'}
               />
               <FeatureCard
                 icon={<ShieldCheck size={21} />}
                 title="3. Simular"
-                text="Antes da soma, o servidor valida apenas banco não portável e parcelas pagas. Troco mínimo e regras do refin são aplicados somente na simulação consolidada FACTA."
+                text={`Antes da soma, o servidor valida banco de origem e parcelas pagas conforme ${bancoDestino}. As demais regras, incluindo idade, tabelas e troco, são aplicadas pelo Motor na simulação consolidada ${bancoDestino}.`}
               />
             </section>
           )}

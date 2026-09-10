@@ -1,5 +1,7 @@
 import type { PortabilidadeMultiplaContrato } from './types';
 
+export type PortabilidadeMultiplaBancoDestino = 'FACTA' | 'DAYCOVAL';
+
 export type PortabilidadeMultiplaGrupo =
   | 'A'
   | 'B'
@@ -21,7 +23,8 @@ export type PortabilidadeMultiplaBloqueioCodigo =
   | 'PARCELA_REFIN_MINIMA'
   | 'VALOR_CONTRATO_REFIN_MINIMO'
   | 'REGRA_BANCO_ORIGEM'
-  | 'SEM_TABELA_FACTA';
+  | 'SEM_TABELA_FACTA'
+  | 'SEM_TABELA_DAYCOVAL';
 
 export interface PortabilidadeMultiplaBloqueio {
   codigo: PortabilidadeMultiplaBloqueioCodigo;
@@ -52,6 +55,15 @@ export interface PortabilidadeMultiplaPreValidacaoEstrutural {
 
 export const PORTABILIDADE_MULTIPLA_MIN_CONTRATOS = 2;
 export const PORTABILIDADE_MULTIPLA_MAX_CONTRATOS = 6;
+export const PORTABILIDADE_MULTIPLA_MAX_CONTRATOS_DAYCOVAL = 3;
+
+export function maxContratosPortabilidadeMultipla(
+  bancoDestino: PortabilidadeMultiplaBancoDestino = 'FACTA',
+): number {
+  return bancoDestino === 'DAYCOVAL'
+    ? PORTABILIDADE_MULTIPLA_MAX_CONTRATOS_DAYCOVAL
+    : PORTABILIDADE_MULTIPLA_MAX_CONTRATOS;
+}
 
 /**
  * Grupos oficiais de unificação do projeto FACTA de referência.
@@ -328,11 +340,13 @@ function structuralGroup(
  */
 export function validarEstruturaPortabilidadeMultipla(
   contratos: PortabilidadeMultiplaContrato[],
+  bancoDestino: PortabilidadeMultiplaBancoDestino = 'FACTA',
 ): PortabilidadeMultiplaPreValidacaoEstrutural {
   const bloqueios: PortabilidadeMultiplaBloqueio[] = [];
   const classificacoes = contratos.map(
     classificarContratoPortabilidadeMultipla,
   );
+  const maxContratos = maxContratosPortabilidadeMultipla(bancoDestino);
 
   if (contratos.length < PORTABILIDADE_MULTIPLA_MIN_CONTRATOS) {
     bloqueios.push({
@@ -342,11 +356,11 @@ export function validarEstruturaPortabilidadeMultipla(
     });
   }
 
-  if (contratos.length > PORTABILIDADE_MULTIPLA_MAX_CONTRATOS) {
+  if (contratos.length > maxContratos) {
     bloqueios.push({
       codigo: 'MAX_CONTRATOS',
       mensagem:
-        `A Portabilidade Múltipla permite no máximo ${PORTABILIDADE_MULTIPLA_MAX_CONTRATOS} contratos.`,
+        `A Portabilidade Múltipla ${bancoDestino} permite no máximo ${maxContratos} contratos.`,
     });
   }
 
@@ -390,39 +404,47 @@ export function validarEstruturaPortabilidadeMultipla(
     });
   }
 
-  const grupos = uniqueNonEmpty(
-    classificacoes
-      .filter(item => item.grupo !== 'SEM_BANCO')
-      .map(item => item.grupo),
-  );
-
-  if (grupos.length > 1) {
-    bloqueios.push({
-      codigo: 'GRUPOS_INCOMPATIVEIS',
-      mensagem:
-        'Os contratos selecionados devem pertencer ao mesmo grupo de unificação: Grupo A somente com A, Grupo B somente com B e Grupo C somente com C da mesma instituição.',
-    });
-  }
-
-  if (grupos.length === 1 && grupos[0] === 'C') {
-    const identidades = uniqueNonEmpty(
-      classificacoes.map(item => item.identidade_banco),
+  // As regras de Grupo A/B/C pertencem somente à Portabilidade Múltipla FACTA.
+  // O Daycoval aceita combinação de bancos diferentes; a elegibilidade de cada
+  // origem é validada pelas próprias regras Daycoval no servidor.
+  if (bancoDestino === 'FACTA') {
+    const grupos = uniqueNonEmpty(
+      classificacoes
+        .filter(item => item.grupo !== 'SEM_BANCO')
+        .map(item => item.grupo),
     );
 
-    if (identidades.length > 1) {
+    if (grupos.length > 1) {
       bloqueios.push({
-        codigo: 'BANCOS_DIFERENTES',
+        codigo: 'GRUPOS_INCOMPATIVEIS',
         mensagem:
-          'Contratos do Grupo C só podem ser unificados quando pertencem ao mesmo banco.',
+          'Os contratos selecionados devem pertencer ao mesmo grupo de unificação: Grupo A somente com A, Grupo B somente com B e Grupo C somente com C da mesma instituição.',
       });
+    }
+
+    if (grupos.length === 1 && grupos[0] === 'C') {
+      const identidades = uniqueNonEmpty(
+        classificacoes.map(item => item.identidade_banco),
+      );
+
+      if (identidades.length > 1) {
+        bloqueios.push({
+          codigo: 'BANCOS_DIFERENTES',
+          mensagem:
+            'Contratos do Grupo C só podem ser unificados quando pertencem ao mesmo banco.',
+        });
+      }
     }
   }
 
-  const grupo = structuralGroup(classificacoes);
+  const grupo = bancoDestino === 'FACTA'
+    ? structuralGroup(classificacoes)
+    : null;
 
   return {
     elegivel_previo:
       contratos.length >= PORTABILIDADE_MULTIPLA_MIN_CONTRATOS
+      && contratos.length <= maxContratos
       && bloqueios.length === 0,
     grupo,
     quantidade_contratos: contratos.length,
@@ -445,8 +467,10 @@ export interface PortabilidadeMultiplaSelecaoResult {
 export function validarInclusaoContratoPortabilidadeMultipla(
   selecionados: PortabilidadeMultiplaContrato[],
   candidato: PortabilidadeMultiplaContrato,
+  bancoDestino: PortabilidadeMultiplaBancoDestino = 'FACTA',
 ): PortabilidadeMultiplaSelecaoResult {
   const candidate = classificarContratoPortabilidadeMultipla(candidato);
+  const maxContratos = maxContratosPortabilidadeMultipla(bancoDestino);
 
   if (candidate.grupo === 'SEM_BANCO' || !candidate.identidade_banco) {
     return {
@@ -462,14 +486,14 @@ export function validarInclusaoContratoPortabilidadeMultipla(
     };
   }
 
-  if (selecionados.length >= PORTABILIDADE_MULTIPLA_MAX_CONTRATOS) {
+  if (selecionados.length >= maxContratos) {
     return {
       permitido: false,
       grupo: candidate.grupo,
       bloqueio: {
         codigo: 'MAX_CONTRATOS',
         mensagem:
-          `A Portabilidade Múltipla permite no máximo ${PORTABILIDADE_MULTIPLA_MAX_CONTRATOS} contratos.`,
+          `A Portabilidade Múltipla ${bancoDestino} permite no máximo ${maxContratos} contratos.`,
       },
     };
   }
@@ -512,7 +536,7 @@ export function validarInclusaoContratoPortabilidadeMultipla(
     };
   }
 
-  if (!selecionados.length) {
+  if (!selecionados.length || bancoDestino === 'DAYCOVAL') {
     return {
       permitido: true,
       grupo: candidate.grupo,

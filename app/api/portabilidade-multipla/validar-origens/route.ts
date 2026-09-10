@@ -50,6 +50,7 @@ export async function POST(request: Request) {
 
     const result = await validarOrigensPortabilidadeMultiplaServer(
       {
+        banco_destino: body?.banco_destino,
         cpf: body?.cpf,
         beneficio: body?.beneficio,
         contrato_ids: body?.contrato_ids,

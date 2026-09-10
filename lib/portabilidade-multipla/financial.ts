@@ -1,6 +1,7 @@
 import type { PortabilidadeMultiplaContrato } from './types';
 import {
   validarEstruturaPortabilidadeMultipla,
+  type PortabilidadeMultiplaBancoDestino,
   type PortabilidadeMultiplaBloqueio,
   type PortabilidadeMultiplaPreValidacaoEstrutural,
 } from './rules';
@@ -25,6 +26,29 @@ export interface PortabilidadeMultiplaConfigFinanceira {
   adicional_viabilidade?: number;
   parcela_minima_refin?: number;
   valor_minimo_contrato_refin?: number;
+}
+
+export function configFinanceiraPortabilidadeMultiplaPorDestino(
+  bancoDestino: PortabilidadeMultiplaBancoDestino = 'FACTA',
+): PortabilidadeMultiplaConfigFinanceira {
+  if (bancoDestino === 'DAYCOVAL') {
+    return {
+      // Daycoval usa integralmente o tratamento de margem/regras do Motor.
+      // O adicional de R$ 20,00 é uma regra específica da Múltipla FACTA.
+      adicional_viabilidade: 0,
+      // No Daycoval, parcela mínima, ticket, saldo e troco são validados
+      // exclusivamente pelas regras/tabelas já cadastradas no Motor.
+      parcela_minima_refin: 0,
+      valor_minimo_contrato_refin: 0,
+    };
+  }
+
+  return {
+    adicional_viabilidade: PORTABILIDADE_MULTIPLA_ADICIONAL_VIABILIDADE,
+    parcela_minima_refin: PORTABILIDADE_MULTIPLA_PARCELA_MINIMA_REFIN,
+    valor_minimo_contrato_refin:
+      PORTABILIDADE_MULTIPLA_VALOR_MINIMO_CONTRATO_REFIN,
+  };
 }
 
 export interface PortabilidadeMultiplaResumoFinanceiro {
@@ -175,6 +199,7 @@ export function calcularResumoFinanceiroPortabilidadeMultipla(
   contratos: PortabilidadeMultiplaContrato[],
   margemLivre: number,
   config: PortabilidadeMultiplaConfigFinanceira = {},
+  bancoDestino: PortabilidadeMultiplaBancoDestino = 'FACTA',
 ): PortabilidadeMultiplaResumoFinanceiro {
   const bloqueios: PortabilidadeMultiplaBloqueio[] = [];
   const cfg = resolvedConfig(config);
@@ -223,12 +248,16 @@ export function calcularResumoFinanceiroPortabilidadeMultipla(
     }
   }
 
-  const regraViabilidadeAtendida =
-    margemNegativaCents === 0
-    || maiorParcelaCents >= minimoViabilidadeCents;
+  const regraViabilidadeAtendida = bancoDestino === 'DAYCOVAL'
+    ? true
+    : (
+        margemNegativaCents === 0
+        || maiorParcelaCents >= minimoViabilidadeCents
+      );
 
   if (
-    contratos.length > 0
+    bancoDestino === 'FACTA'
+    && contratos.length > 0
     && margemNegativaCents > 0
     && !regraViabilidadeAtendida
   ) {
@@ -239,12 +268,16 @@ export function calcularResumoFinanceiroPortabilidadeMultipla(
     });
   }
 
-  // Na margem negativa, a nova parcela precisa permanecer R$ 20,00
-  // acima do valor necessário para absorver o negativo.
-  // Ex.: 598,08 - 175,07 + 20,00 = 443,01.
-  const parcelaRefinCents = margemNegativaCents > 0
-    ? somaParcelasCents - margemNegativaCents + adicionalCents
-    : somaParcelasCents;
+  // FACTA mantém a regra consolidada já homologada: soma - negativo + R$ 20.
+  // DAYCOVAL replica o comportamento do Motor padrão: soma - negativo,
+  // sem criar adicional financeiro fora das regras cadastradas do banco.
+  const parcelaRefinCents = bancoDestino === 'DAYCOVAL'
+    ? Math.max(0, somaParcelasCents - margemNegativaCents)
+    : (
+        margemNegativaCents > 0
+          ? somaParcelasCents - margemNegativaCents + adicionalCents
+          : somaParcelasCents
+      );
   const parcelaMinimaRefinCents = moneyToCents(cfg.parcela_minima_refin);
 
   const parcelaRefinMinimaAtendida =
@@ -361,12 +394,21 @@ export function validarPreviamentePortabilidadeMultipla(
   contratos: PortabilidadeMultiplaContrato[],
   margemLivre: number,
   config: PortabilidadeMultiplaConfigFinanceira = {},
+  bancoDestino: PortabilidadeMultiplaBancoDestino = 'FACTA',
 ): PortabilidadeMultiplaPreValidacaoCompleta {
-  const estrutural = validarEstruturaPortabilidadeMultipla(contratos);
+  const estrutural = validarEstruturaPortabilidadeMultipla(
+    contratos,
+    bancoDestino,
+  );
+  const configDestino = {
+    ...configFinanceiraPortabilidadeMultiplaPorDestino(bancoDestino),
+    ...config,
+  };
   const financeiro = calcularResumoFinanceiroPortabilidadeMultipla(
     contratos,
     margemLivre,
-    config,
+    configDestino,
+    bancoDestino,
   );
 
   const bloqueios: PortabilidadeMultiplaBloqueio[] = [];
