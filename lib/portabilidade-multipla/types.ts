@@ -1,9 +1,35 @@
+export interface PortabilidadeMultiplaEndereco {
+  logradouro?: string;
+  numero?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+  texto_completo?: string;
+}
+
+export interface PortabilidadeMultiplaDadosBancarios {
+  banco?: string;
+  codigo_banco?: string;
+  nome_banco?: string;
+  agencia?: string;
+  conta?: string;
+  meio_pagamento?: string;
+  tipo_recebimento?: string;
+}
+
 export interface PortabilidadeMultiplaCliente {
   cpf: string;
   nome: string;
   data_nascimento: string;
   idade: number;
   uf: string;
+  filiacao?: string;
+  nome_mae?: string;
+  nome_pai?: string;
+  endereco?: PortabilidadeMultiplaEndereco;
+  telefones?: string[];
+  telefone_principal?: string;
 }
 
 export interface PortabilidadeMultiplaMargens {
@@ -60,6 +86,10 @@ export interface PortabilidadeMultiplaBeneficio {
   analfabeto: boolean;
   has_two_cards: boolean;
   negative_card_value: number;
+
+  uf?: string;
+  bloqueado_emprestimo?: boolean;
+  dados_bancarios?: PortabilidadeMultiplaDadosBancarios;
 
   margens: PortabilidadeMultiplaMargens;
   contratos: PortabilidadeMultiplaContrato[];

@@ -467,6 +467,59 @@ function normalizeBenefit(benefit: any): PortabilidadeMultiplaBeneficio {
         benefit?.data_concessao,
       ),
     ),
+    uf: text(
+      firstDefined(
+        person?.UF,
+        person?.UFBeneficio,
+        person?.uf,
+        benefit?.UF,
+        benefit?.UFBeneficio,
+        benefit?.uf,
+      ),
+    ).toUpperCase(),
+    bloqueado_emprestimo: (
+      person?.BloqueadoEmprestimo === '1'
+      || person?.BloqueadoEmprestimo === true
+      || benefit?.BloqueadoEmprestimo === '1'
+      || benefit?.BloqueadoEmprestimo === true
+      || benefit?.BloqueioEmprestimo === '1'
+      || benefit?.BloqueioEmprestimo === true
+      || false
+    ),
+    dados_bancarios: (() => {
+      const rawDados = benefit?.DadosBancarios
+        || benefit?.dadosBancarios
+        || person?.DadosBancarios
+        || person?.dadosBancarios
+        || {};
+      const bancoCod = text(firstDefined(rawDados?.Banco, rawDados?.banco, rawDados?.CodigoBanco, rawDados?.codigoBanco, benefit?.Banco, benefit?.banco));
+      const bancoNome = text(firstDefined(rawDados?.NomeBanco, rawDados?.nomeBanco, rawDados?.BancoNome, benefit?.NomeBanco));
+      const agencia = text(firstDefined(rawDados?.Agencia, rawDados?.agencia, benefit?.Agencia, benefit?.agencia));
+      const conta = text(firstDefined(rawDados?.NumConta, rawDados?.numConta, rawDados?.ContaPagto, rawDados?.contaPagto, rawDados?.Conta, rawDados?.conta, benefit?.ContaPagto, benefit?.NumConta));
+      const meio = text(firstDefined(rawDados?.MeioPagamento, rawDados?.meioPagamento, benefit?.MeioPagamento, benefit?.meioPagamento));
+
+      let tipoRecebimento = '—';
+      const meioNorm = meio.toUpperCase();
+      if (meioNorm === '2' || meioNorm.includes('CORRENTE')) {
+        tipoRecebimento = 'Conta Corrente';
+      } else if (meioNorm === '1' || meioNorm.includes('MAGNETICO') || meioNorm.includes('MAGNÉTICO') || meioNorm.includes('CARTAO') || meioNorm.includes('CARTÃO')) {
+        tipoRecebimento = 'Cartão Magnético';
+      } else if (conta) {
+        tipoRecebimento = 'Conta Corrente';
+      } else if (bancoCod) {
+        tipoRecebimento = 'Cartão Magnético';
+      }
+
+      return {
+        banco: bancoCod,
+        codigo_banco: bancoCod,
+        nome_banco: bancoNome,
+        agencia,
+        conta,
+        meio_pagamento: meio,
+        tipo_recebimento: tipoRecebimento,
+      };
+    })(),
     analfabeto: inferIlliterate(benefit),
     has_two_cards: cardContext.hasTwoCards,
     negative_card_value: cardContext.negativeCardValue,
@@ -573,6 +626,165 @@ export function normalizePortabilidadeMultiplaConsulta(
           data?.uf,
         ),
       ).toUpperCase(),
+      filiacao: text(
+        firstDefined(
+          firstPerson?.NomeMae,
+          firstPerson?.nomeMae,
+          data?.Cadastro?.NomeMae,
+          data?.cadastro?.NomeMae,
+          data?.NomeMae,
+          data?.nomeMae,
+          firstPerson?.Mae,
+          firstPerson?.mae,
+        ),
+      ),
+      nome_mae: text(
+        firstDefined(
+          firstPerson?.NomeMae,
+          firstPerson?.nomeMae,
+          data?.Cadastro?.NomeMae,
+          data?.cadastro?.NomeMae,
+          data?.NomeMae,
+          data?.nomeMae,
+          firstPerson?.Mae,
+          firstPerson?.mae,
+        ),
+      ),
+      nome_pai: text(
+        firstDefined(
+          firstPerson?.NomePai,
+          firstPerson?.nomePai,
+          data?.Cadastro?.NomePai,
+          data?.cadastro?.NomePai,
+          data?.NomePai,
+          data?.nomePai,
+        ),
+      ),
+      endereco: (() => {
+        const logr = text(firstDefined(
+          firstPerson?.Endereco,
+          firstPerson?.endereco,
+          data?.Cadastro?.Endereco,
+          data?.cadastro?.Endereco,
+          data?.Endereco?.Logradouro,
+          data?.Endereco?.Endereco,
+          data?.endereco?.logradouro,
+          data?.endereco?.endereco,
+          data?.Endereco,
+          data?.endereco,
+        ));
+        const num = text(firstDefined(
+          firstPerson?.Numero,
+          firstPerson?.numero,
+          data?.Cadastro?.Numero,
+          data?.cadastro?.Numero,
+          data?.Endereco?.Numero,
+          data?.endereco?.numero,
+        ));
+        const b = text(firstDefined(
+          firstPerson?.Bairro,
+          firstPerson?.bairro,
+          data?.Cadastro?.Bairro,
+          data?.cadastro?.Bairro,
+          data?.Endereco?.Bairro,
+          data?.endereco?.bairro,
+        ));
+        const c = text(firstDefined(
+          firstPerson?.Cidade,
+          firstPerson?.cidade,
+          firstPerson?.Municipio,
+          firstPerson?.municipio,
+          data?.Cadastro?.Cidade,
+          data?.cadastro?.Cidade,
+          data?.Endereco?.Cidade,
+          data?.Endereco?.Municipio,
+          data?.endereco?.cidade,
+        ));
+        const u = text(firstDefined(
+          firstPerson?.UF,
+          firstPerson?.uf,
+          firstPerson?.UFBeneficio,
+          data?.Cadastro?.UF,
+          data?.cadastro?.UF,
+          data?.Endereco?.UF,
+          data?.Endereco?.Uf,
+          data?.endereco?.uf,
+        )).toUpperCase();
+        const cp = text(firstDefined(
+          firstPerson?.CEP,
+          firstPerson?.cep,
+          data?.Cadastro?.CEP,
+          data?.cadastro?.CEP,
+          data?.Endereco?.CEP,
+          data?.endereco?.cep,
+        ));
+
+        const parts: string[] = [];
+        if (logr) parts.push(num ? `${logr}, ${num}` : logr);
+        if (b) parts.push(b);
+        if (c || u) parts.push([c, u].filter(Boolean).join(' - '));
+        if (cp) parts.push(`CEP ${cp}`);
+
+        return {
+          logradouro: logr,
+          numero: num,
+          bairro: b,
+          cidade: c,
+          uf: u,
+          cep: cp,
+          texto_completo: parts.join(' • ') || '—',
+        };
+      })(),
+      telefones: (() => {
+        const rawPhones = [
+          ...(asArray(data?.Telefones || data?.telefones)),
+          ...(asArray(data?.Telefone || data?.telefone)),
+          ...(asArray(firstPerson?.Telefones || firstPerson?.telefones)),
+          ...(asArray(firstPerson?.Telefone || firstPerson?.telefone)),
+          ...(asArray(firstPerson?.Celular || firstPerson?.celular)),
+          ...(asArray(data?.Cadastro?.Telefone || data?.cadastro?.telefone)),
+          ...(asArray(data?.Cadastro?.Celular || data?.cadastro?.celular)),
+        ];
+        const set = new Set<string>();
+        for (const item of rawPhones) {
+          const raw = typeof item === 'object' && item !== null
+            ? (item?.Numero || item?.numero || item?.telefone || '')
+            : item;
+          const cleaned = String(raw || '').replace(/\D/g, '');
+          if (cleaned.length >= 8) {
+            if (cleaned.length === 11) {
+              set.add(`(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`);
+            } else if (cleaned.length === 10) {
+              set.add(`(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`);
+            } else {
+              set.add(cleaned);
+            }
+          }
+        }
+        return Array.from(set);
+      })(),
+      telefone_principal: (() => {
+        const rawPhones = [
+          ...(asArray(data?.Telefones || data?.telefones)),
+          ...(asArray(data?.Telefone || data?.telefone)),
+          ...(asArray(firstPerson?.Telefones || firstPerson?.telefones)),
+          ...(asArray(firstPerson?.Telefone || firstPerson?.telefone)),
+          ...(asArray(firstPerson?.Celular || firstPerson?.celular)),
+        ];
+        for (const item of rawPhones) {
+          const raw = typeof item === 'object' && item !== null
+            ? (item?.Numero || item?.numero || item?.telefone || '')
+            : item;
+          const cleaned = String(raw || '').replace(/\D/g, '');
+          if (cleaned.length === 11) {
+            return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
+          }
+          if (cleaned.length === 10) {
+            return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
+          }
+        }
+        return undefined;
+      })(),
     },
     beneficios,
   };

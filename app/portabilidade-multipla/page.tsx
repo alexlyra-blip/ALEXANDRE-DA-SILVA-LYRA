@@ -7,18 +7,24 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
+  CreditCard,
   FileText,
   Info,
   Landmark,
   Layers3,
   Loader2,
+  Lock,
+  MapPin,
+  Phone,
   RefreshCw,
   Search,
   ShieldCheck,
+  Unlock,
   UserRound,
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/contexts/AuthContext';
+import { getBancoName, getEspecieName } from '@/lib/mappings';
 import {
   classificarContratoPortabilidadeMultipla,
   normalizePortabilidadeMultiplaConsulta,
@@ -205,6 +211,13 @@ function formatMoney(value: number | null | undefined): string {
 function formatRate(value: number): string {
   if (!value || !Number.isFinite(value)) return 'Não informada';
   return `${value.toFixed(2).replace('.', ',')}% a.m.`;
+}
+
+function formatDateBr(iso: string): string {
+  if (!iso) return '';
+  const match = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  return String(iso);
 }
 
 async function readResponse(response: Response): Promise<any> {
@@ -891,115 +904,357 @@ export default function PortabilidadeMultiplaPage() {
 
           {consulta && (
             <>
-              <section className="grid gap-4 lg:grid-cols-[1.2fr_2fr]">
-                <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-300">
-                      <UserRound size={20} />
-                    </div>
+              {(() => {
+                const activeBenefit = selectedBenefit || consulta.beneficios[0];
+                const isBloqueado = Boolean(activeBenefit?.bloqueado_emprestimo);
+                const isAtivo = (activeBenefit?.situacao || '').toLowerCase().includes('ativo') || !activeBenefit?.situacao;
+                const dadosBancarios = activeBenefit?.dados_bancarios;
+                const hasDadosBancarios = Boolean(
+                  dadosBancarios?.codigo_banco || dadosBancarios?.agencia || dadosBancarios?.conta
+                );
+                const meioPagto = dadosBancarios?.tipo_recebimento || (dadosBancarios?.meio_pagamento?.toLowerCase().includes('cart') ? 'Cartão Magnético' : 'Conta Corrente');
 
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                        Cliente
-                      </p>
-                      <h2 className="text-base font-black text-slate-800 dark:text-white">
-                        {consulta.cliente.nome || 'Nome não informado'}
-                      </h2>
-                    </div>
-                  </div>
+                return (
+                  <section className="grid gap-5 xl:grid-cols-2">
+                    {/* Card 1: Dados do Cliente */}
+                    <div className="flex flex-col justify-between rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
+                      <div>
+                        {/* Header Cliente */}
+                        <div className="flex items-center gap-3 border-b border-slate-100 pb-4 dark:border-white/10">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-200">
+                            <UserRound size={22} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                              Dados do Cliente
+                            </p>
+                            <h2 className="truncate text-base font-black text-slate-900 dark:text-white" title={consulta.cliente.nome}>
+                              {consulta.cliente.nome || 'Nome não informado'}
+                            </h2>
+                          </div>
+                        </div>
 
-                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    <InfoTile label="CPF" value={maskCpf(consulta.cliente.cpf || cpf)} />
-                    <InfoTile
-                      label="Idade"
-                      value={consulta.cliente.idade ? `${consulta.cliente.idade} anos` : 'Não informada'}
-                    />
-                    <InfoTile label="UF" value={consulta.cliente.uf || '—'} />
-                    <InfoTile
-                      label="Benefícios"
-                      value={String(consulta.beneficios.length)}
-                    />
-                    <InfoTile
-                      label="Operação"
-                      value={bancoDestino}
-                    />
-                  </div>
-                </div>
+                        {/* Linhas estruturadas */}
+                        <div className="mt-4 space-y-3.5">
+                          {/* 1ª Linha: CPF e Idade (com nascimento e UF de residência) */}
+                          <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
+                            <div>
+                              <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                                CPF
+                              </p>
+                              <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-slate-100">
+                                {maskCpf(consulta.cliente.cpf || cpf)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                                Idade
+                              </p>
+                              <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-slate-100">
+                                {consulta.cliente.idade ? `${consulta.cliente.idade} anos` : 'Não informada'}
+                                {consulta.cliente.data_nascimento && (
+                                  <span className="ml-1 text-[11px] font-medium text-slate-400">
+                                    ({formatDateBr(consulta.cliente.data_nascimento)})
+                                  </span>
+                                )}
+                                {consulta.cliente.uf && (
+                                  <span className="ml-1 text-[10px] font-bold text-slate-400">
+                                    • UF: {consulta.cliente.uf}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
 
-                <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary dark:bg-primary/10">
-                      <FileText size={20} />
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                        Benefício da operação
-                      </p>
-                      <h2 className="text-base font-black text-slate-800 dark:text-white">
-                        {consulta.beneficios.length > 1
-                          ? 'Selecione o NB'
-                          : benefitLabel(consulta.beneficios[0])}
-                      </h2>
-                    </div>
-                  </div>
-
-                  {consulta.beneficios.length > 1 ? (
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                      {consulta.beneficios.map(benefit => {
-                        const active = benefit.numero === selectedBenefitNumber;
-
-                        return (
-                          <button
-                            key={benefit.numero || benefitLabel(benefit)}
-                            type="button"
-                            onClick={() => handleBenefitChange(benefit.numero)}
-                            className={`rounded-2xl border p-4 text-left transition ${
-                              active
-                                ? 'border-emerald-400 bg-emerald-50 ring-4 ring-emerald-500/10 dark:bg-emerald-500/10'
-                                : 'border-slate-200 bg-slate-50 hover:border-slate-300 dark:border-white/10 dark:bg-white/5'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-black text-slate-800 dark:text-white">
-                                NB {benefit.numero || 'não informado'}
-                              </span>
-                              {active && (
-                                <CheckCircle2 size={17} className="text-emerald-600" />
+                          {/* 2ª Linha: Filiação */}
+                          <div className="rounded-xl border border-slate-100 bg-white p-3 dark:border-white/5 dark:bg-white/[0.02]">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                              Filiação
+                            </p>
+                            <div className="mt-1 space-y-0.5 text-xs">
+                              {consulta.cliente.nome_mae ? (
+                                <p className="font-semibold text-slate-700 dark:text-slate-200">
+                                  <span className="font-bold text-slate-400">Mãe:</span> {consulta.cliente.nome_mae}
+                                </p>
+                              ) : null}
+                              {consulta.cliente.nome_pai ? (
+                                <p className="font-semibold text-slate-700 dark:text-slate-200">
+                                  <span className="font-bold text-slate-400">Pai:</span> {consulta.cliente.nome_pai}
+                                </p>
+                              ) : null}
+                              {!consulta.cliente.nome_mae && !consulta.cliente.nome_pai && (
+                                <p className="font-medium text-slate-400">
+                                  {consulta.cliente.filiacao || 'Não informada'}
+                                </p>
                               )}
                             </div>
+                          </div>
 
-                            <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                              Espécie {benefit.especie || '—'} • {benefit.situacao || '—'}
+                          {/* 3ª Linha: Endereço */}
+                          <div className="rounded-xl border border-slate-100 bg-white p-3 dark:border-white/5 dark:bg-white/[0.02]">
+                            <div className="flex items-center gap-1.5 text-slate-400">
+                              <MapPin size={13} className="shrink-0 text-slate-400" />
+                              <p className="text-[9px] font-black uppercase tracking-wider">
+                                Endereço
+                              </p>
+                            </div>
+                            <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+                              {consulta.cliente.endereco?.texto_completo ||
+                                (consulta.cliente.endereco?.logradouro
+                                  ? `${consulta.cliente.endereco.logradouro}${
+                                      consulta.cliente.endereco.numero
+                                        ? `, ${consulta.cliente.endereco.numero}`
+                                        : ''
+                                    }${
+                                      consulta.cliente.endereco.bairro
+                                        ? ` - ${consulta.cliente.endereco.bairro}`
+                                        : ''
+                                    }${
+                                      consulta.cliente.endereco.cidade
+                                        ? ` • ${consulta.cliente.endereco.cidade}`
+                                        : ''
+                                    }${
+                                      consulta.cliente.endereco.uf
+                                        ? `/${consulta.cliente.endereco.uf}`
+                                        : ''
+                                    }${
+                                      consulta.cliente.endereco.cep
+                                        ? ` • CEP: ${consulta.cliente.endereco.cep}`
+                                        : ''
+                                    }`
+                                  : 'Não informado')}
                             </p>
+                          </div>
 
-                            <p className="mt-2 text-xs font-black text-slate-600 dark:text-slate-300">
-                              Margem: {formatMoney(benefit.margens.margem_livre)}
-                            </p>
-                          </button>
-                        );
-                      })}
+                          {/* 4ª Linha: Telefone */}
+                          <div className="rounded-xl border border-slate-100 bg-white p-3 dark:border-white/5 dark:bg-white/[0.02]">
+                            <div className="flex items-center gap-1.5 text-slate-400">
+                              <Phone size={13} className="shrink-0 text-slate-400" />
+                              <p className="text-[9px] font-black uppercase tracking-wider">
+                                Telefone
+                              </p>
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {consulta.cliente.telefones && consulta.cliente.telefones.length > 0 ? (
+                                consulta.cliente.telefones.map((tel, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                                  >
+                                    {tel}
+                                  </span>
+                                ))
+                              ) : consulta.cliente.telefone_principal ? (
+                                <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                  {consulta.cliente.telefone_principal}
+                                </span>
+                              ) : (
+                                <span className="text-xs font-medium text-slate-400">
+                                  Nenhum telefone informado
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <InfoTile
-                        label="NB"
-                        value={consulta.beneficios[0].numero || '—'}
-                      />
-                      <InfoTile
-                        label="Espécie"
-                        value={consulta.beneficios[0].especie || '—'}
-                      />
-                      <InfoTile
-                        label="Margem livre"
-                        value={formatMoney(
-                          consulta.beneficios[0].margens.margem_livre,
+
+                    {/* Card 2: Benefício da Operação */}
+                    <div className="flex flex-col justify-between rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
+                      <div>
+                        {/* Header Benefício */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/10">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                              <FileText size={22} />
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Benefício da Operação
+                              </p>
+                              <h2 className="text-base font-black text-slate-900 dark:text-white">
+                                NB {activeBenefit?.numero || 'não informado'}
+                              </h2>
+                            </div>
+                          </div>
+
+                          {/* Badges de Status e Cadeado */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Status Ativo / Inativo */}
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
+                                isAtivo
+                                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                  : 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-300'
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  isAtivo ? 'bg-emerald-500' : 'bg-rose-500'
+                                }`}
+                              />
+                              {activeBenefit?.situacao || (isAtivo ? 'Ativo' : 'Inativo')}
+                            </span>
+
+                            {/* Cadeado de Empréstimo */}
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
+                                isBloqueado
+                                  ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-300'
+                                  : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300'
+                              }`}
+                              title={
+                                isBloqueado
+                                  ? 'Benefício Bloqueado para Empréstimo'
+                                  : 'Benefício Desbloqueado para Empréstimo'
+                              }
+                            >
+                              {isBloqueado ? (
+                                <>
+                                  <Lock size={12} className="text-rose-600 dark:text-rose-400" />
+                                  <span>Bloqueado</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Unlock size={12} className="text-emerald-600 dark:text-emerald-400" />
+                                  <span>Desbloqueado</span>
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Seletor de NB (se mais de 1 benefício) */}
+                        {consulta.beneficios.length > 1 && (
+                          <div className="mt-4">
+                            <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              Selecione o Benefício ({consulta.beneficios.length} disponíveis)
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {consulta.beneficios.map(b => {
+                                const isSelected = b.numero === activeBenefit?.numero;
+                                return (
+                                  <button
+                                    key={b.numero || benefitLabel(b)}
+                                    type="button"
+                                    onClick={() => handleBenefitChange(b.numero)}
+                                    className={`flex items-center justify-between rounded-xl border p-3 text-left transition ${
+                                      isSelected
+                                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20 dark:bg-primary/10'
+                                        : 'border-slate-200 bg-slate-50/70 hover:border-slate-300 dark:border-white/10 dark:bg-white/[0.02]'
+                                    }`}
+                                  >
+                                    <div>
+                                      <p className="text-xs font-black text-slate-800 dark:text-white">
+                                        NB {b.numero || 'não informado'}
+                                      </p>
+                                      <p className="text-[10px] font-semibold text-slate-400">
+                                        Esp. {b.especie || '—'} {b.uf ? `• ${b.uf}` : ''}
+                                      </p>
+                                    </div>
+                                    {isSelected ? (
+                                      <CheckCircle2 size={16} className="text-primary" />
+                                    ) : (
+                                      <ChevronRight size={14} className="text-slate-400" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         )}
-                      />
+
+                        {/* Detalhes do Benefício Ativo */}
+                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                              Espécie
+                            </p>
+                            <p className="mt-0.5 truncate text-xs font-black text-slate-800 dark:text-white" title={activeBenefit?.especie ? getEspecieName(activeBenefit.especie) : '—'}>
+                              {activeBenefit?.especie ? getEspecieName(activeBenefit.especie) : '—'}
+                            </p>
+                          </div>
+                          <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                              UF do Benefício
+                            </p>
+                            <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-white">
+                              {activeBenefit?.uf || consulta.cliente.uf || '—'}
+                            </p>
+                          </div>
+                          <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                              Margem Livre
+                            </p>
+                            <p className="mt-0.5 text-xs font-black text-emerald-600 dark:text-emerald-400">
+                              {formatMoney(activeBenefit?.margens?.margem_livre)}
+                            </p>
+                          </div>
+                          <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                              Renda Bruta
+                            </p>
+                            <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-white">
+                              {activeBenefit?.salario ? formatMoney(activeBenefit.salario) : '—'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Dados Bancários */}
+                        <div className="mt-4 rounded-xl border border-slate-100 bg-white p-3.5 dark:border-white/5 dark:bg-white/[0.02]">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-white/5">
+                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                              <Landmark size={14} className="text-primary" />
+                              <p className="text-[10px] font-black uppercase tracking-wider">
+                                Dados Bancários do Benefício
+                              </p>
+                            </div>
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                                meioPagto.toLowerCase().includes('cart')
+                                  ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300'
+                                  : 'bg-sky-50 text-sky-700 ring-1 ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-300'
+                              }`}
+                            >
+                              <CreditCard size={11} />
+                              {meioPagto}
+                            </span>
+                          </div>
+
+                          <div className="mt-2.5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            <div className="col-span-2 sm:col-span-1">
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Banco Pagador
+                              </p>
+                              <p className="mt-0.5 truncate text-xs font-black text-slate-800 dark:text-slate-200" title={dadosBancarios?.codigo_banco ? getBancoName(dadosBancarios.codigo_banco) : dadosBancarios?.nome_banco || dadosBancarios?.banco || 'Não informado'}>
+                                {dadosBancarios?.codigo_banco
+                                  ? getBancoName(dadosBancarios.codigo_banco)
+                                  : dadosBancarios?.nome_banco || dadosBancarios?.banco || 'Não informado'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Agência
+                              </p>
+                              <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-slate-200">
+                                {dadosBancarios?.agencia || '—'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Conta
+                              </p>
+                              <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-slate-200">
+                                {dadosBancarios?.conta || '—'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </section>
+                  </section>
+                );
+              })()}
 
               {selectedBenefit ? (
                 <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900 md:p-6">
