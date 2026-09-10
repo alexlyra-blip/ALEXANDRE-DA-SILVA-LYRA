@@ -767,7 +767,7 @@ export default function PortabilidadeMultiplaPage() {
                       Refin mín.
                     </p>
                     <p className="mt-1 text-sm font-black text-slate-800 dark:text-white">
-                      {bancoDestino === 'DAYCOVAL' ? 'Motor' : formatMoney(config?.parcela_minima_refin || 50)}
+                      {formatMoney(bancoDestino === 'DAYCOVAL' ? 20 : (config?.parcela_minima_refin || 50))}
                     </p>
                   </div>
                 </div>
@@ -1288,7 +1288,7 @@ export default function PortabilidadeMultiplaPage() {
                 />
                 <SummaryCard
                   label="Parcela mín. refin"
-                  value={bancoDestino === 'DAYCOVAL' ? 'Regra do motor' : formatMoney(validation.parcela_minima_refin)}
+                  value={formatMoney(validation.parcela_minima_refin)}
                 />
                 <SummaryCard
                   label="Novo contrato mín."

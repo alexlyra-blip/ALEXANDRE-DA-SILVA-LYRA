@@ -23,6 +23,7 @@ export const PORTABILIDADE_MULTIPLA_API_CONFIG = {
       min_contratos: PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
       max_contratos: PORTABILIDADE_MULTIPLA_MAX_CONTRATOS,
       usa_grupos: true,
+      parcela_minima_refin: PORTABILIDADE_MULTIPLA_PARCELA_MINIMA_REFIN,
     },
     DAYCOVAL: {
       nome: 'DAYCOVAL',
@@ -30,6 +31,8 @@ export const PORTABILIDADE_MULTIPLA_API_CONFIG = {
       min_contratos: PORTABILIDADE_MULTIPLA_MIN_CONTRATOS,
       max_contratos: PORTABILIDADE_MULTIPLA_MAX_CONTRATOS_DAYCOVAL,
       usa_grupos: false,
+      parcela_minima_refin: 20,
+      min_parcelas_pagas: 6,
     },
   },
   convenio: 'INSS',

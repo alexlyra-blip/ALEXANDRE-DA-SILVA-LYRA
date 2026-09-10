@@ -13,6 +13,7 @@ export const PORTABILIDADE_MULTIPLA_ADICIONAL_VIABILIDADE = 20;
  * Nao e limite individual dos contratos portados.
  */
 export const PORTABILIDADE_MULTIPLA_PARCELA_MINIMA_REFIN = 50;
+export const PORTABILIDADE_MULTIPLA_PARCELA_MINIMA_REFIN_DAYCOVAL = 20;
 
 /**
  * Regra do NOVO contrato de refinanciamento:
@@ -36,9 +37,8 @@ export function configFinanceiraPortabilidadeMultiplaPorDestino(
       // Daycoval usa integralmente o tratamento de margem/regras do Motor.
       // O adicional de R$ 20,00 é uma regra específica da Múltipla FACTA.
       adicional_viabilidade: 0,
-      // No Daycoval, parcela mínima, ticket, saldo e troco são validados
-      // exclusivamente pelas regras/tabelas já cadastradas no Motor.
-      parcela_minima_refin: 0,
+      // No Daycoval, a parcela mínima do refinanciamento unificado é de R$ 20,00.
+      parcela_minima_refin: PORTABILIDADE_MULTIPLA_PARCELA_MINIMA_REFIN_DAYCOVAL,
       valor_minimo_contrato_refin: 0,
     };
   }
@@ -290,7 +290,7 @@ export function calcularResumoFinanceiroPortabilidadeMultipla(
     pushUniqueBlock(bloqueios, {
       codigo: 'PARCELA_REFIN_MINIMA',
       mensagem:
-        'A parcela unificada do refinanciamento deve ser de pelo menos R$ 50,00.',
+        `A parcela unificada do refinanciamento deve ser de pelo menos R$ ${centsToMoney(parcelaMinimaRefinCents).toFixed(2).replace('.', ',')}.`,
     });
   }
 
@@ -328,8 +328,8 @@ export function calcularResumoFinanceiroPortabilidadeMultipla(
  * valor_total_contrato_refin = saldo_total + valor_liberado
  *
  * Regras obrigatorias (AND):
- * - parcela_refin >= R$ 50,00
- * - valor_total_contrato_refin >= R$ 3.000,00
+ * - parcela_refin >= parcela_minima_refin
+ * - valor_total_contrato_refin >= valor_minimo_contrato_refin (quando configurado > 0)
  */
 export function validarOfertaRefinPortabilidadeMultipla(
   input: PortabilidadeMultiplaOfertaRefinInput,
@@ -354,13 +354,14 @@ export function validarOfertaRefinPortabilidadeMultipla(
     parcelaRefinCents >= parcelaMinimaRefinCents;
 
   const valorTotalMinimoAtendido =
-    valorTotalContratoCents >= valorMinimoContratoCents;
+    valorMinimoContratoCents <= 0
+    || valorTotalContratoCents >= valorMinimoContratoCents;
 
   if (!parcelaRefinMinimaAtendida) {
     pushUniqueBlock(bloqueios, {
       codigo: 'PARCELA_REFIN_MINIMA',
       mensagem:
-        'A parcela unificada do refinanciamento deve ser de pelo menos R$ 50,00.',
+        `A parcela unificada do refinanciamento deve ser de pelo menos R$ ${centsToMoney(parcelaMinimaRefinCents).toFixed(2).replace('.', ',')}.`,
     });
   }
 
@@ -368,7 +369,7 @@ export function validarOfertaRefinPortabilidadeMultipla(
     pushUniqueBlock(bloqueios, {
       codigo: 'VALOR_CONTRATO_REFIN_MINIMO',
       mensagem:
-        'O valor total do novo contrato de refinanciamento (saldo + valor liberado) deve ser de pelo menos R$ 3.000,00.',
+        `O valor total do novo contrato de refinanciamento (saldo + valor liberado) deve ser de pelo menos R$ ${centsToMoney(valorMinimoContratoCents).toFixed(2).replace('.', ',')}.`,
     });
   }
 

@@ -302,9 +302,10 @@ function requiredPaidInstallmentsForOrigin(
   bancoDestino: PortabilidadeMultiplaBancoDestino,
 ): number {
   const requirements: number[] = [];
+  const daycovalBase = bancoDestino === 'DAYCOVAL' ? 6 : 0;
 
   for (const targetBank of targetOriginRules(context, bancoDestino)) {
-    let required = 0;
+    let required = daycovalBase;
 
     const specificRule = Array.isArray(targetBank?.specificInstallmentRules)
       ? targetBank.specificInstallmentRules.find(
@@ -343,15 +344,19 @@ function requiredPaidInstallmentsForOrigin(
         Number(
           targetBank?.minPaidInstallments
           ?? targetBank?.min_paid_installments
-          ?? 0,
-        ) || 0,
+          ?? daycovalBase,
+        ) || daycovalBase,
       ),
     );
 
     requirements.push(required);
   }
 
-  return requirements.length ? Math.min(...requirements) : 0;
+  if (requirements.length) {
+    return Math.min(...requirements);
+  }
+
+  return daycovalBase;
 }
 
 function avaliarRegraBasicaOrigem(
@@ -404,6 +409,15 @@ function avaliarRegraBasicaOrigem(
     return {
       elegivel: false,
       motivo: `Contrato já pertence ao ${bancoDestino} e não pode ser portado para o mesmo banco.`,
+      parcelas_minimas: required,
+    };
+  }
+
+  const valorParcela = Number(contract.parcela) || 0;
+  if (bancoDestino === 'DAYCOVAL' && valorParcela > 0 && valorParcela < 20) {
+    return {
+      elegivel: false,
+      motivo: `Parcela mínima exigida pelo Daycoval é de R$ 20,00 (atual: R$ ${valorParcela.toFixed(2).replace('.', ',')}).`,
       parcelas_minimas: required,
     };
   }
