@@ -1165,38 +1165,45 @@ export default function PortabilidadeMultiplaPage() {
                         )}
 
                         {/* Detalhes do Benefício Ativo */}
-                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                          <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
-                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                              Espécie
-                            </p>
-                            <p className="mt-0.5 truncate text-xs font-black text-slate-800 dark:text-white" title={activeBenefit?.especie ? getEspecieName(activeBenefit.especie) : '—'}>
-                              {activeBenefit?.especie ? getEspecieName(activeBenefit.especie) : '—'}
-                            </p>
+                        <div className="mt-4 space-y-2.5">
+                          {/* 1ª Linha: Nome da Espécie (visível) e Margem Livre */}
+                          <div className="grid grid-cols-[1fr_auto] gap-3">
+                            <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                                Espécie
+                              </p>
+                              <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-white">
+                                {activeBenefit?.especie ? getEspecieName(activeBenefit.especie) : '—'}
+                              </p>
+                            </div>
+                            <div className="min-w-[130px] rounded-xl bg-slate-50/70 p-3 text-right sm:text-left dark:bg-white/[0.02]">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                                Margem Livre
+                              </p>
+                              <p className="mt-0.5 text-xs font-black text-emerald-600 dark:text-emerald-400">
+                                {formatMoney(activeBenefit?.margens?.margem_livre)}
+                              </p>
+                            </div>
                           </div>
-                          <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
-                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                              UF do Benefício
-                            </p>
-                            <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-white">
-                              {activeBenefit?.uf || consulta.cliente.uf || '—'}
-                            </p>
-                          </div>
-                          <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
-                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                              Margem Livre
-                            </p>
-                            <p className="mt-0.5 text-xs font-black text-emerald-600 dark:text-emerald-400">
-                              {formatMoney(activeBenefit?.margens?.margem_livre)}
-                            </p>
-                          </div>
-                          <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
-                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                              Renda Bruta
-                            </p>
-                            <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-white">
-                              {activeBenefit?.salario ? formatMoney(activeBenefit.salario) : '—'}
-                            </p>
+
+                          {/* 2ª Linha (Abaixo): Renda Bruta e UF */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                                Renda Bruta
+                              </p>
+                              <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-white">
+                                {activeBenefit?.salario ? formatMoney(activeBenefit.salario) : '—'}
+                              </p>
+                            </div>
+                            <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-white/[0.02]">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                                UF do Benefício
+                              </p>
+                              <p className="mt-0.5 text-xs font-black text-slate-800 dark:text-white">
+                                {activeBenefit?.uf || consulta.cliente.uf || '—'}
+                              </p>
+                            </div>
                           </div>
                         </div>
 
@@ -1221,12 +1228,12 @@ export default function PortabilidadeMultiplaPage() {
                             </span>
                           </div>
 
-                          <div className="mt-2.5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                            <div className="col-span-2 sm:col-span-1">
+                          <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_80px_130px]">
+                            <div>
                               <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
                                 Banco Pagador
                               </p>
-                              <p className="mt-0.5 truncate text-xs font-black text-slate-800 dark:text-slate-200" title={dadosBancarios?.codigo_banco ? getBancoName(dadosBancarios.codigo_banco) : dadosBancarios?.nome_banco || dadosBancarios?.banco || 'Não informado'}>
+                              <p className="mt-0.5 text-xs font-black leading-tight text-slate-800 dark:text-slate-200">
                                 {dadosBancarios?.codigo_banco
                                   ? getBancoName(dadosBancarios.codigo_banco)
                                   : dadosBancarios?.nome_banco || dadosBancarios?.banco || 'Não informado'}
