@@ -187,8 +187,13 @@ export function calculateOffers(
     isAnalfabeto
   } = params;
 
+  const isConsolidadoMultipla = typeof bancoAtual === 'string' && (
+    bancoAtual.toUpperCase().includes('MULTIPLA') ||
+    bancoAtual.toUpperCase().includes('CONSOLIDADO')
+  );
+
   // Global Non-portable bank check
-  if (nonPortableBanks && nonPortableBanks.some((b: string) => checkBankMatch(b, bancoAtual))) {
+  if (!isConsolidadoMultipla && nonPortableBanks && nonPortableBanks.some((b: string) => checkBankMatch(b, bancoAtual))) {
     return [];
   }
 
@@ -226,7 +231,7 @@ export function calculateOffers(
       sumBalanceAndTroco: rawBank.sumBalanceAndTroco !== undefined ? rawBank.sumBalanceAndTroco : (rawBank.sum_balance_and_troco !== undefined ? rawBank.sum_balance_and_troco : (rawBank.sumSaldoTroco !== undefined ? rawBank.sumSaldoTroco : rawBank.sum_saldo_troco)),
       acceptsIlliterate: rawBank.acceptsIlliterate !== undefined ? rawBank.acceptsIlliterate : (rawBank.accepts_illiterate !== undefined ? rawBank.accepts_illiterate : false),
       acceptsLOAS: rawBank.acceptsLOAS !== undefined ? rawBank.acceptsLOAS : (rawBank.accepts_loas !== undefined ? rawBank.accepts_loas : false),
-      accepts60Mais: rawBank.accepts60Mais !== undefined ? rawBank.accepts60Mais : (rawBank.accepts_60_mais !== undefined ? rawBank.accepts_60_mais : false),
+      accepts60Mais: rawBank.accepts60Mais !== undefined ? rawBank.accepts60Mais : (rawBank.accepts_60_mais !== undefined ? rawBank.accepts_60_mais : undefined),
       acceptsInvalidez: rawBank.acceptsInvalidez !== undefined ? rawBank.acceptsInvalidez : (rawBank.accepts_invalidez !== undefined ? rawBank.accepts_invalidez : true),
       invalidezAgeYears: rawBank.invalidezAgeYears !== undefined ? rawBank.invalidezAgeYears : (rawBank.invalidez_age_years !== undefined ? rawBank.invalidez_age_years : 0),
       invalidezMaxAgeYears: rawBank.invalidezMaxAgeYears !== undefined ? rawBank.invalidezMaxAgeYears : (rawBank.invalidez_max_age_years !== undefined ? rawBank.invalidez_max_age_years : 0),
@@ -324,27 +329,27 @@ export function calculateOffers(
     if (isAnalfabeto && !bank.acceptsIlliterate) return;
 
     // Non-accepted banks (Origins)
-    if (bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) return;
+    if (!isConsolidadoMultipla && bank.nonAcceptedBanks && bank.nonAcceptedBanks.some((b: string) => checkBankMatch(b, bancoAtual))) return;
 
     // Destination restriction: banks that cannot be ported to any other bank
     if (banks.some(r => r.nonPortableBanks && r.nonPortableBanks.some((b: string) => checkBankMatch(b, bank.name)))) return;
 
     // Prevent same-bank portability
-    if (checkBankMatch(bank.name, bancoAtual)) return;
+    if (!isConsolidadoMultipla && checkBankMatch(bank.name, bancoAtual)) return;
 
     // Installments Rule
     let requiredInstallments = 0;
     const effectiveParcelasPagas = parcelasPagas !== undefined ? parcelasPagas : (parseInt(String(prazoTotal || 0)) - parseInt(String(parcelasRestantes || 0)));
-    const specificRule = bank.specificInstallmentRules?.find((r: any) => checkBankMatch(r.bank, bancoAtual));
+    const specificRule = !isConsolidadoMultipla ? bank.specificInstallmentRules?.find((r: any) => checkBankMatch(r.bank, bancoAtual)) : undefined;
     
     if (specificRule) {
       requiredInstallments = parseInt(specificRule.installments) || 0;
     } else {
-      const pInstallment = promotoraInstallments[bancoAtual];
+      const pInstallment = !isConsolidadoMultipla ? promotoraInstallments[bancoAtual] : undefined;
       if (pInstallment !== undefined && pInstallment > 0) {
         requiredInstallments = pInstallment;
       } else {
-        const generalRule = generalRules.find((r: any) => checkBankMatch(r.banco, bancoAtual));
+        const generalRule = !isConsolidadoMultipla ? generalRules.find((r: any) => checkBankMatch(r.banco, bancoAtual)) : undefined;
         if (generalRule) requiredInstallments = generalRule.parcelasAceitas;
       }
       const bankGeneralLimit = bank.minPaidInstallments || 0;

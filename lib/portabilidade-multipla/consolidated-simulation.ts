@@ -38,6 +38,17 @@ export interface PortabilidadeMultiplaOfertaConsolidada {
   regras: string[];
 }
 
+export interface PortabilidadeMultiplaDiagnosticoTabela {
+  tabela: string;
+  prazo: number;
+  coeficiente: number;
+  valor_financiado: number;
+  saldo_devedor: number;
+  troco_calculado: number;
+  troco_minimo_exigido: number;
+  motivo_recusa: string;
+}
+
 export interface PortabilidadeMultiplaSimulacaoConsolidada {
   executada: boolean;
   elegivel: boolean;
@@ -52,6 +63,7 @@ export interface PortabilidadeMultiplaSimulacaoConsolidada {
   saldo_total: number;
   ofertas: PortabilidadeMultiplaOfertaConsolidada[];
   bloqueios: PortabilidadeMultiplaBloqueio[];
+  diagnostico_recusa?: PortabilidadeMultiplaDiagnosticoTabela[];
 }
 
 function normalizeText(value: unknown): string {
@@ -142,7 +154,7 @@ export function buildMotorParamsConsolidadosPortabilidadeMultipla(
     convenio: 'INSS',
     codigoBeneficio: benefit.especie,
     dataConcessao: benefit.data_concessao,
-    bancoAtual: `PORTABILIDADE MULTIPLA ${bancoDestino}`,
+    bancoAtual: 'MULTIPLA_ORIGENS_CONSOLIDADAS',
     // FACTA recebe a parcela já ajustada pela regra própria da Múltipla.
     // DAYCOVAL recebe a soma bruta e a margem negativa separadamente para
     // que o Motor aplique o mesmo tratamento usado na simulação comum.
@@ -301,12 +313,30 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
   // A interface agrupa por prazo e considera a primeira tabela de cada prazo
   // como a Melhor Oferta. Não reordena por troco, taxa ou valor liberado.
 
-  if (!finalOffers.length && bloqueios.length === 0) {
-    bloqueios.push({
-      codigo: bancoDestino === 'DAYCOVAL' ? 'SEM_TABELA_DAYCOVAL' : 'SEM_TABELA_FACTA',
-      mensagem:
-        `O Motor ${bancoDestino} não retornou oferta válida para a parcela e o saldo consolidados desta seleção.`,
-    });
+  let diagnosticoRecusa: PortabilidadeMultiplaDiagnosticoTabela[] | undefined;
+
+  if (!finalOffers.length) {
+    const diag = gerarDiagnosticoRecusaConsolidada(
+      targetBanks,
+      params,
+      preValidation,
+      bancoDestino,
+    );
+    diagnosticoRecusa = diag.diagnostico;
+
+    if (bloqueios.length === 0) {
+      if (diag.bloqueiosSugeridos.length > 0) {
+        for (const block of diag.bloqueiosSugeridos) {
+          bloqueios.push(block);
+        }
+      } else {
+        bloqueios.push({
+          codigo: bancoDestino === 'DAYCOVAL' ? 'SEM_TABELA_DAYCOVAL' : 'SEM_TABELA_FACTA',
+          mensagem:
+            `O Motor ${bancoDestino} avaliou as tabelas ativas, mas nenhuma gerou oferta válida para a parcela consolidada de R$ ${preValidation.soma_parcelas.toFixed(2).replace('.', ',')} e saldo de R$ ${preValidation.saldo_total.toFixed(2).replace('.', ',')}.`,
+        });
+      }
+    }
   }
 
   return {
@@ -323,5 +353,105 @@ export function executarSimulacaoConsolidadaPortabilidadeMultipla(
     saldo_total: preValidation.saldo_total,
     ofertas: finalOffers,
     bloqueios,
+    diagnostico_recusa: diagnosticoRecusa,
   };
+}
+
+function gerarDiagnosticoRecusaConsolidada(
+  targetBanks: any[],
+  params: any,
+  preValidation: PortabilidadeMultiplaPreValidacaoCompleta,
+  bancoDestino: PortabilidadeMultiplaBancoDestino,
+): { diagnostico: PortabilidadeMultiplaDiagnosticoTabela[]; bloqueiosSugeridos: PortabilidadeMultiplaBloqueio[] } {
+  const diagnostico: PortabilidadeMultiplaDiagnosticoTabela[] = [];
+  const bloqueiosSugeridos: PortabilidadeMultiplaBloqueio[] = [];
+
+  const saldoDevedor = preValidation.saldo_total;
+  const parcelaParaContrato = bancoDestino === 'DAYCOVAL'
+    ? preValidation.soma_parcelas
+    : preValidation.parcela_refin;
+  const parcelaParaRegras = parcelaParaContrato;
+  const idade = params.idade || 0;
+
+  for (const bank of targetBanks) {
+    const tabelas = Array.isArray(bank?.tabelas) ? bank.tabelas : [];
+    const bankMinTroco = toNumber(bank?.minTroco);
+    const bankMinInst = toNumber(bank?.minInstallmentValue) || (bancoDestino === 'DAYCOVAL' ? 20 : 0);
+
+    if (bankMinInst > 0 && parcelaParaRegras < bankMinInst) {
+      bloqueiosSugeridos.push({
+        codigo: 'PARCELA_ABAIXO_MINIMO',
+        mensagem: `A parcela consolidada de R$ ${parcelaParaRegras.toFixed(2).replace('.', ',')} é inferior à parcela mínima de R$ ${bankMinInst.toFixed(2).replace('.', ',')} exigida pelo ${bancoDestino}.`,
+      });
+    }
+
+    for (const tabela of tabelas) {
+      const nomeTabela = String(tabela?.nome || 'Tabela');
+      const prazo = Math.max(0, Math.trunc(toNumber(tabela?.prazoRefinPort || tabela?.prazo)));
+      const coef = toNumber(tabela?.coeficiente);
+      const minTrocoTabela = toNumber(tabela?.minTroco);
+      const effectiveMinTroco = minTrocoTabela > 0 ? minTrocoTabela : bankMinTroco;
+
+      if (coef <= 0) {
+        diagnostico.push({
+          tabela: nomeTabela,
+          prazo,
+          coeficiente: coef,
+          valor_financiado: 0,
+          saldo_devedor: saldoDevedor,
+          troco_calculado: 0,
+          troco_minimo_exigido: effectiveMinTroco,
+          motivo_recusa: 'Coeficiente não configurado ou zerado.',
+        });
+        continue;
+      }
+
+      const valorFinanciado = parcelaParaContrato / coef;
+      const trocoCalculado = valorFinanciado - saldoDevedor;
+
+      let motivo = '';
+
+      const tableMinAge = toNumber(tabela?.minAge || tabela?.idadeMinima);
+      const tableMaxAge = toNumber(tabela?.maxAge || tabela?.idadeMaxima);
+      if (tableMinAge > 0 && idade < tableMinAge) {
+        motivo = `Idade do cliente (${idade} anos) é inferior ao mínimo da tabela (${tableMinAge} anos).`;
+      } else if (tableMaxAge > 0 && idade > tableMaxAge) {
+        motivo = `Idade do cliente (${idade} anos) ultrapassa o máximo da tabela (${tableMaxAge} anos).`;
+      } else if (trocoCalculado <= 0) {
+        motivo = `Troco não gerado: valor financiado (R$ ${valorFinanciado.toFixed(2).replace('.', ',')}) é inferior ou igual ao saldo devedor (R$ ${saldoDevedor.toFixed(2).replace('.', ',')}).`;
+      } else if (effectiveMinTroco > 0 && trocoCalculado < effectiveMinTroco) {
+        motivo = `Troco gerado de R$ ${trocoCalculado.toFixed(2).replace('.', ',')} é inferior ao troco mínimo exigido de R$ ${effectiveMinTroco.toFixed(2).replace('.', ',')}.`;
+      } else {
+        motivo = 'Descartada por taxa ponderada ou ticket mínimo da mesa.';
+      }
+
+      diagnostico.push({
+        tabela: nomeTabela,
+        prazo,
+        coeficiente: coef,
+        valor_financiado: Number(valorFinanciado.toFixed(2)),
+        saldo_devedor: Number(saldoDevedor.toFixed(2)),
+        troco_calculado: Number(trocoCalculado.toFixed(2)),
+        troco_minimo_exigido: effectiveMinTroco,
+        motivo_recusa: motivo,
+      });
+    }
+  }
+
+  const trocoInsuficiente = diagnostico.find(d => d.troco_calculado > 0 && d.troco_calculado < d.troco_minimo_exigido);
+  const trocoNegativo = diagnostico.find(d => d.troco_calculado <= 0 && d.coeficiente > 0);
+
+  if (trocoInsuficiente && !bloqueiosSugeridos.length) {
+    bloqueiosSugeridos.push({
+      codigo: 'TROCO_INSUFICIENTE',
+      mensagem: `Troco de R$ ${trocoInsuficiente.troco_calculado.toFixed(2).replace('.', ',')} na ${trocoInsuficiente.tabela} (${trocoInsuficiente.prazo}X) não atingiu o mínimo exigido pelo ${bancoDestino} (R$ ${trocoInsuficiente.troco_minimo_exigido.toFixed(2).replace('.', ',')}).`,
+    });
+  } else if (trocoNegativo && !bloqueiosSugeridos.length) {
+    bloqueiosSugeridos.push({
+      codigo: 'TROCO_ZERADO',
+      mensagem: `A parcela unificada de R$ ${parcelaParaContrato.toFixed(2).replace('.', ',')} não foi suficiente para superar o saldo total de R$ ${saldoDevedor.toFixed(2).replace('.', ',')}, gerando troco zero.`,
+    });
+  }
+
+  return { diagnostico, bloqueiosSugeridos };
 }

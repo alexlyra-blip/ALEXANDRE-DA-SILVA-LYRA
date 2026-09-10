@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   FileText,
+  Info,
   Landmark,
   Layers3,
   Loader2,
@@ -134,6 +135,17 @@ type OfertaConsolidada = {
   regras: string[];
 };
 
+type DiagnosticoTabela = {
+  tabela: string;
+  prazo: number;
+  coeficiente: number;
+  valor_financiado: number;
+  saldo_devedor: number;
+  troco_calculado: number;
+  troco_minimo_exigido: number;
+  motivo_recusa: string;
+};
+
 type SimulacaoConsolidada = {
   executada: boolean;
   elegivel: boolean;
@@ -148,6 +160,7 @@ type SimulacaoConsolidada = {
   saldo_total: number;
   ofertas: OfertaConsolidada[];
   bloqueios: Bloqueio[];
+  diagnostico_recusa?: DiagnosticoTabela[];
 };
 
 type ValidacaoOrigens = {
@@ -895,8 +908,12 @@ export default function PortabilidadeMultiplaPage() {
                     </div>
                   </div>
 
-                  <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
                     <InfoTile label="CPF" value={maskCpf(consulta.cliente.cpf || cpf)} />
+                    <InfoTile
+                      label="Idade"
+                      value={consulta.cliente.idade ? `${consulta.cliente.idade} anos` : 'Não informada'}
+                    />
                     <InfoTile label="UF" value={consulta.cliente.uf || '—'} />
                     <InfoTile
                       label="Benefícios"
@@ -1596,6 +1613,63 @@ export default function PortabilidadeMultiplaPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {!!originValidation.simulacao_consolidada.diagnostico_recusa?.length && (
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Info size={16} className="text-slate-500" />
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      Diagnóstico detalhado das tabelas {bancoDestino} avaliadas
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    {originValidation.simulacao_consolidada.diagnostico_recusa.map((diag, index) => (
+                      <div
+                        key={`${diag.tabela}-${diag.prazo}-${index}`}
+                        className="rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-slate-900"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-white/5">
+                          <span className="text-xs font-black text-slate-800 dark:text-white">
+                            {diag.tabela} ({diag.prazo > 0 ? `${diag.prazo}X` : 'Prazo não informado'})
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-400">
+                            Coeficiente: {diag.coeficiente || '—'}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                          <div>
+                            <span className="text-slate-400">Novo financiado:</span>
+                            <p className="font-bold text-slate-700 dark:text-slate-200">
+                              {formatMoney(diag.valor_financiado)}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Saldo a quitar:</span>
+                            <p className="font-bold text-slate-700 dark:text-slate-200">
+                              {formatMoney(diag.saldo_devedor)}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Troco apurado:</span>
+                            <p className={`font-bold ${diag.troco_calculado > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                              {formatMoney(diag.troco_calculado)}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Troco mínimo exigido:</span>
+                            <p className="font-bold text-slate-700 dark:text-slate-200">
+                              {formatMoney(diag.troco_minimo_exigido)}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                          {diag.motivo_recusa}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
