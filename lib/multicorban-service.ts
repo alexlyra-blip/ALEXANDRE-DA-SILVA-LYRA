@@ -205,6 +205,8 @@ export async function consultarCpfMulticorban(
     let errorMsg = 'Falha ao consultar a API da MultiCorban';
     if (response.status === 503 || details.includes('oscilações temporárias') || details.includes('atualização em andamento')) {
       errorMsg = 'A API da MultiCorban/BancoDataHub está temporariamente instável ou em manutenção no momento (HTTP 503). Tente novamente em instantes.';
+    } else if (response.status === 403 || details.includes('Acesso não autorizado')) {
+      errorMsg = 'Acesso não autorizado pela MultiCorban (Saldo de consultas zerado ou token sem permissão). Verifique seus créditos na MultiCorban.';
     } else if (details && details.length < 250 && !details.includes('<html')) {
       errorMsg = details;
     }
@@ -306,6 +308,8 @@ export async function consultarBeneficioMulticorban(
     let errorMsg = 'Falha ao consultar a API da MultiCorban por benefício';
     if (response.status === 503 || details.includes('oscilações temporárias') || details.includes('atualização em andamento')) {
       errorMsg = 'A API da MultiCorban/BancoDataHub está temporariamente instável ou em manutenção no momento (HTTP 503). Tente novamente em instantes.';
+    } else if (response.status === 403 || details.includes('Acesso não autorizado')) {
+      errorMsg = 'Acesso não autorizado pela MultiCorban (Saldo de consultas zerado ou token sem permissão). Verifique seus créditos na MultiCorban.';
     } else if (details && details.length < 250 && !details.includes('<html')) {
       errorMsg = details;
     }
