@@ -185,19 +185,38 @@ export async function consultarCpfMulticorban(
     console.log(`[Multicorban] Consulta forçada sem cache para CPF ${cpf.slice(0, 3)}***${cpf.slice(-2)}`);
   }
 
-  const url = type === 'siape'
-    ? 'https://api.bancodatahub.com/siape'
-    : 'https://api.bancodatahub.com/cpf';
+  const baseUrl = (process.env.MULTICORBAN_BASE_URL || 'https://api.bancodatahub.com').replace(/\/+$/, '');
+  const timeoutMs = Math.max(5000, (Number(process.env.MULTICORBAN_TIMEOUT) || 30) * 1000);
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: apiToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ cpf }),
-    cache: 'no-store',
-  });
+  const url = type === 'siape'
+    ? `${baseUrl}/siape`
+    : `${baseUrl}/cpf`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: apiToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ cpf }),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(timer);
+    if (fetchErr.name === 'AbortError') {
+      const timeoutError: any = new Error('Tempo limite de resposta da MultiCorban excedido (Timeout)');
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw fetchErr;
+  }
+  clearTimeout(timer);
 
   if (!response.ok) {
     const details = await response.text().catch(() => '');
@@ -284,23 +303,42 @@ export async function consultarBeneficioMulticorban(
     console.log(`[Multicorban] Consulta forçada sem cache para Benefício ${beneficio}`);
   }
 
+  const baseUrl = (process.env.MULTICORBAN_BASE_URL || 'https://api.bancodatahub.com').replace(/\/+$/, '');
+  const timeoutMs = Math.max(5000, (Number(process.env.MULTICORBAN_TIMEOUT) || 30) * 1000);
+
   const url = type === 'siape'
-    ? 'https://api.bancodatahub.com/siape'
-    : 'https://api.bancodatahub.com/offline';
+    ? `${baseUrl}/siape`
+    : `${baseUrl}/offline`;
 
   const body = type === 'siape'
     ? { matricula: beneficio, cpf: beneficio }
     : { beneficio: isNaN(Number(beneficio)) ? beneficio : Number(beneficio) };
 
-  let response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: apiToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-    cache: 'no-store',
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: apiToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(timer);
+    if (fetchErr.name === 'AbortError') {
+      const timeoutError: any = new Error('Tempo limite de resposta da MultiCorban excedido (Timeout)');
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw fetchErr;
+  }
+  clearTimeout(timer);
 
   if (!response.ok) {
     const details = await response.text().catch(() => '');
